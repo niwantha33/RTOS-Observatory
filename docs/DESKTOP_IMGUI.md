@@ -31,6 +31,7 @@ are available. clang-cl by itself does not supply Windows SDK imports/manifest
 tools. Launch-VsDevShell.ps1 can change the current directory; always return
 to the actual repository folder before Git or CMake operations. Build from the repository:
 
+    cd C:\My-Projects\RTOS-Observatory
     git fetch origin
     git switch --track origin/feature/dear-imgui-desktop-w05-w06
     git submodule sync --recursive
