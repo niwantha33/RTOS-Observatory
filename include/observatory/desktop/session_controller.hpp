@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 #include "observatory/session.hpp"
+#include "observatory/timeline.hpp"
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -15,6 +16,7 @@ public:
     bool loaded() const noexcept { return trace_.has_value() && report_.has_value(); }
     const DecodedTrace& trace() const;
     const Report& report() const;
+    TimelineView timeline(std::uint64_t begin_us, std::uint64_t end_us) const;
     const std::filesystem::path& origin() const noexcept { return origin_; }
     const std::string& mode() const noexcept { return mode_; }
 private:

@@ -23,6 +23,14 @@ int main(int argc, char* argv[]) {
     assert(controller.loaded());
     assert(controller.trace().decoder == "universal-v1");
     assert(controller.trace().capture.events.size() >= 2);
+    const auto full_view = controller.timeline(0, 20);
+    assert(full_view.cores.size() == 1);
+    assert(full_view.cores[0].unknown_us == 10);
+    assert(!full_view.cores[0].busy_percent);
+    const auto known_view = controller.timeline(10, 20);
+    assert(known_view.cores[0].running_us == 10);
+    assert(known_view.cores[0].unknown_us == 0);
+    assert(known_view.cores[0].busy_percent && *known_view.cores[0].busy_percent == 100.0);
     const auto count = controller.trace().capture.events.size();
     rejected = false;
     try { controller.open_trace(sample, "missing-decoder"); } catch (const Error&) { rejected = true; }

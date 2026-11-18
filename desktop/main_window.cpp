@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "main_window.hpp"
+#include "timeline_canvas.hpp"
 
 #include <QAbstractItemView>
 #include <QBoxLayout>
@@ -15,6 +16,7 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QStackedWidget>
 #include <QStyle>
 #include <QTableWidget>
@@ -142,7 +144,7 @@ void MainWindow::build() {
     auto* nav = new QButtonGroup(this);
     nav->setExclusive(true);
     const auto entries = std::initializer_list<std::pair<const char*, int>>{
-        {"Overview", 0}, {"Events", 1}, {"Findings", 2}, {"Evidence details", 3}};
+        {"Overview", 0}, {"Events", 1}, {"Execution timeline", 2}, {"CPU / waits", 3}, {"Findings", 4}, {"Evidence details", 5}};
     for (const auto& entry : entries) {
         auto* b = new QPushButton(QString::fromLatin1(entry.first));
         b->setCheckable(true);
@@ -215,6 +217,63 @@ void MainWindow::build() {
     connect(filter_, &QLineEdit::textChanged, this, [this](const QString& q) { filter_events(q); });
     pages_->addWidget(eventsPage);
 
+    // W06: native timeline with explicit unknown gaps; no implied history outside evidence.
+    auto* timelinePage = new QWidget;
+    auto* tl = new QVBoxLayout(timelinePage);
+    tl->addWidget(make_label("EXECUTION TIMELINE  /  µs  /  SOLID = OBSERVED; HATCHED = UNKNOWN", "subhead"));
+    auto* tools = new QHBoxLayout;
+    tools->addWidget(make_label("From (µs)", "subhead"));
+    range_begin_ = new QLineEdit("0");
+    range_begin_->setObjectName("timelineRangeBegin");
+    range_begin_->setMaximumWidth(145);
+    tools->addWidget(range_begin_);
+    tools->addWidget(make_label("To (µs)", "subhead"));
+    range_end_ = new QLineEdit("0");
+    range_end_->setObjectName("timelineRangeEnd");
+    range_end_->setMaximumWidth(145);
+    tools->addWidget(range_end_);
+    auto* fit = new QPushButton("Fit");
+    auto* zoomIn = new QPushButton("Zoom +");
+    auto* zoomOut = new QPushButton("Zoom −");
+    tools->addWidget(fit);
+    tools->addWidget(zoomIn);
+    tools->addWidget(zoomOut);
+    tools->addStretch(1);
+    tl->addLayout(tools);
+    connect(range_begin_, &QLineEdit::editingFinished, this, [this] { refresh_timeline(); });
+    connect(range_end_, &QLineEdit::editingFinished, this, [this] { refresh_timeline(); });
+    connect(fit, &QPushButton::clicked, this, [this] {
+        if (!controller_.loaded()) return;
+        range_begin_->setText(num(controller_.report().start_us));
+        range_end_->setText(num(controller_.report().end_us));
+        refresh_timeline();
+    });
+    connect(zoomIn, &QPushButton::clicked, this, [this] { zoom_timeline(true); });
+    connect(zoomOut, &QPushButton::clicked, this, [this] { zoom_timeline(false); });
+    timeline_quality_ = make_label("Open a trace to explore recorded scheduler intervals.", "subhead");
+    timeline_quality_->setWordWrap(true);
+    tl->addWidget(timeline_quality_);
+    auto* scroll = new QScrollArea;
+    scroll->setObjectName("timelineScroll");
+    scroll->setWidgetResizable(true);
+    timeline_ = new TimelineCanvas;
+    timeline_->setObjectName("executionTimeline");
+    scroll->setWidget(timeline_);
+    tl->addWidget(scroll, 1);
+    tl->addWidget(make_label("Blue: task running   Green: explicit idle   Amber: ISR   Hatched: unknown   Purple: completed wait", "subhead"));
+    pages_->addWidget(timelinePage);
+
+    auto* cpuPage = new QWidget;
+    auto* cpuLayout = new QVBoxLayout(cpuPage);
+    cpuLayout->addWidget(make_label("PER-CORE ACCOUNTING  /  NO AGGREGATE WITHOUT CORE QUALIFICATION", "subhead"));
+    cpu_ = make_table({"Core", "Running (µs)", "ISR (µs)", "Idle (µs)", "Unknown (µs)", "Busy %"}, "cpuAnalysisTable");
+    cpuLayout->addWidget(cpu_, 2);
+    cpuLayout->addWidget(make_label("COMPLETED WAIT TIME  /  DOES NOT IMPLY TASK BLOCKED AT EVERY INSTANT", "subhead"));
+    wait_summary_ = make_table({"Task", "Running (µs)", "Completed wait (µs)", "Waits"}, "waitSummaryTable");
+    cpuLayout->addWidget(wait_summary_, 2);
+    cpuLayout->addWidget(make_label("Durations are clipped to the selected window. Busy % appears only with full observed CPU coverage and no reported evidence loss.", "subhead"));
+    pages_->addWidget(cpuPage);
+
     auto* findingsPage = new QWidget;
     auto* fi = new QVBoxLayout(findingsPage);
     fi->addWidget(make_label("FINDINGS  /  OBSERVED PATTERNS ARE NOT PROVEN ROOT CAUSES", "subhead"));
@@ -233,7 +292,7 @@ void MainWindow::build() {
     pages_->addWidget(detailsPage);
 
     auto* footer = new QHBoxLayout;
-    footer->addWidget(make_label("W05 · Native Qt 6 desktop · Offline analysis only", "subhead"));
+    footer->addWidget(make_label("W06 · Observed execution & CPU evidence · Offline only", "subhead"));
     footer->addStretch(1);
     auto* save = new QPushButton("Export report JSON");
     footer->addWidget(save);
@@ -332,6 +391,9 @@ void MainWindow::refresh() {
             QString::number(static_cast<qlonglong>(e.value)), num(e.line)});
     }
     filter_->clear();
+    range_begin_->setText(num(report.start_us));
+    range_end_->setText(num(report.end_us));
+    refresh_timeline();
     findings_->setRowCount(0);
     for (const auto& f : report.findings)
         append(findings_, {value(f.code), value(f.confidence), value(f.task), value(f.resource),
@@ -360,7 +422,7 @@ void MainWindow::refresh() {
         "\nMissing events: " + num(decoded.evidence.missing_events) +
         "\nDeclared drops: " + num(decoded.evidence.declared_drops) +
         "\n\nQUALITY\n" + QString(complete ? "Complete within capture boundaries" : "Incomplete evidence") +
-        "\n\nW05 SCOPE\nNo live debug, raw CTF decoder, physical probe or historical memory reconstruction.");
+        "\n\nW06 SCOPE\nObserved offline timeline and CPU accounting only; no live debug, raw CTF decoder, physical probe or historical memory reconstruction.");
 }
 
 void MainWindow::filter_events(const QString& q) {
@@ -372,6 +434,71 @@ void MainWindow::filter_events(const QString& q) {
         }
         events_->setRowHidden(i, !match);
     }
+}
+
+void MainWindow::refresh_timeline() {
+    if (!controller_.loaded()) return;
+    bool valid_begin = false, valid_end = false;
+    const auto begin = range_begin_->text().toULongLong(&valid_begin);
+    const auto end = range_end_->text().toULongLong(&valid_end);
+    if (!valid_begin || !valid_end) {
+        timeline_quality_->setText("Invalid range: enter non-negative decimal µs timestamps.");
+        cpu_->setRowCount(0);
+        wait_summary_->setRowCount(0);
+        timeline_->set_view({});
+        return;
+    }
+    try {
+        auto snapshot = controller_.timeline(begin, end);
+        cpu_->setRowCount(0);
+        for (const auto& c : snapshot.cores)
+            append(cpu_, {value(c.core), num(c.running_us), num(c.isr_us), num(c.idle_us),
+                          num(c.unknown_us),
+                          c.busy_percent ? QString::number(*c.busy_percent, 'f', 2) + "%"
+                                         : "Unknown"});
+        wait_summary_->setRowCount(0);
+        bool table_capped = false;
+        for (const auto& t : snapshot.tasks) {
+            if (!t.running_us && !t.completed_waits) continue;
+            if (wait_summary_->rowCount() >= 2000) { table_capped = true; break; }
+            append(wait_summary_, {value(t.task), num(t.running_us),
+                num(t.completed_wait_us), num(static_cast<std::uint64_t>(t.completed_waits))});
+        }
+        QString status = "Window [" + num(begin) + ", " + num(end) +
+                         ") µs  ·  " + (snapshot.evidence_complete ? "No reported loss" : "Incomplete evidence");
+        for (const auto& warning : snapshot.warnings) status += "\n• " + text(warning);
+        if (table_capped) status += "\n• Task summary limited to 2,000 visible rows; timeline accounting is unaffected.";
+        timeline_quality_->setText(status);
+        timeline_->set_view(std::move(snapshot));
+    } catch (const std::exception& ex) {
+        timeline_quality_->setText("Invalid timeline window: " + text(ex.what()));
+        cpu_->setRowCount(0);
+        wait_summary_->setRowCount(0);
+        timeline_->set_view({});
+    }
+}
+void MainWindow::zoom_timeline(bool zoom_in) {
+    if (!controller_.loaded()) return;
+    bool a = false, b = false;
+    const auto begin = range_begin_->text().toULongLong(&a);
+    const auto end = range_end_->text().toULongLong(&b);
+    if (!a || !b || end <= begin) return;
+    const auto& report = controller_.report();
+    if (begin < report.start_us || end > report.end_us) { refresh_timeline(); return; }
+    const auto width = end - begin;
+    const auto total = report.end_us - report.start_us;
+    const auto new_width = zoom_in ? std::max<std::uint64_t>(1, width / 2)
+                                  : width + std::min(width, total - width);
+    const auto center = begin + width / 2;
+    auto from = center >= new_width / 2 ? center - new_width / 2 : report.start_us;
+    if (from < report.start_us) from = report.start_us;
+    if (new_width > report.end_us - from) from = report.end_us - new_width;
+    range_begin_->setText(num(from));
+    range_end_->setText(num(from + new_width));
+    refresh_timeline();
+}
+int MainWindow::cpu_rows() const noexcept {
+    return cpu_ ? cpu_->rowCount() : 0;
 }
 
 int MainWindow::event_rows() const noexcept {

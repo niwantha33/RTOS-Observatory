@@ -1,12 +1,12 @@
 # RTOS Observatory · 0.2.0 foundation
 
-**Independent C++20 RTOS diagnostics engine, C11 target ring and browser-based offline visualisation.**
+**Independent C++20 RTOS diagnostics engine, C11 target ring, and Qt6 native + browser-based offline visualisation.**
 
 > Status: executable **offline MVP**, not a production debugger. The supplied capture is **synthetic**. This repository does **not** implement live GDB transport, a real FreeRTOS/TI-RTOS/Zephyr parser, verified trace firmware, or an installed Eclipse extension. The experimental Eclipse handoff source is in `bridge/eclipse`.
 
-## W05 — Standalone native desktop (draft PR #12)
+## W05 — Standalone native desktop (merged PR #12)
 
-The optional **Qt 6 Widgets** application provides a real Windows/Linux desktop session browser that calls the existing **C++20 core in-process**. It opens normalized trace files and indexed offline sessions, displays tasks/events/findings and evidence quality, filters event rows, and exports reports. It does **not** connect to GDB, claim live tracing, or implement W06 timelines or W07 causal graphs.
+The optional **Qt 6 Widgets** application provides a real Windows/Linux desktop session browser that calls the existing **C++20 core in-process**. It opens normalized trace files and indexed offline sessions, displays tasks/events/findings and evidence quality, filters event rows, and exports reports. It does **not** connect to GDB, claim live tracing, or implement W07 causal graphs.
 
 ```sh
 cmake -S . -B build-desktop -DOBSERVATORY_BUILD_DESKTOP=ON -DOBSERVATORY_BUILD_LIVE=OFF
@@ -15,7 +15,14 @@ ctest --test-dir build-desktop -C Release --output-on-failure
 # Launch rtos-observatory-desktop (build-desktop/Release/ on Visual Studio generators)
 ```
 
-Qt 6.5+ development libraries matching your compiler are required **only** for the desktop option. W05 remains in review in [PR #12](https://github.com/niwantha33/RTOS-Observatory/pull/12); [detailed setup, tests and scope](docs/DESKTOP_W05.md).
+Qt 6.5+ development libraries matching your compiler are required **only** for the desktop option. W05 merged in [PR #12](https://github.com/niwantha33/RTOS-Observatory/pull/12) with successful Windows/Linux desktop CI; [setup and scope](docs/DESKTOP_W05.md).
+
+## W06 — Execution timeline and CPU analysis (draft PR #13)
+
+W06 adds **native Qt task and per-core execution timelines**, explicit ISR/idle/unknown spans, completed wait lanes, microsecond window selection, Fit/zoom, hover details, per-core CPU busy/idle/ISR/unknown durations and conditional utilisation percentages. Uncovered time is **Unknown**, not idle; percentages are suppressed for incomplete or loss-affected windows. Thread lanes show observed execution only, never inferred ready/sleeping states. All results remain offline evidence from normalized input.
+
+Run the desktop with `--trace examples/timeline.trace` after building; this sample is **synthetic**. [W06 technical specification and testing](docs/W06_TIMELINE.md) · [W06 draft PR #13](https://github.com/niwantha33/RTOS-Observatory/pull/13). W06 is **not accepted until CI passes and the PR merges**.
+
 ## Optional Asio TCP capture
 
 The host can receive a bounded finite normalized trace using standalone Asio and one strand per session, validate rows and report progress during reception, then save it for offline replay. See [build and demo instructions](docs/ASIO_CAPTURE.md). This is an early W17/W18 transport foundation; device adapters and continuously updating diagnostic analysis remain planned.
@@ -67,7 +74,7 @@ ctest --test-dir build --output-on-failure
 | Semaphore/queue/event/notification waits | Generic paired duration only; no queue depth or ownership reconstruction |
 | Trace loss, bad timestamps, missing event pairs | Reject or report incomplete; no invented reconstruction |
 | Embedded C11 tracing ring | Built + tested **SPSC only**, no RTOS hooking/drain transport |
-| Visual timeline, findings, waits and cycles | Offline local HTML viewer; no React dependency yet |
+| Visual timeline, findings, waits and cycles | Offline local HTML viewer; W06 draft Qt6 scheduler/task/ISR timeline and per-core CPU analysis |
 | Eclipse bridge | Opt-in Java source and PDE extension snippet; **not compiled/installed/validated** |
 | Saved Zephyr CTF aggregate report import | Implemented read-only adapter for existing ZEW `offline_trace_json.py` CPU and contention JSON, without raw event reconstruction |
 | Live streaming and cross-RTOS capture | Not implemented; next phases |
@@ -76,6 +83,8 @@ ctest --test-dir build --output-on-failure
 
 - `include/observatory/engine.hpp` public engine model
 - `src/engine.cpp` bounded trace parser, scheduler and causal analysis
+- `src/timeline.cpp`, `include/observatory/timeline.hpp` evidence-safe per-core accounting
+- `desktop/` native Qt6 event, timeline and CPU investigation workspace (optional)
 - `src/main.cpp` command-line entry point
 - `firmware/obs_trace_ring.{h,c}` bounded C11 SPSC event queue
 - `adapters/zew_offline_reports.py` imports existing Workbench saved-CTF **aggregate** JSON reports without inventing event boundaries

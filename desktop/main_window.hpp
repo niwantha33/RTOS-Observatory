@@ -11,6 +11,7 @@ class QPlainTextEdit;
 class QStackedWidget;
 class QTableWidget;
 namespace observatory::desktop {
+class TimelineCanvas;
 class MainWindow final : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
@@ -18,6 +19,7 @@ public:
     bool open_session(const QString& path);
     bool is_loaded() const noexcept { return controller_.loaded(); }
     int event_rows() const noexcept;
+    int cpu_rows() const noexcept;
     QString last_error() const { return error_; }
 private:
     void build();
@@ -28,6 +30,8 @@ private:
     void show_error(const QString& title);
     void add_recent(const QString& path, const QString& kind, const QString& decoder);
     void filter_events(const QString& query);
+    void refresh_timeline();
+    void zoom_timeline(bool zoom_in);
     SessionController controller_;
     QString error_;
     QComboBox* decoder_{};
@@ -44,6 +48,12 @@ private:
     QTableWidget* events_{};
     QTableWidget* tasks_{};
     QTableWidget* findings_{};
+    QTableWidget* cpu_{};
+    QTableWidget* wait_summary_{};
+    TimelineCanvas* timeline_{};
+    QLabel* timeline_quality_{};
+    QLineEdit* range_begin_{};
+    QLineEdit* range_end_{};
     QLineEdit* filter_{};
 };
 } // namespace observatory::desktop

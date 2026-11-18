@@ -16,8 +16,8 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     if (args.size() >= 3 && args.at(1) == "--smoke") {
-        const bool ok = window.open_trace(args.at(2)) && window.is_loaded() && window.event_rows() > 0;
-        QTextStream(stdout) << (ok ? "W05 desktop smoke passed\n" : "W05 desktop smoke failed: " + window.last_error() + "\n");
+        const bool ok = window.open_trace(args.at(2)) && window.is_loaded() && window.event_rows() > 0 && window.cpu_rows() > 0;
+        QTextStream(stdout) << (ok ? "W06 desktop timeline + CPU smoke passed\n" : "W06 desktop timeline + CPU smoke failed: " + window.last_error() + "\n");
         return ok ? 0 : 2;
     }
     if (args.size() >= 3 && args.at(1) == "--trace") window.open_trace(args.at(2));
