@@ -1,0 +1,64 @@
+name: "RTOS Observatory bug"
+description: "Report a reproducible defect with RTOS, target, trace and fix evidence."
+title: "[P0-BUG-XXX][WXX] "
+body:
+  - type: markdown
+    attributes:
+      value: "Use a unique Pxx-BUG-nnn ID. Do not include secrets or proprietary RAM/source in a public issue. Link the related phase tracker and work package."
+  - type: input
+    id: phase
+    attributes:
+      label: Phase and work package
+      description: "Example P3 / W15 / issue #5"
+      placeholder: "P3 / W15 / #5"
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - "S0 — Security, safety or data corruption"
+        - "S1 — Crash, invalid diagnosis or critical workflow"
+        - "S2 — Broken supported feature"
+        - "S3 — UI, documentation or cosmetic"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: "OS, compiler, app commit, IDE, board/MCU, RTOS version, probe and debug server. Write N/A for offline."
+      placeholder: "Windows / C++ compiler / Zephyr version / MSPM0G3507 / XDS110 / OpenOCD..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: "Minimal steps or saved synthetic fixture; indicate how often it occurs."
+      placeholder: "1. Build ...\n2. Open ...\n3. Observe ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected versus actual behaviour
+      placeholder: "Expected: ...\nActual: ..."
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, trace evidence and data quality
+      description: "Link sanitised logs/trace/ELF hash. Describe clock domain, loss, completeness and whether hardware or synthetic."
+      placeholder: "Trace ID, event time, capture mode, completeness, timestamps, screenshots, build SHA."
+    validations:
+      required: false
+  - type: textarea
+    id: hypotheses
+    attributes:
+      label: Investigation and fix verification
+      description: "Keep suspected causes separate from established facts; add the PR/commit and regression evidence when known."
+    validations:
+      required: false
