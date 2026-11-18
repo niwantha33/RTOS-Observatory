@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # W06 — RTOS execution timeline and CPU analysis (offline)
 
-W06 extends the W05 **independent Qt6 desktop**. It consumes only reports from the existing C++20 decoder/analyzer and indexed session engine; it does not implement a second decoder, attach to target hardware, or infer unseen scheduler state.
+W06's core CPU and interval model is independent of the desktop. The originally merged W06 Qt6 renderer is being replaced by the Dear ImGui + GLFW + OpenGL3 desktop; see [build instructions](DESKTOP_IMGUI.md). It consumes only reports from the existing C++20 decoder/analyzer and indexed session engine; it does not implement a second decoder, attach to target hardware, or infer unseen scheduler state.
 
 ## Build and run
 
@@ -12,7 +12,7 @@ W06 extends the W05 **independent Qt6 desktop**. It consumes only reports from t
 
 On Windows, run the executable from the generator's output directory (for example build-desktop/Release/). The included example is synthetic **universal-v1** data and is not RTOS or hardware qualification.
 
-Open **Execution timeline** to inspect explicitly observed CPU task, idle, and ISR spans and completed wait lanes, hover bars for source-range details, choose an exact microsecond window, Fit, or zoom. Open **CPU / waits** for independent per-core running/ISR/idle/unknown durations, conditional busy percentages, and per-task observed execution vs completed wait durations.
+Open the Dear ImGui **Execution timeline** to inspect explicitly observed CPU task, idle, and ISR spans and completed wait lanes, hover bars for source-range details, choose an exact microsecond window, Fit, or zoom. Open **CPU / waits** for independent per-core running/ISR/idle/unknown durations, conditional busy percentages, and per-task observed execution vs completed wait durations.
 
 ## Accounting rules / limits
 
@@ -22,7 +22,7 @@ Open **Execution timeline** to inspect explicitly observed CPU task, idle, and I
 - Busy time = observed running + ISR wall time. A Busy % is displayed **only** when the entire selected core/window has explicit non-overlapping scheduler coverage, the analyzer reports complete, and the decoder reports no missing or dropped events. Otherwise it says Unknown. Even qualified percentages describe only the supplied trace evidence, not attested physical CPU usage.
 - Per-core utilization is shown independently; there is no misleading combined multicore percentage. The universal-v1 prototype is not cross-core-causality-qualified.
 - The wait table contains **completed recorded waits**, clipped to the window. They do not imply an exclusive blocked state, proven ownership, exact scheduling cause or missing waits.
-- A display limit of 20,000 scheduler slices/wait bars prevents unbounded canvas work; display truncation is flagged, while accounting covers all decoded intervals. Wait visualization is limited to 32 lanes; the breakdown table remains available.
+- A display limit of 20,000 scheduler slices/wait bars prevents unbounded canvas work; display truncation is flagged, while accounting covers all decoded intervals. Task and wait visualization are each limited to 32 lanes; the breakdown table remains available.
 - Endpoints outside the recorded capture and empty ranges are rejected. Drops, reset epochs, unclosed scheduler spans, bad priorities, event loss, and metadata uncertainty follow the original evidence rules.
 
 ## Tests / acceptance
