@@ -57,5 +57,11 @@ int main() {
     assert(multicore.cores.size() == 2);
     assert(*multicore.cores[0].busy_percent == 100.0);
     assert(*multicore.cores[1].busy_percent == 0.0);
+    r.intervals = {{"A","cpu0","running",70,90}};
+    const auto unobserved = build_timeline(r,0,50,true);
+    assert(unobserved.cores.size() == 1);
+    assert(unobserved.cores[0].unknown_us == 50);
+    assert(unobserved.cores[0].running_us == 0);
+    assert(!unobserved.cores[0].busy_percent);
     std::cout << "W06 interval, gap, ISR, wait, overlap and CPU tests passed\n";
 }
