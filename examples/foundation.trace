@@ -1,0 +1,5 @@
+RTOS-OBSERVATORY	1	build-abc	zephyr-4	mono	1000000
+0	0	SESSION	-	foundation	0
+1	0	CREATE	worker	-	5
+2	10	SWITCH_IN	worker	cpu0	0
+3	20	SWITCH_OUT	worker	cpu0	0

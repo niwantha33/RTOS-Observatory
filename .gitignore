@@ -1,0 +1,17 @@
+/build/
+/build-*/
+*.obj
+*.o
+*.exe
+*.pdb
+*.ilk
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+*.pyc
+__pycache__/
+examples/my-report.json
+
+build*/
