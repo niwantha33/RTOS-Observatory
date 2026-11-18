@@ -122,13 +122,13 @@ try {
     $clang = 'C:\Program Files\LLVM\bin\clang-cl.exe'
     if (-not (Test-Path -LiteralPath $clang -PathType Leaf)) {
         $clangCommand = Get-Command clang-cl.exe -CommandType Application -ErrorAction SilentlyContinue
-        if ($clangCommand) { $clang = $clangCommand.Source }
+        if ($clangCommand) { $clang = @($clangCommand)[0].Source }
     }
     Require-File $clang 'LLVM clang-cl.exe'
     $clangBin = Split-Path $clang -Parent
     Require-File (Join-Path $clangBin 'lld-link.exe') 'LLVM lld-link.exe'
-    $cmake = (Get-Command cmake -CommandType Application -ErrorAction Stop).Source
-    $ninja = (Get-Command ninja -CommandType Application -ErrorAction Stop).Source
+    $cmake = (Get-Command cmake -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    $ninja = (Get-Command ninja -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     $ctest = Join-Path (Split-Path $cmake -Parent) 'ctest.exe'
     Require-File $ctest 'CTest executable'
 
@@ -173,9 +173,9 @@ try {
         '-DOBSERVATORY_BUILD_LIVE=OFF',
         '-DOBSERVATORY_BUILD_TESTS=ON'
     )
-    Run-Checked $cmake $cmakeArgs 'CMake configure'
-    Run-Checked $cmake @('--build', $build, '--parallel', '4') 'Desktop build'
-    Run-Checked $ctest @('--test-dir', $build, '--output-on-failure', '--no-tests=error', '-C', $Configuration) 'CTest'
+    Run-Checked -Executable $cmake -Arguments $cmakeArgs -Step 'CMake configure'
+    Run-Checked -Executable $cmake -Arguments @('--build', $build, '--parallel', '4') -Step 'Desktop build'
+    Run-Checked -Executable $ctest -Arguments @('--test-dir', $build, '--output-on-failure', '--no-tests=error', '-C', $Configuration) -Step 'CTest'
 
     Write-Host ''
     Write-Host 'SUCCESS: RTOS Observatory configured, built and passed tests.' -ForegroundColor Green
