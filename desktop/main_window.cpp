@@ -43,7 +43,7 @@ QLabel* make_label(const QString& t, const QString& id = {}) {
     if (!id.isEmpty()) l->setObjectName(id);
     return l;
 }
-QFrame* metric(const QString& caption, QLabel*& output) {
+QFrame* metric_card(const QString& caption, QLabel*& output) {
     auto* frame = new QFrame;
     frame->setObjectName("metric");
     auto* l = new QVBoxLayout(frame);
@@ -189,9 +189,9 @@ void MainWindow::build() {
     auto* ov = new QVBoxLayout(overview);
     ov->setSpacing(12);
     auto* cards = new QHBoxLayout;
-    cards->addWidget(metric("RECORDED EVENTS", event_metric_));
-    cards->addWidget(metric("OBSERVED TASKS", task_metric_));
-    cards->addWidget(metric("FINDINGS", finding_metric_));
+    cards->addWidget(metric_card("RECORDED EVENTS", event_metric_));
+    cards->addWidget(metric_card("OBSERVED TASKS", task_metric_));
+    cards->addWidget(metric_card("FINDINGS", finding_metric_));
     ov->addLayout(cards);
     ov->addWidget(make_label("TASKS  /  VERIFIED FROM TRACE EVENTS", "subhead"));
     tasks_ = make_table({"Task", "Priority", "Period (µs)", "Idle"}, "taskTable");
