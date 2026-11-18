@@ -6,16 +6,19 @@
 
 ## W05 — Standalone native desktop (merged PR #12)
 
+The Dear ImGui renderer migration is being developed in PR #14. The historical Qt implementation remains on `main` until that PR is accepted.
+
 The optional **Dear ImGui + GLFW + OpenGL3** application provides a real Windows/Linux desktop session browser that calls the existing **C++20 core in-process**. It opens normalized trace files and indexed offline sessions, displays tasks/events/findings and evidence quality, filters event rows, and exports reports. It does **not** connect to GDB, claim live tracing, or implement W07 causal graphs.
 
-```sh
+``sh
+git submodule update --init --recursive
 cmake -S . -B build-desktop -DOBSERVATORY_BUILD_DESKTOP=ON -DOBSERVATORY_BUILD_LIVE=OFF
 cmake --build build-desktop --config Release
 ctest --test-dir build-desktop -C Release --output-on-failure
 # Launch rtos-observatory-desktop (build-desktop/Release/ on Visual Studio generators)
 ```
 
-No Qt installation is required. The desktop option fetches the version-pinned MIT-licensed Dear ImGui and zlib-licensed GLFW sources. **Windows needs MSVC-compatible SDK tools (including mt.exe and rc.exe), CMake, Ninja, and a C++20 compiler.** [ImGui build steps and licence notes](docs/DESKTOP_IMGUI.md). W05 was originally merged with Qt in [PR #12](https://github.com/niwantha33/RTOS-Observatory/pull/12); this migration replaces that UI.
+No Qt installation is required. Dear ImGui and GLFW are exact-commit Git submodules under `third_party/` (along with optional standalone Asio). Run `git submodule update --init --recursive` after cloning or changing branches. CMake never downloads these libraries during configuration. **Windows needs MSVC-compatible SDK tools (including mt.exe and rc.exe), CMake, Ninja, and a C++20 compiler.** [ImGui build steps and licence notes](docs/DESKTOP_IMGUI.md). W05 was originally merged with Qt in [PR #12](https://github.com/niwantha33/RTOS-Observatory/pull/12); this migration replaces that UI.
 
 ## W06 — Execution timeline and CPU analysis (merged PR #13; renderer migration in progress)
 
