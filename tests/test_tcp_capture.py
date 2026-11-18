@@ -7,7 +7,9 @@ import tempfile
 import threading
 import time
 capture, analyze, fixture = sys.argv[1:]
-trace=pathlib.Path(fixture).read_bytes()
+# Git may check the fixture out as CRLF on Windows. Normalize before
+# constructing explicit LF/CRLF wire cases; avoid generating CRCRLF.
+trace=pathlib.Path(fixture).read_bytes().replace(b'\r\n',b'\n')
 def check(data, expected=0, extra=(), delay=0):
     with tempfile.TemporaryDirectory() as tmp:
         root=pathlib.Path(tmp);session=root/'session'
