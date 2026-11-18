@@ -142,6 +142,13 @@ if(OBSERVATORY_BUILD_DESKTOP)
     observatory_desktop_model observatory_imgui)
   target_compile_features(rtos-observatory-desktop PRIVATE cxx_std_20)
   install(TARGETS rtos-observatory-desktop RUNTIME DESTINATION bin)
+  # Explicit redistributable third-party notices for source/binary packaging.
+  install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE
+    DESTINATION share/doc/rtos-observatory/licenses RENAME Observatory-Apache-2.0.txt)
+  install(FILES ${imgui_SOURCE_DIR}/LICENSE.txt
+    DESTINATION share/doc/rtos-observatory/licenses RENAME Dear-ImGui-MIT.txt)
+  install(FILES ${glfw_SOURCE_DIR}/LICENSE.md
+    DESTINATION share/doc/rtos-observatory/licenses RENAME GLFW-zlib.txt)
 
   if(OBSERVATORY_BUILD_TESTS)
     add_executable(observatory_desktop_controller_tests desktop/tests/test_session_controller.cpp)
