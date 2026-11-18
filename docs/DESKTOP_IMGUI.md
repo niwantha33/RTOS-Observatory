@@ -14,19 +14,27 @@ W06 model. The core library, CLI and C11 target ring remain Qt-free.
 - OpenGL / platform drivers and SDK components remain required.
 - No Qt SDK, Qt DLLs, or Qt paid licence is needed for this backend.
 
-Versioned dependency Git tags are used by CMake FetchContent. First configuration
-requires internet access or local sources via FETCHCONTENT_SOURCE_DIR_IMGUI and
-FETCHCONTENT_SOURCE_DIR_GLFW. The core-only build never downloads UI dependencies.
+All three external source libraries are now **Git submodules with exact commit IDs**
+recorded as gitlinks. ImGui and GLFW are consumed from third_party/; standalone
+Asio is pinned for the optional live transport. No CMake FetchContent, system
+library fallback or configure-time library download is used. Initialise them
+once with `git submodule update --init --recursive`; subsequent offline CMake
+configurations can work without the network. Git still requires access to
+those upstream repositories on the first submodule checkout. Missing submodule
+contents cause a clear configure error.
 
 ## First Windows build
 
 Open x64 Native Tools Command Prompt (VS 2022/2026), or activate the Visual
 Studio developer environment in PowerShell so cl, rc and mt from Windows SDK
 are available. clang-cl by itself does not supply Windows SDK imports/manifest
-tools. Build from the repository:
+tools. Launch-VsDevShell.ps1 can change the current directory; always return
+to the actual repository folder before Git or CMake operations. Build from the repository:
 
     git fetch origin
     git switch --track origin/feature/dear-imgui-desktop-w05-w06
+    git submodule sync --recursive
+    git submodule update --init --recursive
     cmake -S . -B build-imgui -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_BUILD_TYPE=Release -DOBSERVATORY_BUILD_DESKTOP=ON
     cmake --build build-imgui --parallel 2
     ctest --test-dir build-imgui --output-on-failure
@@ -42,6 +50,7 @@ Install Ninja, CMake, a C++20 compiler, GLFW/OpenGL/X11 development libraries
 and Xvfb for headless UI tests:
 
     sudo apt-get install cmake ninja-build g++ git libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev xvfb
+    git submodule update --init --recursive
     cmake -S . -B build-imgui -G Ninja -DCMAKE_BUILD_TYPE=Release -DOBSERVATORY_BUILD_DESKTOP=ON
     cmake --build build-imgui --parallel 2
     ctest --test-dir build-imgui --output-on-failure
