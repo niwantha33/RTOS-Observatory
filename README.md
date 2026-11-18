@@ -4,6 +4,18 @@
 
 > Status: executable **offline MVP**, not a production debugger. The supplied capture is **synthetic**. This repository does **not** implement live GDB transport, a real FreeRTOS/TI-RTOS/Zephyr parser, verified trace firmware, or an installed Eclipse extension. The experimental Eclipse handoff source is in `bridge/eclipse`.
 
+## W05 — Standalone native desktop (draft PR #12)
+
+The optional **Qt 6 Widgets** application provides a real Windows/Linux desktop session browser that calls the existing **C++20 core in-process**. It opens normalized trace files and indexed offline sessions, displays tasks/events/findings and evidence quality, filters event rows, and exports reports. It does **not** connect to GDB, claim live tracing, or implement W06 timelines or W07 causal graphs.
+
+```sh
+cmake -S . -B build-desktop -DOBSERVATORY_BUILD_DESKTOP=ON -DOBSERVATORY_BUILD_LIVE=OFF
+cmake --build build-desktop --config Release
+ctest --test-dir build-desktop -C Release --output-on-failure
+# Launch rtos-observatory-desktop (build-desktop/Release/ on Visual Studio generators)
+```
+
+Qt 6.5+ development libraries matching your compiler are required **only** for the desktop option. W05 remains in review in [PR #12](https://github.com/niwantha33/RTOS-Observatory/pull/12); [detailed setup, tests and scope](docs/DESKTOP_W05.md).
 ## Optional Asio TCP capture
 
 The host can receive a bounded finite normalized trace using standalone Asio and one strand per session, validate rows and report progress during reception, then save it for offline replay. See [build and demo instructions](docs/ASIO_CAPTURE.md). This is an early W17/W18 transport foundation; device adapters and continuously updating diagnostic analysis remain planned.
