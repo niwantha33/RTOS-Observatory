@@ -14,7 +14,8 @@
 namespace observatory::desktop {
 namespace {
 std::filesystem::path file_path(const std::string& text) {
-    return std::filesystem::u8path(text);
+    // Preserve UTF-8 input semantics without deprecated C++20 std::filesystem::u8path.
+    return std::filesystem::path(std::u8string(text.begin(), text.end()));
 }
 std::string as_text(std::uint64_t n) { return std::to_string(n); }
 ImU32 rgba(int r, int g, int b, int a = 255) { return IM_COL32(r,g,b,a); }
