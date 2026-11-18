@@ -6,7 +6,7 @@
 
 ## W05 — Standalone native desktop (merged PR #12)
 
-The Dear ImGui renderer migration is being developed in PR #14. The historical Qt implementation remains on `main` until that PR is accepted.
+The Dear ImGui renderer was merged in [PR #14](https://github.com/niwantha33/RTOS-Observatory/pull/14), replacing the historical Qt desktop UI.
 
 The optional **Dear ImGui + GLFW + OpenGL3** application provides a real Windows/Linux desktop session browser that calls the existing **C++20 core in-process**. It opens normalized trace files and indexed offline sessions, displays tasks/events/findings and evidence quality, filters event rows, and exports reports. It does **not** connect to GDB, claim live tracing, or implement W07 causal graphs.
 
@@ -18,13 +18,13 @@ ctest --test-dir build-desktop -C Release --output-on-failure
 # Launch rtos-observatory-desktop (build-desktop/Release/ on Visual Studio generators)
 ```
 
-No Qt installation is required. Dear ImGui and GLFW are exact-commit Git submodules under `third_party/` (along with optional standalone Asio). Run `git submodule update --init --recursive` after cloning or changing branches. CMake never downloads these libraries during configuration. **Windows needs MSVC-compatible SDK tools (including mt.exe and rc.exe), CMake, Ninja, and a C++20 compiler.** [ImGui build steps and licence notes](docs/DESKTOP_IMGUI.md). W05 was originally merged with Qt in [PR #12](https://github.com/niwantha33/RTOS-Observatory/pull/12); this migration replaces that UI.
+No Qt installation is required. Dear ImGui and GLFW are exact-commit Git submodules under `third_party/` (along with optional standalone Asio). Run `git submodule update --init --recursive` after cloning or changing branches. CMake never downloads these libraries during configuration. **Windows needs MSVC-compatible SDK tools (including mt.exe and rc.exe), CMake, Ninja, and a C++20 compiler.** For clang-cl, use the checked-in `tools/build-windows-clang.ps1` from ordinary PowerShell after submodule checkout. It configures the complete MSVC/SDK environment and runs the desktop build and CTest; see [Windows details](docs/DESKTOP_IMGUI.md). [ImGui build steps and licence notes](docs/DESKTOP_IMGUI.md). W05 was originally merged with Qt in [PR #12](https://github.com/niwantha33/RTOS-Observatory/pull/12); this migration replaces that UI.
 
 ## W06 — Execution timeline and CPU analysis (merged PR #13; renderer migration in progress)
 
 W06 adds **native Dear ImGui task and per-core execution timelines**, explicit ISR/idle/unknown spans, completed wait lanes, microsecond window selection, Fit/zoom, hover details, per-core CPU busy/idle/ISR/unknown durations and conditional utilisation percentages. Uncovered time is **Unknown**, not idle; percentages are suppressed for incomplete or loss-affected windows. Thread lanes show observed execution only, never inferred ready/sleeping states. All results remain offline evidence from normalized input.
 
-Run the desktop with `--trace examples/timeline.trace` after building; this sample is **synthetic**. [W06 technical specification and testing](docs/W06_TIMELINE.md) · [W06 merged PR #13](https://github.com/niwantha33/RTOS-Observatory/pull/13). The core W06 model is merged; review this Dear ImGui migration separately.
+Run the desktop with `--trace examples/timeline.trace` after building; this sample is **synthetic**. [W06 technical specification and testing](docs/W06_TIMELINE.md) · [W06 merged PR #13](https://github.com/niwantha33/RTOS-Observatory/pull/13). The core W06 model and Dear ImGui renderer are merged; this remains an offline evidence viewer.
 
 ## Optional Asio TCP capture
 
