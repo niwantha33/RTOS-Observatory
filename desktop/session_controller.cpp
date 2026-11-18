@@ -35,7 +35,7 @@ TimelineView SessionController::timeline(std::uint64_t begin_us, std::uint64_t e
     if (!loaded()) throw Error("No trace loaded");
     const auto& evidence = trace_->evidence;
     return build_timeline(*report_, begin_us, end_us,
-                          evidence.missing_events == 0 && evidence.declared_drops == 0);
+                          evidence.sequence_available && evidence.missing_events == 0 && evidence.declared_drops == 0);
 }
 void SessionController::export_report(const std::filesystem::path& file) const {
     if (!report_) throw Error("No investigation loaded");
