@@ -1,0 +1,28 @@
+# Illustrative synthetic event trace. Priority urgency increases numerically.
+# timestamp_us  event  task  object  value (TAB SEPARATED)
+0	SESSION	-	synthetic-zephyr	0
+0	CREATE	TaskA	-	9
+0	CREATE	TaskB	-	5
+0	CREATE	TaskC	-	2
+0	PERIOD	TaskA	-	1000
+10	SWITCH_IN	TaskC	core0	0
+20	MUTEX_ACQUIRE	TaskC	M1	0
+30	SWITCH_OUT	TaskC	core0	0
+100	TASK_RELEASE	TaskA	-	0
+120	MUTEX_WAIT	TaskA	M1	0
+130	SWITCH_IN	TaskB	core0	0
+430	SWITCH_OUT	TaskB	core0	0
+440	SWITCH_IN	TaskC	core0	0
+600	MUTEX_UNLOCK	TaskC	M1	0
+610	SWITCH_OUT	TaskC	core0	0
+620	MUTEX_ACQUIRE	TaskA	M1	0
+630	TASK_BEGIN	TaskA	-	0
+630	SWITCH_IN	TaskA	core0	0
+670	MUTEX_UNLOCK	TaskA	M1	0
+680	TASK_FINISH	TaskA	-	0
+690	SWITCH_OUT	TaskA	core0	0
+1100	TASK_RELEASE	TaskA	-	0
+1110	TASK_BEGIN	TaskA	-	0
+1110	SWITCH_IN	TaskA	core0	0
+1150	TASK_FINISH	TaskA	-	0
+1160	SWITCH_OUT	TaskA	core0	0

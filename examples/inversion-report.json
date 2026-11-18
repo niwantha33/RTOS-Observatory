@@ -1,0 +1,13 @@
+{
+  "schema": "rtos-observatory-report/v1",
+  "session": "synthetic-zephyr",
+  "source": "synthetic-zephyr",
+  "complete": true,
+  "start_us": 0, "end_us": 1160,
+  "threads": [{"id":"TaskA","priority":9,"period_us":1000,"idle":false},{"id":"TaskB","priority":5,"period_us":null,"idle":false},{"id":"TaskC","priority":2,"period_us":null,"idle":false}],
+  "intervals": [{"task":"TaskC","core":"core0","state":"running","start_us":10,"end_us":30},{"task":"TaskB","core":"core0","state":"running","start_us":130,"end_us":430},{"task":"TaskC","core":"core0","state":"running","start_us":440,"end_us":610},{"task":"TaskA","core":"core0","state":"running","start_us":630,"end_us":690},{"task":"TaskA","core":"core0","state":"running","start_us":1110,"end_us":1160}],
+  "waits": [{"task":"TaskA","resource":"M1","resource_type":"mutex","owner":"TaskC","owner_proven":true,"owner_release_us":600,"start_us":120,"end_us":620}],
+  "cycles": [{"task":"TaskA","release_us":100,"start_us":630,"end_us":680,"phase_error_us":0},{"task":"TaskA","release_us":1100,"start_us":1110,"end_us":1150,"phase_error_us":0}],
+  "findings": [{"code":"RESOURCE_WAIT","confidence":"observed","description":"Observed completed mutex wait; no deadline inferred","task":"TaskA","resource":"M1","start_us":120,"end_us":620,"observed_us":500},{"code":"PRIORITY_INVERSION_PATTERN","confidence":"observed-pattern","description":"High-priority waiter blocked on lower-priority mutex owner while medium-priority task executed; causation and deadline miss not proven","task":"TaskA","resource":"M1","start_us":120,"end_us":620,"observed_us":300},{"code":"DISPATCH_DELAY","confidence":"observed","description":"Time between explicit release and task-begin marker (application-level, not necessarily scheduler dispatch)","task":"TaskA","resource":"-","start_us":100,"end_us":630,"observed_us":530},{"code":"DISPATCH_DELAY","confidence":"observed","description":"Time between explicit release and task-begin marker (application-level, not necessarily scheduler dispatch)","task":"TaskA","resource":"-","start_us":1100,"end_us":1110,"observed_us":10}],
+  "warnings": []
+}

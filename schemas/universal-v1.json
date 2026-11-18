@@ -1,0 +1,121 @@
+{
+  "protocol": "rtos-observatory/universal",
+  "version": 1,
+  "encoding": "ASCII-compatible UTF-8",
+  "serialization": "TSV",
+  "header": [
+    "RTOS-OBSERVATORY",
+    "1",
+    "firmware",
+    "rtos",
+    "clock",
+    "1000000"
+  ],
+  "row_fields": [
+    "sequence",
+    "timestamp_us",
+    "event",
+    "task",
+    "object",
+    "value"
+  ],
+  "constraints": {
+    "sequence": "uint64 strictly increasing",
+    "timestamp_us": "uint63 nondecreasing",
+    "task_and_object": "1..64 safe printable ASCII bytes; see EVENT_SCHEMA.md",
+    "value": "int64",
+    "first_event": "0 SESSION - session-id 0 (sequence omitted here)",
+    "priority": "0..255; higher is more urgent",
+    "period_us": ">0",
+    "drop_count": ">0"
+  },
+  "events": [
+    "SESSION",
+    "CREATE",
+    "PRIORITY",
+    "PERIOD",
+    "SWITCH_IN",
+    "SWITCH_OUT",
+    "ISR_ENTER",
+    "ISR_EXIT",
+    "MUTEX_WAIT",
+    "MUTEX_ACQUIRE",
+    "MUTEX_UNLOCK",
+    "WAIT_BEGIN",
+    "WAIT_END",
+    "TASK_RELEASE",
+    "TASK_BEGIN",
+    "TASK_FINISH",
+    "DROP"
+  ],
+  "families": {
+    "task": {
+      "version": 1,
+      "events": [
+        "CREATE",
+        "PRIORITY",
+        "PERIOD",
+        "SWITCH_IN",
+        "SWITCH_OUT",
+        "TASK_RELEASE",
+        "TASK_BEGIN",
+        "TASK_FINISH"
+      ]
+    },
+    "isr": {
+      "version": 1,
+      "events": [
+        "ISR_ENTER",
+        "ISR_EXIT"
+      ]
+    },
+    "mutex": {
+      "version": 1,
+      "events": [
+        "MUTEX_WAIT",
+        "MUTEX_ACQUIRE",
+        "MUTEX_UNLOCK"
+      ]
+    },
+    "semaphore": {
+      "version": 1,
+      "events": [
+        "WAIT_BEGIN",
+        "WAIT_END"
+      ],
+      "resource_prefix": "sem:"
+    },
+    "queue": {
+      "version": 1,
+      "events": [
+        "WAIT_BEGIN",
+        "WAIT_END"
+      ],
+      "resource_prefix": "queue:"
+    },
+    "clock": {
+      "version": 1,
+      "header_fields": [
+        "clock",
+        "ticks_per_second"
+      ],
+      "ticks_per_second": 1000000
+    },
+    "evidence": {
+      "version": 1,
+      "events": [
+        "SESSION",
+        "DROP"
+      ],
+      "fields": [
+        "sequence",
+        "source_line",
+        "first_sequence",
+        "last_sequence",
+        "missing_events",
+        "declared_drops"
+      ]
+    }
+  },
+  "semantics": "../docs/UNIVERSAL_V1.md"
+}
