@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Gitlink SHAs in the parent repository, not branches or tags, are authoritative.
+[submodule "third_party/imgui"]
+    path = third_party/imgui
+    url = https://github.com/ocornut/imgui.git
+    shallow = true
+[submodule "third_party/glfw"]
+    path = third_party/glfw
+    url = https://github.com/glfw/glfw.git
+    shallow = true
+[submodule "third_party/asio"]
+    path = third_party/asio
+    url = https://github.com/chriskohlhoff/asio.git
+    shallow = true
