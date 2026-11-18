@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # RTOS Observatory — project status
 
-**Verified baseline:** 2026-11-18 — W05 merged on `main` at [`595bd157e`](https://github.com/niwantha33/RTOS-Observatory/commit/595bd157e5a3b9b86a2e11d1c6b6edd148713d67), with [desktop Windows/Linux CI passing](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44337073814). **W06 PR #13 merged on 2026-11-18**, Dear ImGui renderer migration pending CI/review; this is a dated development snapshot, not a live CI dashboard.
+**Verified baseline:** 2026-11-18 — W05 merged on `main` at [`595bd157e`](https://github.com/niwantha33/RTOS-Observatory/commit/595bd157e5a3b9b86a2e11d1c6b6edd148713d67), with [desktop Windows/Linux CI passing](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44337073814). **W06 PR #13 merged on 2026-11-18**, Dear ImGui renderer + third-party gitlink pinning in PR #14; latest CI/review pending; this is a dated development snapshot, not a live CI dashboard.
 
 [Master issue #8](https://github.com/niwantha33/RTOS-Observatory/issues/8) · [Master plan](MASTER_PLAN.md) · [Bug guide](BUG_TRACKING.md)
 
@@ -40,7 +40,8 @@
 - [`main` CI run #44326850607](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44326850607) finished **success** at **14:41:57 UTC** — Ubuntu Debug, Ubuntu Release, Windows Debug and Windows Release all built and passed CTest.
 - [PR #9](https://github.com/niwantha33/RTOS-Observatory/pull/9) was merged; roadmap/templates are on main.
 - [W05 PR #12](https://github.com/niwantha33/RTOS-Observatory/pull/12) merged 2026-11-18; [desktop CI](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44337073814) passed all four Windows/Linux Debug/Release jobs.
-- [Merged W06 PR #13](https://github.com/niwantha33/RTOS-Observatory/pull/13) implements timeline and CPU analysis; CI and acceptance still pending.
+- [Merged W06 PR #13](https://github.com/niwantha33/RTOS-Observatory/pull/13) implements offline timeline and CPU analysis.
+- [Draft PR #14](https://github.com/niwantha33/RTOS-Observatory/pull/14): replace Qt with Dear ImGui, pin ImGui/GLFW/Asio using Git submodules, remove CMake FetchContent. Latest-head CI and review pending.
 
 ## Open constraints / risks
 
