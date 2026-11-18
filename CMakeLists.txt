@@ -4,8 +4,9 @@ option(OBSERVATORY_BUILD_TESTS "Build deterministic C++ tests" ON)
 add_library(observatory_target_ring firmware/obs_trace_ring.c)
 target_include_directories(observatory_target_ring PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/firmware)
 target_compile_features(observatory_target_ring PUBLIC c_std_11)
-if(MSVC)
-  # MSVC gates its C11 <stdatomic.h> implementation behind this option.
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+  # Only Microsoft's C compiler needs this option; clang-cl supports C11 atomics
+  # without it, and warns when passed /experimental:c11atomics.
   target_compile_options(observatory_target_ring PUBLIC /experimental:c11atomics)
 endif()
 add_library(observatory_core src/engine.cpp src/session.cpp src/timeline.cpp)
