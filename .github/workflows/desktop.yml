@@ -1,4 +1,4 @@
-name: Native desktop W05
+name: Native desktop Dear ImGui
 on: [push, pull_request]
 
 jobs:
@@ -9,17 +9,21 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         configuration: [Debug, Release]
-    env:
-      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
-      - uses: jurplel/install-qt-action@v4
+      - name: Install Linux GLFW/OpenGL/Xvfb dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev xvfb
+      - name: Activate Windows MSVC and Windows SDK tools
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
         with:
-          version: '6.8.3'
-          cache: true
-      - name: Configure Qt desktop
-        run: cmake -S . -B build-desktop -DOBSERVATORY_BUILD_DESKTOP=ON -DOBSERVATORY_BUILD_LIVE=OFF -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
-      - name: Build native UI and C++ core
-        run: cmake --build build-desktop --config ${{ matrix.configuration }} --parallel 2
-      - name: CTest model, CLI and native offscreen widget
-        run: ctest --test-dir build-desktop -C ${{ matrix.configuration }} --output-on-failure
+          arch: amd64
+      - name: Configure native ImGui desktop
+        run: cmake -S . -B build-desktop -G Ninja -DOBSERVATORY_BUILD_DESKTOP=ON -DOBSERVATORY_BUILD_LIVE=OFF -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
+      - name: Build ImGui UI and C++ core
+        run: cmake --build build-desktop --parallel 2
+      - name: CTest offline model, CLI, controller and UI smoke
+        run: ctest --test-dir build-desktop --output-on-failure
