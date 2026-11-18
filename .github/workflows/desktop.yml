@@ -29,3 +29,27 @@ jobs:
         run: cmake --build build-desktop --parallel 2
       - name: CTest offline model, CLI, controller and UI smoke
         run: ctest --test-dir build-desktop --output-on-failure
+
+  # Reproduces local clang-cl + lld-link + MSVC CRT/Windows SDK configuration.
+  # Separate from the existing native MSVC desktop matrix; no VsDevCmd.bat.
+  windows-clang-cl:
+    name: Windows clang-cl / ${{ matrix.configuration }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Discover MSVC runtime and SDK, configure, build and test
+        shell: pwsh
+        run: >
+          pwsh -NoProfile -ExecutionPolicy Bypass -File
+          .\tools\build-windows-clang.ps1
+          -Configuration ${{ matrix.configuration }}
+          -BuildDirectory build-windows-clang-${{ matrix.configuration }}
