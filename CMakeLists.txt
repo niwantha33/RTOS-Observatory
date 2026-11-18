@@ -93,16 +93,16 @@ if(OBSERVATORY_BUILD_LIVE AND OBSERVATORY_BUILD_TESTS AND Python3_Interpreter_FO
 endif()
 
 # W05/W06: Qt-free standalone Dear ImGui + GLFW + OpenGL3 desktop.
-# CLI, offline analysis, and firmware builds never fetch desktop dependencies.
+# CLI, offline analysis, and firmware builds do not require UI submodule contents.
 option(OBSERVATORY_BUILD_DESKTOP "Build Dear ImGui native offline desktop" OFF)
 if(OBSERVATORY_BUILD_DESKTOP)
-  include(FetchContent)
-  # Exact released tags, not floating branches. Offline local sources:
-  # -DFETCHCONTENT_SOURCE_DIR_IMGUI=... -DFETCHCONTENT_SOURCE_DIR_GLFW=...
-  FetchContent_Declare(imgui
-    GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG v1.92.6
-    GIT_SHALLOW TRUE)
+  # Dependencies are committed gitlinks, never fetched at configure time.
+  set(imgui_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui")
+  set(glfw_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/glfw")
+  if(NOT EXISTS "${imgui_SOURCE_DIR}/imgui.h" OR
+     NOT EXISTS "${glfw_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "Desktop dependencies missing. Run: git submodule update --init --recursive")
+  endif()
   set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
   set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
   set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
@@ -110,11 +110,7 @@ if(OBSERVATORY_BUILD_DESKTOP)
     set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_X11 ON CACHE BOOL "" FORCE)
   endif()
-  FetchContent_Declare(glfw
-    GIT_REPOSITORY https://github.com/glfw/glfw.git
-    GIT_TAG 3.5.1
-    GIT_SHALLOW TRUE)
-  FetchContent_MakeAvailable(imgui glfw)
+  add_subdirectory("${glfw_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/third_party/glfw")
   find_package(OpenGL REQUIRED)
 
   add_library(observatory_desktop_model desktop/session_controller.cpp)
