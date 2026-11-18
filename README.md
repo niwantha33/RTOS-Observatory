@@ -6,7 +6,7 @@
 
 ## Optional Asio TCP capture
 
-The host can receive a bounded finite normalized trace using standalone Asio and one strand per session, then save it for offline replay. See [build and demo instructions](docs/ASIO_CAPTURE.md). This is an early W17/W18 transport foundation; device adapters and continuously updating analysis remain planned.
+The host can receive a bounded finite normalized trace using standalone Asio and one strand per session, validate rows and report progress during reception, then save it for offline replay. See [build and demo instructions](docs/ASIO_CAPTURE.md). This is an early W17/W18 transport foundation; device adapters and continuously updating diagnostic analysis remain planned.
 
 ## Phase 0: offline sessions
 

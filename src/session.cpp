@@ -62,53 +62,12 @@ public:
 class V1Decoder final : public Decoder {
 public:
     DecodedTrace decode(std::istream& in, const Limits& limits) const override {
-        auto raw = bounded_read(in, limits);
-        std::istringstream stream(raw);
-        std::string line;
-        if (!std::getline(stream, line)) throw Error("missing v1 header");
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        const auto h = fields(line);
-        if (h.size() != 6 || h[0] != "RTOS-OBSERVATORY" || h[1] != "1") throw Error("unsupported event schema");
-        token(h[2]); token(h[3]); token(h[4]);
-        DecodedTrace result;
-        result.identity = {h[2], h[3], h[4], uint(h[5])};
-        if (result.identity.ticks_per_second != 1000000) throw Error("v1 requires normalized microsecond timestamps");
-        std::ostringstream normalized;
-        std::uint64_t previous = 0;
-        bool first = true;
-        std::size_t count = 0;
-        while (std::getline(stream, line)) {
-            if (!line.empty() && line.back() == '\r') line.pop_back();
-            if (line.empty() || line[0] == '#') continue;
-            if (++count > limits.max_events) throw Error("event limit exceeded");
-            const auto f = fields(line);
-            if (f.size() != 6) throw Error("v1 event requires sequence plus five event fields");
-            const auto seq = uint(f[0]);
-            if (!first && seq <= previous) throw Error("duplicate or decreasing sequence");
-            if (first) result.evidence.first_sequence = seq;
-            else if (seq-previous > 1) {
-                const auto missing = seq-previous-1;
-                if (missing > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) throw Error("sequence gap exceeds event range");
-                result.evidence.missing_events = add_checked(result.evidence.missing_events, missing);
-                normalized << f[1] << "\tDROP\t-\t-\t" << missing << '\n';
-            }
-            for (std::size_t i=1; i<f.size(); ++i) normalized << (i==1 ? "" : "\t") << f[i];
-            normalized << '\n';
-            previous = seq; first = false;
-        }
-        result.evidence.sequence_available = true;
-        result.evidence.last_sequence = previous;
-        std::istringstream events(normalized.str());
-        result.capture = parse_trace(events, limits.max_events);
-        // Synthetic DROP events carry gap evidence; explicit DROP is separately counted.
-        std::istringstream original(raw);
-        std::getline(original, line);
-        while (std::getline(original, line)) {
-            if (!line.empty() && line.back() == '\r') line.pop_back();
-            auto f = fields(line);
-            if (f.size()==6 && f[2]=="DROP") result.evidence.declared_drops = add_checked(result.evidence.declared_drops, uint(f[5]));
-        }
-        return result;
+        UniversalStream stream(limits);
+        char buffer[4096];
+        while (in.read(buffer,sizeof(buffer)) || in.gcount()>0)
+            stream.feed(std::string_view(buffer,static_cast<std::size_t>(in.gcount())));
+        if(!in.eof()) throw Error("input read failed");
+        return stream.finish();
     }
 };
 std::uint32_t crc32(const std::string& raw) {
@@ -158,6 +117,74 @@ std::string read(const std::filesystem::path& path, const Limits& limits) {
     if (!in) throw Error("session read failed: " + path.string());
     return bounded_read(in, limits);
 }
+}
+UniversalStream::UniversalStream(Limits limits):limits_(limits) {
+    trace_.decoder="universal-v1";
+}
+void UniversalStream::row() {
+    ++line_;
+    auto line=std::move(pending_);pending_.clear();
+    if(!line.empty() && line.back()=='\r') line.pop_back();
+    if(!header_) {
+        const auto h=fields(line);
+        if(h.size()!=6 || h[0]!="RTOS-OBSERVATORY" || h[1]!="1") throw Error("unsupported event schema");
+        token(h[2]);token(h[3]);token(h[4]);
+        trace_.identity={h[2],h[3],h[4],uint(h[5])};
+        if(trace_.identity.ticks_per_second!=1000000) throw Error("v1 requires normalized microsecond timestamps");
+        header_=true;trace_.evidence.sequence_available=true;return;
+    }
+    if(line.empty() || line[0]=='#') return;
+    const auto split=line.find('\t');
+    if(split==std::string::npos) throw Error("v1 event requires sequence plus five event fields");
+    const auto sequence=uint(line.substr(0,split));
+    auto event=detail::parse_event_row(line.substr(split+1),line_);
+    auto& evidence=trace_.evidence;
+    if(trace_.capture.events.empty()) evidence.first_sequence=sequence;
+    else {
+        if(sequence<=evidence.last_sequence) throw Error("duplicate or decreasing sequence");
+        if(event.timestamp_us<trace_.capture.events.back().timestamp_us) throw Error("decreasing timestamp");
+        const auto gap=sequence-evidence.last_sequence-1;
+        if(gap) {
+            if(gap>static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) throw Error("sequence gap exceeds event range");
+            evidence.missing_events=add_checked(evidence.missing_events,gap);
+            detail::append_event(trace_.capture,{event.timestamp_us,"DROP","-","-",static_cast<std::int64_t>(gap),line_},limits_.max_events);
+        }
+    }
+    if(event.type=="DROP") evidence.declared_drops=add_checked(evidence.declared_drops,static_cast<std::uint64_t>(event.value));
+    detail::append_event(trace_.capture,std::move(event),limits_.max_events);
+    evidence.last_sequence=sequence;
+}
+void UniversalStream::feed(std::string_view bytes) {
+    if(failed_ || finalized_) throw Error("stream is no longer writable");
+    try {
+        if(bytes.size()>limits_.max_bytes-bytes_) throw Error("input byte limit exceeded");
+        bytes_+=bytes.size();
+        for(char c:bytes) {
+            if(c=='\n') row();
+            else {
+                if(pending_.size()>=limits_.max_line_bytes) throw Error("input line limit exceeded");
+                pending_.push_back(c);
+            }
+        }
+    } catch(...) {failed_=true;throw;}
+}
+DecodedTrace UniversalStream::finish(bool require_final_newline) {
+    if(failed_ || finalized_) throw Error("stream is no longer writable");
+    try {
+        if(!pending_.empty()) {
+            if(require_final_newline) throw Error("truncated stream: missing final newline");
+            row();
+        }
+        if(!header_ || trace_.capture.events.size()<2) throw Error("missing header, SESSION or trace events");
+        finalized_=true;
+        return std::move(trace_);
+    } catch(...) {failed_=true;throw;}
+}
+StreamProgress UniversalStream::progress() const {
+    if(failed_ || finalized_) throw Error("progress requires an active valid stream");
+    return {bytes_,trace_.capture.events.size(),pending_.size(),
+        trace_.capture.events.empty()?0:trace_.capture.events.back().timestamp_us,
+        trace_.evidence.missing_events,trace_.evidence.declared_drops,header_,false};
 }
 void DecoderRegistry::add(std::string id, std::shared_ptr<const Decoder> decoder) {
     token(id);

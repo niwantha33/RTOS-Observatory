@@ -12,7 +12,7 @@ std::shared_ptr<TcpCapture> TcpCapture::create(asio::io_context& io, TcpCaptureO
 }
 TcpCapture::TcpCapture(asio::io_context& io, TcpCaptureOptions options, Completion cb)
     : strand_(asio::make_strand(io)), socket_(strand_), idle_(strand_), deadline_(strand_),
-      options_(std::move(options)), completion_(std::move(cb)) {}
+      options_(std::move(options)), completion_(std::move(cb)), decoder_(options_.limits) {}
 void TcpCapture::start() {
     asio::post(strand_,[self=shared_from_this()]{self->begin();});
 }
@@ -44,29 +44,19 @@ void TcpCapture::read() {
     socket_.async_read_some(asio::buffer(buffer_),[self=shared_from_this()](const asio::error_code& ec,std::size_t n) {
         if(self->done_) return;
         if(n > self->options_.limits.max_bytes-self->raw_.size()) {self->finish("capture byte limit exceeded");return;}
-        // Count physical data rows and bound partial lines before accumulating them.
-        // One extra row is allowed for the universal-v1 header; decoder enforces exact event count.
-        for(std::size_t i=0;i<n;++i) {
-            const char c=self->buffer_[i];
-            if(c=='\n') {
-                if(self->row_has_data_ && !self->row_comment_) {
-                    if(++self->rows_ > self->options_.limits.max_events && self->rows_-self->options_.limits.max_events>1) {
-                        self->finish("capture row limit exceeded");return;
-                    }
-                }
-                self->line_bytes_=0;self->row_has_data_=false;self->row_comment_=false;
-            } else {
-                if(++self->line_bytes_ > self->options_.limits.max_line_bytes) {self->finish("capture line limit exceeded");return;}
-                if(!self->row_has_data_) self->row_comment_=(c=='#');
-                self->row_has_data_=true;
-            }
-        }
         self->raw_.append(self->buffer_.data(),n);
-        if(ec==asio::error::eof) {
-            // A newline is the transport commit boundary: never silently accept a cut final row.
-            if(self->line_bytes_!=0) self->finish("truncated stream: missing final newline");
-            else self->finish({},true);
-            return;
+        try {
+            self->decoder_.feed(std::string_view(self->buffer_.data(),n));
+            if(self->options_.progress && n) self->options_.progress(self->decoder_.progress());
+            if(ec==asio::error::eof) {
+                auto summary=self->decoder_.progress();
+                self->decoder_.finish(true);
+                summary.finalized=true;
+                if(self->options_.progress) self->options_.progress(summary);
+                self->finish({},true);return;
+            }
+        } catch(const std::exception& error) {
+            self->finish(std::string("stream validation/progress failed: ")+error.what());return;
         }
         if(ec) {self->finish("read failed: "+ec.message());return;}
         self->arm_idle();self->read();

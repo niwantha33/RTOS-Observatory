@@ -26,6 +26,28 @@ struct DecodedTrace {
     Evidence evidence;
     std::string decoder;
 };
+struct StreamProgress {
+    std::size_t bytes{}, events{}, pending_line_bytes{};
+    std::uint64_t last_timestamp_us{}, missing_events{}, declared_drops{};
+    bool header_valid = false;
+    bool finalized = false;
+};
+// Single-owner incremental universal-v1 parser, independent of Asio.
+// Any error poisons the instance. No recovery or reuse across reset epochs.
+class UniversalStream {
+public:
+    explicit UniversalStream(Limits limits = {});
+    void feed(std::string_view bytes);
+    DecodedTrace finish(bool require_final_newline = false);
+    StreamProgress progress() const;
+private:
+    void row();
+    Limits limits_;
+    DecodedTrace trace_;
+    std::string pending_;
+    std::size_t bytes_{}, line_{};
+    bool header_{}, failed_{}, finalized_{};
+};
 class Decoder {
 public:
     virtual ~Decoder() = default;
