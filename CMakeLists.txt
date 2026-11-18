@@ -67,6 +67,8 @@ if(OBSERVATORY_BUILD_LIVE)
   add_executable(rtos-observatory-capture src/capture_main.cpp)
   target_link_libraries(rtos-observatory-capture PRIVATE observatory_live)
   install(TARGETS rtos-observatory-capture RUNTIME DESTINATION bin)
+  install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/third_party/asio/asio/LICENSE_1_0.txt
+    DESTINATION share/doc/rtos-observatory/licenses RENAME Asio-Boost-1.0.txt)
   if(OBSERVATORY_BUILD_TESTS)
     add_executable(observatory_live_tests tests/test_live.cpp)
     target_link_libraries(observatory_live_tests PRIVATE observatory_live)
