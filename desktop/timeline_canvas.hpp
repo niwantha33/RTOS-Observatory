@@ -18,10 +18,12 @@ protected:
 private:
     int lane_for_core(const std::string& core) const;
     int lane_for_wait(const std::string& task, const std::string& resource) const;
+    int lane_for_task(const std::string& task) const;
     QRectF bar(std::uint64_t begin, std::uint64_t end, int lane) const;
     TimelineView view_;
     std::vector<std::string> rows_;
     std::map<std::string, int> core_rows_;
+    std::map<std::string, int> task_rows_;
     std::map<std::string, int> wait_rows_;
     bool rows_limited_{false};
     static constexpr int left_ = 170;
