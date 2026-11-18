@@ -67,6 +67,8 @@ if(OBSERVATORY_BUILD_LIVE)
   add_executable(rtos-observatory-capture src/capture_main.cpp)
   target_link_libraries(rtos-observatory-capture PRIVATE observatory_live)
   install(TARGETS rtos-observatory-capture RUNTIME DESTINATION bin)
+  install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/third_party/asio/asio/LICENSE_1_0.txt
+    DESTINATION share/doc/rtos-observatory/licenses RENAME Asio-Boost-1.0.txt)
   if(OBSERVATORY_BUILD_TESTS)
     add_executable(observatory_live_tests tests/test_live.cpp)
     target_link_libraries(observatory_live_tests PRIVATE observatory_live)
@@ -92,20 +94,60 @@ if(OBSERVATORY_BUILD_LIVE AND OBSERVATORY_BUILD_TESTS AND Python3_Interpreter_FO
   set_tests_properties(observatory_live_progress PROPERTIES TIMEOUT 25)
 endif()
 
-# W05: optional standalone native desktop, directly linked to observatory_core.
-# The existing CLI and firmware build never require Qt.
-option(OBSERVATORY_BUILD_DESKTOP "Build Qt6 native offline desktop" OFF)
+# W05/W06: Qt-free standalone Dear ImGui + GLFW + OpenGL3 desktop.
+# CLI, offline analysis, and firmware builds do not require UI submodule contents.
+option(OBSERVATORY_BUILD_DESKTOP "Build Dear ImGui native offline desktop" OFF)
 if(OBSERVATORY_BUILD_DESKTOP)
-  find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
+  # Dependencies are committed gitlinks, never fetched at configure time.
+  set(imgui_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui")
+  set(glfw_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/glfw")
+  if(NOT EXISTS "${imgui_SOURCE_DIR}/imgui.h" OR
+     NOT EXISTS "${glfw_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "Desktop dependencies missing. Run: git submodule update --init --recursive")
+  endif()
+  set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+  if(UNIX AND NOT APPLE)
+    set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_X11 ON CACHE BOOL "" FORCE)
+  endif()
+  add_subdirectory("${glfw_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/third_party/glfw")
+  find_package(OpenGL REQUIRED)
+
   add_library(observatory_desktop_model desktop/session_controller.cpp)
   target_include_directories(observatory_desktop_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(observatory_desktop_model PUBLIC observatory_core)
   target_compile_features(observatory_desktop_model PUBLIC cxx_std_20)
-  add_executable(rtos-observatory-desktop desktop/main.cpp desktop/main_window.cpp desktop/main_window.hpp
-    desktop/timeline_canvas.cpp desktop/timeline_canvas.hpp)
-  target_link_libraries(rtos-observatory-desktop PRIVATE observatory_desktop_model Qt6::Widgets)
+
+  add_library(observatory_imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
+  target_include_directories(observatory_imgui PUBLIC
+    ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+  target_link_libraries(observatory_imgui PUBLIC glfw OpenGL::GL)
+  target_compile_features(observatory_imgui PUBLIC cxx_std_20)
+
+  add_executable(rtos-observatory-desktop
+    desktop/imgui/main.cpp
+    desktop/imgui/workspace.cpp
+    desktop/imgui/workspace.hpp)
+  target_link_libraries(rtos-observatory-desktop PRIVATE
+    observatory_desktop_model observatory_imgui)
   target_compile_features(rtos-observatory-desktop PRIVATE cxx_std_20)
   install(TARGETS rtos-observatory-desktop RUNTIME DESTINATION bin)
+  # Explicit redistributable third-party notices for source/binary packaging.
+  install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE
+    DESTINATION share/doc/rtos-observatory/licenses RENAME Observatory-Apache-2.0.txt)
+  install(FILES ${imgui_SOURCE_DIR}/LICENSE.txt
+    DESTINATION share/doc/rtos-observatory/licenses RENAME Dear-ImGui-MIT.txt)
+  install(FILES ${glfw_SOURCE_DIR}/LICENSE.md
+    DESTINATION share/doc/rtos-observatory/licenses RENAME GLFW-zlib.txt)
+
   if(OBSERVATORY_BUILD_TESTS)
     add_executable(observatory_desktop_controller_tests desktop/tests/test_session_controller.cpp)
     target_link_libraries(observatory_desktop_controller_tests PRIVATE observatory_desktop_model)
@@ -115,9 +157,23 @@ if(OBSERVATORY_BUILD_DESKTOP)
     else()
       target_compile_options(observatory_desktop_controller_tests PRIVATE -UNDEBUG)
     endif()
-    add_test(NAME observatory_desktop_controller COMMAND observatory_desktop_controller_tests ${CMAKE_CURRENT_SOURCE_DIR}/examples/foundation.trace)
-    add_test(NAME observatory_desktop_smoke COMMAND rtos-observatory-desktop --smoke ${CMAKE_CURRENT_SOURCE_DIR}/examples/foundation.trace)
-    add_test(NAME observatory_desktop_timeline_smoke COMMAND rtos-observatory-desktop --smoke ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
-    set_tests_properties(observatory_desktop_smoke observatory_desktop_timeline_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    add_test(NAME observatory_desktop_controller COMMAND observatory_desktop_controller_tests
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/foundation.trace)
+    add_test(NAME observatory_desktop_smoke COMMAND rtos-observatory-desktop --smoke
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/foundation.trace)
+    add_test(NAME observatory_desktop_timeline_smoke COMMAND rtos-observatory-desktop --smoke
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
+    set_tests_properties(observatory_desktop_smoke observatory_desktop_timeline_smoke
+      PROPERTIES TIMEOUT 30)
+    # Linux CI xvfb-run provides a genuine hidden GLFW/OpenGL render smoke.
+    if(UNIX AND NOT APPLE)
+      find_program(OBSERVATORY_XVFB_RUN xvfb-run)
+      if(OBSERVATORY_XVFB_RUN)
+        add_test(NAME observatory_imgui_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
+          $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui
+          ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
+        set_tests_properties(observatory_imgui_ui_smoke PROPERTIES TIMEOUT 30)
+      endif()
+    endif()
   endif()
 endif()

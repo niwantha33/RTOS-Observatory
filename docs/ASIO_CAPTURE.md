@@ -4,15 +4,21 @@ This opt-in host transport receives one finite `universal-v1` normalized trace o
 
 ## Build
 
-Keep the dependency-free offline build with the default CMake options. For TCP capture, provide a standalone Asio include path:
+The dependency-free offline core build remains the default. The optional TCP
+capture now requires the exact **standalone Asio 1.30.2 Git submodule** under
+`third_party/asio`; initialise it once before configuring:
 
 ```sh
-cmake -S . -B build-live -DCMAKE_BUILD_TYPE=Release -DOBSERVATORY_BUILD_LIVE=ON -DOBSERVATORY_ASIO_INCLUDE_DIR=/path/to/asio/include
+git submodule update --init --recursive
+cmake -S . -B build-live -DCMAKE_BUILD_TYPE=Release -DOBSERVATORY_BUILD_LIVE=ON
 cmake --build build-live --config Release
 ctest --test-dir build-live -C Release --output-on-failure
 ```
 
-Alternatively explicitly set `-DOBSERVATORY_FETCH_ASIO=ON`; CMake then downloads the 1.30.2 archive with a pinned SHA256. There is no automatic network fetch in the default build. Asio is licensed under the Boost Software License 1.0; see the downloaded archive's `asio/LICENSE_1_0.txt`. An externally supplied include path is caller-managed and is not digest-verified by CMake. CI exercises the pinned archive on Linux and Windows.
+CMake does not download Asio or accept an unverified globally installed
+fallback. Asio is licensed under the Boost Software License 1.0; see
+`third_party/asio/asio/LICENSE_1_0.txt`. The parent repository records its
+exact Git commit; CI checks out the same source for Linux and Windows.
 
 ## Local demonstration
 

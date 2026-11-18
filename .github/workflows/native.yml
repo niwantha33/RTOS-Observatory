@@ -10,9 +10,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.config }} -DOBSERVATORY_BUILD_LIVE=ON -DOBSERVATORY_FETCH_ASIO=ON
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.config }} -DOBSERVATORY_BUILD_LIVE=ON
       - run: cmake --build build --config ${{ matrix.config }}
       - run: ctest --test-dir build -C ${{ matrix.config }} --output-on-failure

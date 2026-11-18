@@ -1,3 +1,5 @@
+> **Renderer migration (after W05 acceptance):** The Qt6 implementation described below is the historical baseline accepted in PR #12. The current intended desktop renderer is Dear ImGui + GLFW + OpenGL3, with [new build instructions](DESKTOP_IMGUI.md). The CLI/controller integration remains unchanged. No Qt installation is required for the new build.
+
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # W05 — Standalone native desktop application
 
