@@ -457,13 +457,17 @@ void MainWindow::refresh_timeline() {
                           c.busy_percent ? QString::number(*c.busy_percent, 'f', 2) + "%"
                                          : "Unknown"});
         wait_summary_->setRowCount(0);
-        for (const auto& t : snapshot.tasks)
-            if (t.running_us || t.completed_waits)
-                append(wait_summary_, {value(t.task), num(t.running_us),
-                    num(t.completed_wait_us), num(static_cast<std::uint64_t>(t.completed_waits))});
+        bool table_capped = false;
+        for (const auto& t : snapshot.tasks) {
+            if (!t.running_us && !t.completed_waits) continue;
+            if (wait_summary_->rowCount() >= 2000) { table_capped = true; break; }
+            append(wait_summary_, {value(t.task), num(t.running_us),
+                num(t.completed_wait_us), num(static_cast<std::uint64_t>(t.completed_waits))});
+        }
         QString status = "Window [" + num(begin) + ", " + num(end) +
                          ") µs  ·  " + (snapshot.evidence_complete ? "No reported loss" : "Incomplete evidence");
         for (const auto& warning : snapshot.warnings) status += "\n• " + text(warning);
+        if (table_capped) status += "\n• Task summary limited to 2,000 visible rows; timeline accounting is unaffected.";
         timeline_quality_->setText(status);
         timeline_->set_view(std::move(snapshot));
     } catch (const std::exception& ex) {
