@@ -34,7 +34,9 @@ jobs:
   # Separate from the existing native MSVC desktop matrix; no VsDevCmd.bat.
   windows-clang-cl:
     name: Windows clang-cl / ${{ matrix.configuration }}
-    runs-on: windows-latest
+    # Hosted LLVM 20 is supported by the VS 2022 STL. VS 2026 needs LLVM 22+.
+    # Keep windows-latest MSVC tests in the separate desktop matrix above.
+    runs-on: windows-2022
     strategy:
       fail-fast: false
       matrix:
