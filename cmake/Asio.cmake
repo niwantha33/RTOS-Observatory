@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+option(OBSERVATORY_FETCH_ASIO "Explicitly allow downloading pinned standalone Asio" OFF)
+find_path(OBSERVATORY_ASIO_INCLUDE_DIR asio.hpp)
+if(NOT OBSERVATORY_ASIO_INCLUDE_DIR AND OBSERVATORY_FETCH_ASIO)
+  if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+  endif()
+  include(FetchContent)
+  FetchContent_Declare(observatory_asio
+    URL https://codeload.github.com/chriskohlhoff/asio/tar.gz/refs/tags/asio-1-30-2
+    URL_HASH SHA256=755bd7f85a4b269c67ae0ea254907c078d408cce8e1a352ad2ed664d233780e8
+  )
+  FetchContent_MakeAvailable(observatory_asio)
+  set(OBSERVATORY_ASIO_INCLUDE_DIR "${observatory_asio_SOURCE_DIR}/asio/include")
+endif()
+if(NOT OBSERVATORY_ASIO_INCLUDE_DIR)
+  message(FATAL_ERROR "Standalone Asio required: set OBSERVATORY_ASIO_INCLUDE_DIR or explicitly enable OBSERVATORY_FETCH_ASIO")
+endif()
+add_library(observatory_asio_headers INTERFACE)
+target_include_directories(observatory_asio_headers SYSTEM INTERFACE ${OBSERVATORY_ASIO_INCLUDE_DIR})
+target_compile_definitions(observatory_asio_headers INTERFACE ASIO_STANDALONE ASIO_NO_DEPRECATED)
+find_package(Threads REQUIRED)
+target_link_libraries(observatory_asio_headers INTERFACE Threads::Threads)
+if(WIN32)
+  target_compile_definitions(observatory_asio_headers INTERFACE _WIN32_WINNT=0x0601)
+  target_link_libraries(observatory_asio_headers INTERFACE ws2_32 mswsock)
+endif()

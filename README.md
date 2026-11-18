@@ -4,6 +4,10 @@
 
 > Status: executable **offline MVP**, not a production debugger. The supplied capture is **synthetic**. This repository does **not** implement live GDB transport, a real FreeRTOS/TI-RTOS/Zephyr parser, verified trace firmware, or an installed Eclipse extension. The experimental Eclipse handoff source is in `bridge/eclipse`.
 
+## Optional Asio TCP capture
+
+The host can receive a bounded finite normalized trace using standalone Asio and one strand per session, then save it for offline replay. See [build and demo instructions](docs/ASIO_CAPTURE.md). This is an early W17/W18 transport foundation; device adapters and continuously updating analysis remain planned.
+
 ## Phase 0: offline sessions
 
 Versioned ingestion, decoder registration, bounded processing and indexed session storage are implemented. See [Foundation](docs/FOUNDATION.md) and [Universal v1](docs/UNIVERSAL_V1.md) for contracts and qualification limits.
@@ -77,7 +81,7 @@ ctest --test-dir build --output-on-failure
 * Durations and timing come from explicit paired input. We never reconstruct historical stack memory, ISR nesting beyond supplied events, queue depths, or lost intervals.
 * Inversion is labelled as an **observed pattern**, not a proved deadline miss or a universally established root cause.
 * A dropped-event marker marks the capture incomplete and suppresses inversion-pattern attribution.
-* No sockets are opened, no network APIs are used and no target is controlled by the CLI or viewer. The Eclipse prototype does not connect to GDB.
+* The offline engine and viewer open no sockets and control no target. The optional TCP capture executable connects only to an explicitly selected numeric address and sends no target commands. The Eclipse prototype does not connect to GDB.
 * The demo is not a performance/overhead claim. Fuzzing, multi-core causality, transport authenticity, released binaries and physical-board qualification remain open.
 
 ## Roadmap
