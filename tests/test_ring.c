@@ -7,7 +7,8 @@
 #include <stdio.h>
 int main(void) {
     obs_trace_ring_t ring;
-    obs_trace_ring_init(&ring);
+    assert(!obs_trace_ring_init(NULL));
+    assert(obs_trace_ring_init(&ring));
     obs_trace_record_t sample = {123u, 42u, 55u, 9u, 0u};
     obs_trace_record_t result;
     assert(!obs_trace_ring_pop(&ring, &result));
@@ -24,6 +25,10 @@ int main(void) {
     assert(!obs_trace_ring_pop(&ring,&result));
     assert(obs_trace_ring_push(&ring,&sample));
     assert(obs_trace_ring_pop(&ring,&result));
+    ring.ready = false;
+    assert(!obs_trace_ring_push(&ring, &sample));
+    assert(!obs_trace_ring_pop(&ring, &result));
+    assert(obs_trace_ring_dropped(&ring) == 0u);
     puts("SPSC trace ring tests passed");
     return 0;
 }

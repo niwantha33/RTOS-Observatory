@@ -4,14 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdatomic.h>
-// Some C11 implementations expose this constant as a compiler expression.
-// Evaluate it in the language, rather than in a preprocessor #if.
-#ifdef __cplusplus
-static_assert(ATOMIC_INT_LOCK_FREE == 2,
-              "This prototype requires lock-free atomic unsigned int; check target support.");
-#else
-_Static_assert(ATOMIC_INT_LOCK_FREE == 2,
-               "This prototype requires lock-free atomic unsigned int; check target support.");
+// A value of 1 requires checking the actual atomic objects at initialization.
+#if ATOMIC_INT_LOCK_FREE == 0
+#error "This prototype requires lock-free atomic unsigned int; check target support."
 #endif
 #ifdef __cplusplus
 extern "C" {
@@ -30,12 +25,15 @@ typedef struct {
     uint16_t core_id;
 } obs_trace_record_t;
 typedef struct {
+    bool ready; // Set once before publishing the ring to producer/consumer.
     atomic_uint head;
     atomic_uint tail;
     atomic_uint dropped;
     obs_trace_record_t records[OBS_TRACE_RING_CAPACITY];
 } obs_trace_ring_t;
-void obs_trace_ring_init(obs_trace_ring_t *ring);
+// Returns false on unsupported atomics. Push/pop reject an unready ring.
+// Initialize before concurrent use; never reinitialize an active ring.
+bool obs_trace_ring_init(obs_trace_ring_t *ring);
 bool obs_trace_ring_push(obs_trace_ring_t *ring, const obs_trace_record_t *record);
 bool obs_trace_ring_pop(obs_trace_ring_t *ring, obs_trace_record_t *record);
 unsigned obs_trace_ring_dropped(const obs_trace_ring_t *ring);
