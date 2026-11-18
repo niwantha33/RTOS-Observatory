@@ -171,13 +171,12 @@ void Workspace::draw_sidebar() {
     header("RECENT IN THIS PROCESS");
     for (std::size_t i=0; i<recents_.size(); ++i) {
         ImGui::PushID(static_cast<int>(i));
-        const auto& r=recents_[i];
+        const auto r=recents_[i]; // reloading may mutate recents_ storage
         auto name=std::filesystem::path(r.path).filename().string();
         if (name.empty()) name=r.path;
         if (ImGui::Selectable(name.c_str(), false)) {
-            const auto copy=r; // loading mutates the recent list
-            if (copy.session) (void)open_session(copy.path);
-            else (void)open_trace(copy.path,copy.decoder);
+            if (r.session) (void)open_session(r.path);
+            else (void)open_trace(r.path,r.decoder);
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",r.path.c_str());
         ImGui::PopID();
