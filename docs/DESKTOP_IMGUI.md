@@ -23,27 +23,35 @@ configurations can work without the network. Git still requires access to
 those upstream repositories on the first submodule checkout. Missing submodule
 contents cause a clear configure error.
 
-## First Windows build
+## First Windows build (tested local clang-cl / MSVC SDK combination)
 
-Open x64 Native Tools Command Prompt (VS 2022/2026), or activate the Visual
-Studio developer environment in PowerShell so cl, rc and mt from Windows SDK
-are available. clang-cl by itself does not supply Windows SDK imports/manifest
-tools. Launch-VsDevShell.ps1 can change the current directory; always return
-to the actual repository folder before Git or CMake operations. Build from the repository:
+Install Visual Studio C++ build tools + Windows 10/11 SDK, LLVM clang-cl/lld-link,
+CMake and Ninja. Open ordinary PowerShell; no VS developer prompt is necessary.
+Initialize the pinned git submodules, then run the repository's **versioned**
+Windows build script. It locates MSVC x64 libraries, Windows SDK headers/lib/rc/mt,
+filters out non-version folders such as SDK Lib/wdf, and uses forward-slash CMake
+compiler paths. It does not invoke the developer shell script or change system
+environment/registry settings.
 
-    cd C:\My-Projects\RTOS-Observatory
-    git fetch origin
-    git switch --track origin/feature/dear-imgui-desktop-w05-w06
+    Set-Location C:\My-Projects\RTOS-Observatory
     git submodule sync --recursive
     git submodule update --init --recursive
-    cmake -S . -B build-imgui -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_BUILD_TYPE=Release -DOBSERVATORY_BUILD_DESKTOP=ON
-    cmake --build build-imgui --parallel 2
-    ctest --test-dir build-imgui --output-on-failure
-    .\build-imgui\rtos-observatory-desktop.exe --trace .\examples\timeline.trace
+    .\tools\build-windows-clang.ps1 -Configuration Release
+    .\build-windows-clang\rtos-observatory-desktop.exe --trace .\examples\timeline.trace
 
-If the branch exists locally, switch to it and pull --ff-only. Use a fresh
-build directory when changing generator/compiler. You may omit Clang flags
-to use MSVC from the developer shell.
+For Debug, use a **separate** build folder to avoid reusing the Release cache:
+
+    .\tools\build-windows-clang.ps1 -Configuration Debug -BuildDirectory build-windows-clang-debug
+
+A green SUCCESS is printed only if CMake configuration, the full desktop build
+and CTest all finish with zero exit code. The command writes
+build-windows-clang/windows-clang-build.log for diagnostics. If it fails, inspect
+that file and repair missing MSVC/Windows SDK components using Visual Studio
+Installer. Do not bypass CMake compiler checks or use a different CRT.
+
+GitHub Actions verifies the same script in Windows Debug and Release separately
+from the existing MSVC/Ubuntu desktop jobs. Existing manually configured build
+folders must not be reused with a different compiler or generator.
 
 ## Ubuntu / Linux
 
