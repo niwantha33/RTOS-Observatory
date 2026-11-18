@@ -443,6 +443,9 @@ void MainWindow::refresh_timeline() {
     const auto end = range_end_->text().toULongLong(&valid_end);
     if (!valid_begin || !valid_end) {
         timeline_quality_->setText("Invalid range: enter non-negative decimal µs timestamps.");
+        cpu_->setRowCount(0);
+        wait_summary_->setRowCount(0);
+        timeline_->set_view({});
         return;
     }
     try {
@@ -465,6 +468,9 @@ void MainWindow::refresh_timeline() {
         timeline_->set_view(std::move(snapshot));
     } catch (const std::exception& ex) {
         timeline_quality_->setText("Invalid timeline window: " + text(ex.what()));
+        cpu_->setRowCount(0);
+        wait_summary_->setRowCount(0);
+        timeline_->set_view({});
     }
 }
 void MainWindow::zoom_timeline(bool zoom_in) {
@@ -474,13 +480,13 @@ void MainWindow::zoom_timeline(bool zoom_in) {
     const auto end = range_end_->text().toULongLong(&b);
     if (!a || !b || end <= begin) return;
     const auto& report = controller_.report();
+    if (begin < report.start_us || end > report.end_us) { refresh_timeline(); return; }
     const auto width = end - begin;
+    const auto total = report.end_us - report.start_us;
     const auto new_width = zoom_in ? std::max<std::uint64_t>(1, width / 2)
-                                  : std::min<std::uint64_t>(report.end_us - report.start_us,
-                                                            width + std::min(width, report.end_us - report.start_us - width));
-    const auto offset = (width - (zoom_in ? new_width : width)) / 2;
-    auto from = zoom_in ? begin + offset : begin >= (new_width - width) / 2
-                              ? begin - (new_width - width) / 2 : report.start_us;
+                                  : width + std::min(width, total - width);
+    const auto center = begin + width / 2;
+    auto from = center >= new_width / 2 ? center - new_width / 2 : report.start_us;
     if (from < report.start_us) from = report.start_us;
     if (new_width > report.end_us - from) from = report.end_us - new_width;
     range_begin_->setText(num(from));
