@@ -6,6 +6,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace observatory {
@@ -76,6 +77,10 @@ struct Report {
     std::vector<Finding> findings;
     std::vector<std::string> warnings;
 };
+namespace detail {
+Event parse_event_row(const std::string& row, std::size_t line);
+void append_event(Capture&, Event, std::size_t max_events);
+}
 Capture parse_trace(std::istream& input, std::size_t max_events = 2000000);
 Report analyze(const Capture& capture);
 std::string report_json(const Report& report);

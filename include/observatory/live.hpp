@@ -11,6 +11,7 @@ struct TcpCaptureOptions {
     std::string address = "127.0.0.1"; // Numeric address; no DNS lookup.
     unsigned short port{};
     Limits limits{};
+    std::function<void(const StreamProgress&)> progress; // Optional; runs on session strand.
     std::chrono::milliseconds idle_timeout{5000};
     std::chrono::milliseconds total_timeout{30000};
 };
@@ -40,8 +41,8 @@ private:
     Completion completion_;
     std::array<char,4096> buffer_{};
     std::string raw_;
-    std::size_t line_bytes_{}, rows_{};
+    UniversalStream decoder_;
     std::uint64_t idle_generation_{};
-    bool started_{}, done_{}, row_has_data_{}, row_comment_{};
+    bool started_{}, done_{};
 };
 } // namespace observatory

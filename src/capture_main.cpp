@@ -33,6 +33,16 @@ int main(int argc,char** argv) {
         }
         if(session.empty()) throw observatory::Error("--store is required");
         if(std::filesystem::exists(session)) throw observatory::Error("session directory already exists");
+        auto last_update=std::chrono::steady_clock::time_point{};
+        options.progress=[&](const observatory::StreamProgress& p) {
+            const auto now=std::chrono::steady_clock::now();
+            if(p.events && (p.finalized || now-last_update>=std::chrono::milliseconds(200))) {
+                std::cout<<"Live events="<<p.events<<" bytes="<<p.bytes
+                         <<" timestamp_us="<<p.last_timestamp_us<<" missing="<<p.missing_events
+                         <<" drops="<<p.declared_drops<<" finalized="<<p.finalized<<std::endl;
+                last_update=now;
+            }
+        };
         asio::io_context io;
         observatory::CaptureResult result;
         auto capture=observatory::TcpCapture::create(io,options,[&](auto r){result=std::move(r);});

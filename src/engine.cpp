@@ -106,51 +106,54 @@ void append_interval(Report& report, const std::string& task, const std::string&
 }
 } // namespace
 
+namespace detail {
+Event parse_event_row(const std::string& row, std::size_t line) {
+    const auto cells = split_line(row, line);
+    auto timestamp = number<std::uint64_t>(cells[0], line);
+    if (timestamp > kMaxTimestamp) throw Error("line " + std::to_string(line) + ": invalid or decreasing timestamp");
+    if (!known_types.contains(cells[1])) throw Error("line " + std::to_string(line) + ": unsupported event " + cells[1]);
+    check_name(cells[2], line);
+    check_name(cells[3], line);
+    const auto value = number<std::int64_t>(cells[4], line);
+    if ((cells[1] == "CREATE" || cells[1] == "PRIORITY") && (value < 0 || value > 255))
+        throw Error("line " + std::to_string(line) + ": priority out of range 0..255");
+    if (cells[1] == "PERIOD" && value <= 0)
+        throw Error("line " + std::to_string(line) + ": period must be positive");
+    if (cells[1] == "DROP" && value <= 0)
+        throw Error("line " + std::to_string(line) + ": drop count must be positive");
+    return {timestamp,cells[1],cells[2],cells[3],value,line};
+}
+void append_event(Capture& result, Event event, std::size_t max_events) {
+    if (result.events.empty()) {
+        if (event.type != "SESSION" || event.timestamp_us != 0 || event.task != "-")
+            throw Error("first event must be SESSION at timestamp 0");
+        result.source=event.object;result.session=event.object;
+    } else {
+        if (event.type=="SESSION") throw Error("multiple SESSION events not permitted; separate reset epochs");
+        if (event.timestamp_us < result.events.back().timestamp_us) throw Error("decreasing timestamp");
+    }
+    if (result.events.size()>=max_events) throw Error("capture exceeds max_events");
+    result.events.push_back(std::move(event));
+}
+}
 Capture parse_trace(std::istream& input, std::size_t max_events) {
     Capture result;
     std::string line;
-    std::size_t line_number = 0;
-    bool seen_session = false;
-    std::uint64_t previous_timestamp = 0;
+    std::size_t line_number=0;
     while (true) {
-        line.clear();
-        char ch;
-        while (input.get(ch) && ch != '\n') {
-            if (line.size() >= kMaxLine) throw Error("line exceeds 4096 bytes");
+        line.clear();char ch;
+        while (input.get(ch) && ch!='\n') {
+            if (line.size()>=kMaxLine) throw Error("line exceeds 4096 bytes");
             line.push_back(ch);
         }
         if (!input && !input.eof()) throw Error("trace read failed");
         if (line.empty() && input.eof()) break;
         ++line_number;
-        if (line.size() > kMaxLine) throw Error("line " + std::to_string(line_number) + ": line exceeds 4096 bytes");
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (line.empty() || line[0] == '#') continue;
-        const auto cells = split_line(line, line_number);
-        auto timestamp = number<std::uint64_t>(cells[0], line_number);
-        if (timestamp > kMaxTimestamp || timestamp < previous_timestamp) throw Error("line " + std::to_string(line_number) + ": invalid or decreasing timestamp");
-        if (!known_types.contains(cells[1])) throw Error("line " + std::to_string(line_number) + ": unsupported event " + cells[1]);
-        check_name(cells[2], line_number);
-        check_name(cells[3], line_number);
-        const auto value = number<std::int64_t>(cells[4], line_number);
-        if (!seen_session) {
-            if (cells[1] != "SESSION" || timestamp != 0 || cells[2] != "-") throw Error("first event must be SESSION at timestamp 0");
-            result.source = cells[3];
-            result.session = cells[3];
-            seen_session = true;
-        } else if (cells[1] == "SESSION") {
-            throw Error("multiple SESSION events not permitted; separate reset epochs");
-        }
-        if ((cells[1] == "CREATE" || cells[1] == "PRIORITY") && (value < 0 || value > 255))
-            throw Error("line " + std::to_string(line_number) + ": priority out of range 0..255");
-        if (cells[1] == "PERIOD" && value <= 0)
-            throw Error("line " + std::to_string(line_number) + ": period must be positive");
-        if (cells[1] == "DROP" && value <= 0)
-            throw Error("line " + std::to_string(line_number) + ": drop count must be positive");
-        if (result.events.size() >= max_events) throw Error("capture exceeds max_events");
-        result.events.push_back({timestamp, cells[1], cells[2], cells[3], value, line_number});
-        previous_timestamp = timestamp;
+        if (!line.empty() && line.back()=='\r') line.pop_back();
+        if (line.empty() || line[0]=='#') continue;
+        detail::append_event(result,detail::parse_event_row(line,line_number),max_events);
     }
-    if (!seen_session || result.events.size() < 2) throw Error("missing SESSION or no trace events");
+    if(result.events.size()<2) throw Error("missing SESSION or no trace events");
     return result;
 }
 

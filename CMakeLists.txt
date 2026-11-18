@@ -76,3 +76,15 @@ if(OBSERVATORY_BUILD_LIVE)
     set_tests_properties(observatory_tcp_capture PROPERTIES TIMEOUT 30)
   endif()
 endif()
+
+if(OBSERVATORY_BUILD_TESTS)
+  add_executable(observatory_stream_tests tests/test_stream.cpp)
+  target_link_libraries(observatory_stream_tests PRIVATE observatory_core)
+  add_test(NAME observatory_incremental_stream COMMAND observatory_stream_tests)
+endif()
+if(OBSERVATORY_BUILD_LIVE AND OBSERVATORY_BUILD_TESTS AND Python3_Interpreter_FOUND)
+  add_test(NAME observatory_live_progress COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_live_progress.py $<TARGET_FILE:rtos-observatory-capture>
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/foundation.trace)
+  set_tests_properties(observatory_live_progress PROPERTIES TIMEOUT 25)
+endif()
