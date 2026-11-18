@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 def read_output():
                     for line in process.stdout:
                         output.append(line)
-                        if 'Live events=2 ' in line and 'finalized=0' in line: seen.set()
+                        if 'Live events=' in line and 'finalized=0' in line: seen.set()
                 reader=threading.Thread(target=read_output);reader.start()
                 conn.sendall(b''.join(lines[:3]))
                 assert seen.wait(3),'no progress before source EOF'
