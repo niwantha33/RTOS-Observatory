@@ -30,12 +30,20 @@ void TimelineCanvas::set_view(TimelineView view) {
     view_ = std::move(view);
     rows_.clear();
     core_rows_.clear();
+    task_rows_.clear();
     wait_rows_.clear();
     rows_limited_ = false;
     for (const auto& core : view_.cores) {
         const auto id = static_cast<int>(rows_.size());
         rows_.push_back("CPU " + core.core);
         core_rows_[core.core] = id;
+    }
+    for (const auto& task : view_.tasks) {
+        if (!task.running_us) continue;
+        if (task_rows_.size() >= 32) { rows_limited_ = true; continue; }
+        const auto id = static_cast<int>(rows_.size());
+        rows_.push_back("TASK " + task.task);
+        task_rows_[task.task] = id;
     }
     for (const auto& wait : view_.waits) {
         const auto key = wait_key(wait);
@@ -51,6 +59,10 @@ void TimelineCanvas::set_view(TimelineView view) {
 int TimelineCanvas::lane_for_core(const std::string& core) const {
     const auto at = core_rows_.find(core);
     return at == core_rows_.end() ? -1 : at->second;
+}
+int TimelineCanvas::lane_for_task(const std::string& task) const {
+    const auto at = task_rows_.find(task);
+    return at == task_rows_.end() ? -1 : at->second;
 }
 int TimelineCanvas::lane_for_wait(const std::string& task, const std::string& resource) const {
     const auto at = wait_rows_.find(task + "\n" + resource);
@@ -115,6 +127,15 @@ void TimelineCanvas::paintEvent(QPaintEvent*) {
                                                   static_cast<int>(r.width()) - 7));
         }
     }
+    // Separate per-task tracks show proven execution, not inferred Ready/Sleeping.
+    for (const auto& slice : view_.slices) {
+        if (slice.state != "running") continue;
+        auto r = bar(slice.start_us, slice.end_us, lane_for_task(slice.task));
+        if (r.isEmpty()) continue;
+        p.setBrush(QColor("#468ee5"));
+        p.setPen(Qt::NoPen);
+        p.drawRoundedRect(r, 3, 3);
+    }
     for (const auto& wait : view_.waits) {
         const auto lane = lane_for_wait(wait.task, wait.resource);
         auto r = bar(wait.start_us, wait.end_us, lane);
@@ -125,7 +146,7 @@ void TimelineCanvas::paintEvent(QPaintEvent*) {
     }
     if (rows_limited_) {
         p.setPen(QColor("#ffcf83"));
-        p.drawText(12, height() - 9, "Wait lanes capped at 32; see the CPU and Wait tables.");
+        p.drawText(12, height() - 9, "Task/wait lanes capped at 32 each; all durations remain in the CPU/wait tables.");
     }
 }
 void TimelineCanvas::mouseMoveEvent(QMouseEvent* event) {
@@ -137,6 +158,15 @@ void TimelineCanvas::mouseMoveEvent(QMouseEvent* event) {
                                                    : q(slice.state + " / " + slice.task);
         QToolTip::showText(event->globalPosition().toPoint(),
             "Core: " + q(slice.core) + "\n" + title +
+            "\n[" + tick(slice.start_us) + ", " + tick(slice.end_us) + ") µs", this);
+        return;
+    }
+    for (const auto& slice : view_.slices) {
+        if (slice.state != "running") continue;
+        const auto r = bar(slice.start_us, slice.end_us, lane_for_task(slice.task));
+        if (!r.contains(point)) continue;
+        QToolTip::showText(event->globalPosition().toPoint(),
+            "Observed task execution: " + q(slice.task) + "\nCore: " + q(slice.core) +
             "\n[" + tick(slice.start_us) + ", " + tick(slice.end_us) + ") µs", this);
         return;
     }
