@@ -42,9 +42,12 @@ TimelineView build_timeline(const Report& report, std::uint64_t start_us,
     std::map<std::string, TaskUsage> per_task;
     for (const auto& task : report.threads) per_task[task.id] = {task.id};
     for (const auto& span : report.intervals) {
-        if (span.end_us <= start_us || span.start_us >= end_us) continue;
         if (span.end_us <= span.start_us || span.core.empty()) continue;
-        per_core[span.core].push_back(&span);
+        // Core identity survives windows without any matching intervals. An
+        // entirely unobserved window is UNKNOWN, never an absent or idle CPU.
+        auto& spans = per_core[span.core];
+        if (span.end_us <= start_us || span.start_us >= end_us) continue;
+        spans.push_back(&span);
     }
     for (const auto& [name, spans] : per_core) {
         CoreUsage usage;
