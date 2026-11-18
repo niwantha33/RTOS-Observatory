@@ -4,8 +4,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdatomic.h>
-#if ATOMIC_INT_LOCK_FREE != 2
-#error "This prototype requires lock-free atomic unsigned int; check target support."
+// Some C11 implementations expose this constant as a compiler expression.
+// Evaluate it in the language, rather than in a preprocessor #if.
+#ifdef __cplusplus
+static_assert(ATOMIC_INT_LOCK_FREE == 2,
+              "This prototype requires lock-free atomic unsigned int; check target support.");
+#else
+_Static_assert(ATOMIC_INT_LOCK_FREE == 2,
+               "This prototype requires lock-free atomic unsigned int; check target support.");
 #endif
 #ifdef __cplusplus
 extern "C" {
