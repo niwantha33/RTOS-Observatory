@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # RTOS Observatory — project status
 
-**Last verified:** 2026-11-18 14:41 UTC, on `main` at commit [`67d3229c4`](https://github.com/niwantha33/RTOS-Observatory/commit/67d3229c4a4a354f95e01a7ae4a5091c6037f1da). This is a **dated snapshot**, not an automatically refreshing dashboard.
+**Last verified for P0:** 2026-11-18 14:41 UTC, on `main` at commit [`67d3229c4`](https://github.com/niwantha33/RTOS-Observatory/commit/67d3229c4a4a354f95e01a7ae4a5091c6037f1da). This is a **dated snapshot**, not an automatically refreshing dashboard.
 
 [Master issue #8](https://github.com/niwantha33/RTOS-Observatory/issues/8) · [Master plan](MASTER_PLAN.md) · [Bug guide](BUG_TRACKING.md)
 
@@ -10,7 +10,7 @@
 | Phase | Work packages | Verified scope/state | Phase issue | Evidence |
 | --- | --- | --- | --- | --- |
 | **P0 Foundation and architecture** | **W01–W04** | **Done for bounded offline foundation** | [#2](https://github.com/niwantha33/RTOS-Observatory/issues/2) | [Merged PR #1](https://github.com/niwantha33/RTOS-Observatory/pull/1), [main CI passed](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44326850607) |
-| P1 Modern graphical interface | W05–W08 | Next; full standalone desktop UI not yet integrated | [#3](https://github.com/niwantha33/RTOS-Observatory/issues/3) | Offline prototype HTML in Phase 0 |
+| P1 Modern graphical interface | W05–W08 | **W05 in draft PR #12 / Qt CI pending; not merged**. W06–W08 planned | [#3](https://github.com/niwantha33/RTOS-Observatory/issues/3) | Offline prototype HTML in Phase 0 |
 | P2 Intelligent RTOS diagnostics | W09–W13 | Planned | [#4](https://github.com/niwantha33/RTOS-Observatory/issues/4) | — |
 | P3 Debugger and live hardware | W14–W19 | Planned | [#5](https://github.com/niwantha33/RTOS-Observatory/issues/5) | — |
 | P4 Multi-RTOS ecosystem | W20–W24 | Planned | [#6](https://github.com/niwantha33/RTOS-Observatory/issues/6) | — |
@@ -24,19 +24,21 @@
 | **W02** | **Done — normalized v1 only** | Task/ISR/mutex events and generic semaphore/queue waits; not native CTF/UIA |
 | **W03** | **Done — bounded offline only** | Explicit decoder registry, limits and gap/loss reporting; no running-target decoder |
 | **W04** | **Done — local offline v1 only** | Indexed immutable sessions, raw evidence, CRC32 integrity and deterministic replay; no secure attestation or range API |
-| W05–W08 | Not started (P1) | Interactive desktop and graph studio are future scope |
+| **W05** | **In progress / draft PR #12** | Qt6 native desktop, session controller, tests and Windows/Linux CI under validation; not merged |
+| W06–W08 | Not started (P1) | Interactive timeline, graph and time travel remain future scope |
 | W09–W13 | Not started (P2) | Evidence-backed RTOS diagnosis and source graph are future scope |
 | W14–W19 | Not started (P3) | Debug-probe integration and live transports require physical hardware validation |
 | W20–W24 | Not started (P4) | Native vendor/version-aware RTOS adapters not yet qualified |
 | W25–W27 | Not started (P5) | Rich reports, optional AI/MCP and what-if simulator future work |
 
-**Totals:** 27 packages planned · **4 done within specified offline scope** · 23 pending. **No production live trace or physical-board qualification is claimed**.
+**Totals:** 27 packages planned · **4 done within specified offline scope** · **1 W05 in draft PR** · 22 not started. No change to accepted total until merged. **No production live trace or physical-board qualification is claimed**.
 
 ## Recent CI / PR activity
 
 - [PR #1](https://github.com/niwantha33/RTOS-Observatory/pull/1) merged at **14:40:29 UTC, 2026-11-18**, commit [`67d3229c4`](https://github.com/niwantha33/RTOS-Observatory/commit/67d3229c4a4a354f95e01a7ae4a5091c6037f1da).
 - [`main` CI run #44326850607](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44326850607) finished **success** at **14:41:57 UTC** — Ubuntu Debug, Ubuntu Release, Windows Debug and Windows Release all built and passed CTest.
-- [PR #9](https://github.com/niwantha33/RTOS-Observatory/pull/9) containing this master tracking documentation and GitHub templates remains open until reviewed/merged.
+- [PR #9](https://github.com/niwantha33/RTOS-Observatory/pull/9) was merged; roadmap/templates are on main.
+- [W05 draft PR #12](https://github.com/niwantha33/RTOS-Observatory/pull/12) adds a standalone Qt6 desktop; CI acceptance and merge remain pending.
 
 ## Open constraints / risks
 
