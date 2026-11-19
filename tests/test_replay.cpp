@@ -52,6 +52,11 @@ int main() {
     d.evidence.missing_events=0;
     d.capture.events.push_back({7,"DROP","-","-",2,9});
     d.capture.events.push_back({8,"MUTEX_UNLOCK","High","M1",0,10});
+    const auto at_loss = replay_at(d,8);
+    assert(!at_loss.integrity_verified);
+    assert(at_loss.resources.size()==1);
+    assert(at_loss.resources[0].kind==ReplayResourceKind::Unknown);
+    assert(!at_loss.waits[0].known);
     const auto lost = replay_at(d,9);
     assert(!lost.integrity_verified);
     assert(lost.resources.size()==1 && lost.resources[0].kind==ReplayResourceKind::Unknown);
