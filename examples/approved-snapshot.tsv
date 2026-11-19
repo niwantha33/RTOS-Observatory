@@ -1,0 +1,6 @@
+RTOS-OBSERVATORY-APPROVED-SNAPSHOT	1	synthetic-dsf	1	user-approval-1	fixture-only	32	unverified
+TCB	task-A	0x20000100	4	ok	deadbeef
+MEM	stack-A	0x20001000	4	ok	01020304
+MEM	stack-B	0x20002000	4	failed	-
+REG	PC	0x0	0	ok	0x08000100
+REG	SP	0x0	0	failed	-
