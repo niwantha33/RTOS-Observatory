@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #ifndef OBS_WIRE_V1_H
 #define OBS_WIRE_V1_H
-#include "obs_recorder.h"
+#include "obs_trace_types.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
