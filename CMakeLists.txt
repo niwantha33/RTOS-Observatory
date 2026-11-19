@@ -45,13 +45,13 @@ if(OBSERVATORY_BUILD_TESTS)
   add_test(NAME observatory_causal_patterns COMMAND observatory_causal_tests)
   add_test(NAME observatory_causal_fixture_parse COMMAND rtos-observatory
     --input ${CMAKE_CURRENT_SOURCE_DIR}/examples/causal-drift.trace
-    --output ${CMAKE_CURRENT_BINARY_DIR}/w11-drift-report.json)
+    --decoder universal-v1 --output ${CMAKE_CURRENT_BINARY_DIR}/w11-drift-report.json)
   add_test(NAME observatory_circular_fixture_parse COMMAND rtos-observatory
     --input ${CMAKE_CURRENT_SOURCE_DIR}/examples/causal-cycle.trace
-    --output ${CMAKE_CURRENT_BINARY_DIR}/w11-cycle-report.json)
+    --decoder universal-v1 --output ${CMAKE_CURRENT_BINARY_DIR}/w11-cycle-report.json)
   add_test(NAME observatory_resource_fixture_parse COMMAND rtos-observatory
     --input ${CMAKE_CURRENT_SOURCE_DIR}/examples/resources.trace
-    --output ${CMAKE_CURRENT_BINARY_DIR}/resource-fixture-report.json)
+    --decoder universal-v1 --output ${CMAKE_CURRENT_BINARY_DIR}/resource-fixture-report.json)
   add_test(NAME observatory_timeline_accounting COMMAND observatory_timeline_tests)
   add_test(NAME observatory_core_tests COMMAND observatory_tests)
   find_package(Python3 COMPONENTS Interpreter QUIET)
