@@ -103,6 +103,7 @@ int main(int argc,char** argv) {
     assert(!changed.verified_sources.contains("src/app.c"));
     write(sources/"src"/"app.c",c_source);
 
+    const auto original_image=image;
     image[28]=1; // Still a synthetic ELF header, but modified binary digest
     write(elf,image);
     const auto wrong=verify_source_index(index,elf,sources);
@@ -111,7 +112,7 @@ int main(int argc,char** argv) {
     write(elf,std::string("not an ELF\n"));
     const auto invalid_elf=verify_source_index(index,elf,sources);
     assert(!invalid_elf.elf_matches);
-    write(elf,image);
+    write(elf,original_image);
 
     const auto invalid=[
         &](const std::string& fragment) {return rejects(header+files+fragment);};
@@ -148,5 +149,9 @@ int main(int argc,char** argv) {
     // Relocated/copies outside the selected source root must not resolve.
     const auto missing_root=verify_source_index(index,elf,root/"missing");
     assert(!missing_root.all_sources_match);
+    // Leave a synthetic but fully byte-hash-matched fixture for desktop smoke.
+    write(root/"symbols.tsv",data);
+    assert(verify_source_index(index,elf,sources).elf_matches);
+    assert(verify_source_index(index,elf,sources).all_sources_match);
     std::cout<<"W13 SHA-256, source/call/lock graph, verified source navigation and fail-closed identity tests passed\n";
 }
