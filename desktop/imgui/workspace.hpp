@@ -22,6 +22,8 @@ public:
     void draw();
     bool exit_requested() const noexcept { return exit_requested_; }
     bool loaded() const noexcept { return controller_.loaded(); }
+    const GraphView* graph() const noexcept { return graph_ ? &*graph_ : nullptr; }
+    void show_graph() noexcept { page_ = Page::Graph; }
     const std::string& error() const noexcept { return error_; }
     const SessionController& controller() const noexcept { return controller_; }
     const TimelineView* timeline() const noexcept { return timeline_ ? &*timeline_ : nullptr; }
