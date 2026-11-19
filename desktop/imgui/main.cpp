@@ -114,6 +114,8 @@ int main(int argc, char** argv) {
     bool smoke_resources=false;
     bool smoke_causal=false;
     bool smoke_fault=false;
+    bool smoke_symbols=false;
+    std::string symbol_manifest, symbol_elf, symbol_root;
     std::string fault_load_path;
     std::string load_path;
     bool session=false;
@@ -141,6 +143,9 @@ int main(int argc, char** argv) {
                   "  --fault-snapshot PATH  View a local, offline W12 snapshot\n"
                   "  --smoke-fault PATH  Headless W12 fault snapshot/model smoke\n"
                   "  --smoke-ui-fault PATH  Hidden W12 fault evidence panel smoke\n"
+                  "  --symbols MANIFEST ELF SOURCE_ROOT  Open the offline source/symbol graph\n"
+                  "  --smoke-symbols MANIFEST ELF SOURCE_ROOT  Headless W13 digest/navigation smoke\n"
+                  "  --smoke-ui-symbols MANIFEST ELF SOURCE_ROOT  Hidden W13 verified graph UI\n"
                   "Drag a trace file onto the window or enter a filename in the sidebar.");
         return 0;
     }
@@ -203,6 +208,17 @@ int main(int argc, char** argv) {
         std::puts("W11 source-linked causal diagnostics model smoke passed");
         return 0;
     }
+    if(argc>=5 && std::string_view(argv[1])=="--smoke-symbols") {
+        if(!workspace.open_source_index(argv[2],argv[3],argv[4]) ||
+           !workspace.symbols() || workspace.symbols()->functions.size()<3 ||
+           !workspace.symbol_verification().elf_matches ||
+           !workspace.symbol_verification().all_sources_match) {
+            std::fprintf(stderr,"W13 symbol identity smoke failed: %s\n",workspace.error().c_str());
+            return 3;
+        }
+        std::puts("W13 verified C/C++/Rust symbol graph and source checks passed");
+        return 0;
+    }
     if(argc>=3 && std::string_view(argv[1])=="--smoke-fault") {
         if(!workspace.open_fault_snapshot(argv[2]) || !workspace.fault_view() ||
            workspace.fault_view()->findings.empty()) {
@@ -212,7 +228,14 @@ int main(int argc, char** argv) {
         std::puts("W12 offline stack, TCB, fault and memory evidence smoke passed");
         return 0;
     }
-    if(argc>=3 && (std::string_view(argv[1])=="--smoke-ui" ||
+    if(argc>=5 && (std::string_view(argv[1])=="--symbols" ||
+                    std::string_view(argv[1])=="--smoke-ui-symbols")) {
+        symbol_manifest=argv[2];
+        symbol_elf=argv[3];
+        symbol_root=argv[4];
+        smoke_symbols=std::string_view(argv[1])=="--smoke-ui-symbols";
+        smoke_ui=smoke_symbols;
+    } else if(argc>=3 && (std::string_view(argv[1])=="--smoke-ui" ||
                    std::string_view(argv[1])=="--smoke-ui-graph" ||
                    std::string_view(argv[1])=="--smoke-ui-replay" ||
                    std::string_view(argv[1])=="--smoke-ui-diagnostics" ||
@@ -251,7 +274,13 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,"Cannot load W12 fault evidence: %s\n",workspace.error().c_str());
         return 2;
     }
+    if (!symbol_manifest.empty() &&
+        !workspace.open_source_index(symbol_manifest,symbol_elf,symbol_root)) {
+        std::fprintf(stderr,"Cannot load W13 symbol map: %s\n",workspace.error().c_str());
+        return 2;
+    }
     if (smoke_causal) workspace.show_causality();
+    if (smoke_symbols) workspace.show_source_graph();
     if (smoke_fault) workspace.show_faults();
     glfwSetErrorCallback(glfw_error);
     if(!glfwInit()) { std::fputs("GLFW initialization failed\n",stderr); return 3; }
@@ -310,7 +339,8 @@ int main(int argc, char** argv) {
     glfwTerminate();
     if(smoke_ui) {
         std::printf("Desktop font: %s\n",font_name.c_str());
-        std::puts(smoke_causal ? "W11 causal panel UI smoke passed" :
+        std::puts(smoke_symbols ? "W13 verified source graph UI smoke passed" :
+                  smoke_causal ? "W11 causal panel UI smoke passed" :
                   smoke_resources ? "W10 resource panel UI smoke passed" :
                   smoke_diagnostics ? "W09 scheduler UI smoke passed" :
                   smoke_replay ? "W08 replay GLFW+OpenGL UI smoke passed" :
