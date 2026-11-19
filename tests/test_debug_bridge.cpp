@@ -35,6 +35,9 @@ int main(int argc,char** argv) {
     auto a=monitor.observe(first,1700000000500ull);
     assert(a.accepted && a.fresh && a.transition_known);
     assert(a.status=="reported-recent");
+    const auto same=monitor.observe(first,1700000000600ull);
+    assert(same.accepted && same.fresh && !same.transition_known &&
+           same.status=="unchanged-recent");
     assert(monitor.last() && monitor.last()->state==BridgeState::Attached);
     auto running=monitor.observe(parse(encode("RUNNING",2,1700000000900ull)),1700000001100ull);
     assert(running.accepted && running.fresh && running.transition_known);
@@ -69,10 +72,12 @@ int main(int argc,char** argv) {
     assert(!rollback.accepted && rollback.status=="out-of-order");
 
     BridgeMonitor initial;
-    auto invalid=initial.observe(parse(encode("RUNNING",1)),1700000000500ull);
-    assert(!invalid.accepted && invalid.status=="no-initial-attach");
-    invalid=initial.observe(parse(encode("ATTACHED",3)),1700000000500ull);
-    assert(!invalid.accepted && !initial.last());
+    const auto late=initial.observe(parse(encode("RUNNING",5)),1700000000500ull);
+    assert(late.accepted && !late.transition_known);
+    assert(initial.last()->sequence==5);
+    BridgeMonitor skipped;
+    const auto missed=skipped.observe(parse(encode("ATTACHED",3)),1700000000500ull);
+    assert(missed.accepted && !missed.transition_known);
 
     assert(rejects(""));
     assert(rejects(encode().substr(0,encode().size()-1)));
