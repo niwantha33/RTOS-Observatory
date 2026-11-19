@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 from pathlib import Path
 import re
 import statistics
@@ -70,7 +69,7 @@ def attachment(root, item):
     check_object(item, "attachment", {"kind", "path", "sha256"})
     kind = identifier(item["kind"], "attachment kind")
     rel = item["path"]
-    if not isinstance(rel, str) or not rel or len(rel) > 240:
+    if not isinstance(rel, str) or not rel or len(rel) > 240 or "\0" in rel:
         raise EvidenceError("attachment: invalid local path")
     p = Path(rel)
     if p.is_absolute() or ".." in p.parts or any(part in ("", ".") for part in p.parts):
@@ -96,7 +95,8 @@ def attachment(root, item):
 def summarize(profile: dict, root: Path):
     check_object(
         profile, "manifest",
-        {"schema", "sample_origin", "board", "silicon", "probe",
+        {"schema", "sample_origin", "run_id", "board", "board_revision",
+         "silicon", "probe", "probe_firmware", "debug_server",
          "rtos", "rtos_version", "firmware_sha256", "transport",
          "single_debugger_owner", "no_unapproved_debug_actions",
          "measurement", "attachments"},
@@ -106,12 +106,13 @@ def summarize(profile: dict, root: Path):
     origin = profile["sample_origin"]
     if origin not in ("synthetic", "physical"):
         raise EvidenceError("sample_origin must be synthetic or physical")
-    for key in ("board", "silicon", "probe", "rtos", "rtos_version"):
+    for key in ("run_id", "board", "board_revision", "silicon", "probe",
+                "probe_firmware", "debug_server", "rtos", "rtos_version"):
         identifier(profile[key], key)
     firmware = profile["firmware_sha256"]
     if not isinstance(firmware, str) or not HEX_SHA.fullmatch(firmware):
         raise EvidenceError("firmware identity: invalid SHA256")
-    if profile["transport"] not in SUPPORTED:
+    if not isinstance(profile["transport"], str) or profile["transport"] not in SUPPORTED:
         raise EvidenceError("unqualified/unknown transport")
     owner = boolean(profile["single_debugger_owner"], "single_debugger_owner")
     safe_debug = boolean(
@@ -157,8 +158,15 @@ def summarize(profile: dict, root: Path):
     difference_median = statistics.median(differences)
     report = {
         "schema": SCHEMA,
+        "run_id": profile["run_id"],
         "board": profile["board"],
+        "board_revision": profile["board_revision"],
+        "probe": profile["probe"],
+        "probe_firmware": profile["probe_firmware"],
+        "debug_server": profile["debug_server"],
+        "firmware_sha256": profile["firmware_sha256"],
         "rtos": profile["rtos"],
+        "rtos_version": profile["rtos_version"],
         "transport": profile["transport"],
         "source": origin,
         "hardware_qualification": "DEFERRED" if origin == "synthetic"
