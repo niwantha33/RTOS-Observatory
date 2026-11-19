@@ -17,8 +17,8 @@ C_SOURCES = frozenset((".c", ".cc", ".cpp", ".cxx"))
 # Lines and columns intentionally do not form part of the finding identity:
 # inserting unrelated lines must not disguise pre-existing diagnostics.
 LOCATION = re.compile(
-    r"^(.+?):(\\d+):(?:(\\d+):)?\\s*(error|warning):\\s*(.*?)"
-    r"(?:\\s+\\[([\\w.-]+)\\])?\\s*$"
+    r"^(.+?):(\d+):(?:(\d+):)?\s*(error|warning):\s*(.*?)"
+    r"(?:\s+\[([\w.-]+)\])?\s*$"
 )
 
 
