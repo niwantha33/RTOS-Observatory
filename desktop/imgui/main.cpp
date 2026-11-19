@@ -109,6 +109,7 @@ int main(int argc, char** argv) {
     observatory::desktop::Workspace workspace;
     bool smoke_ui=false;
     bool smoke_graph=false;
+    bool smoke_replay=false;
     std::string load_path;
     bool session=false;
     if(argc>=2 && std::string_view(argv[1])=="--version") {
@@ -124,6 +125,8 @@ int main(int argc, char** argv) {
                   "  --smoke-ui PATH  Hidden GLFW/OpenGL+ImGui one-frame integration test\n"
                   "  --smoke-graph PATH  Headless W07 graph-model smoke test\n"
                   "  --smoke-ui-graph PATH  Hidden W07 graph-canvas integration test\n"
+                  "  --smoke-replay PATH  Headless W08 replay smoke test\n"
+                  "  --smoke-ui-replay PATH  Hidden W08 replay navigation integration test\n"
                   "Drag a trace file onto the window or enter a filename in the sidebar.");
         return 0;
     }
@@ -149,10 +152,21 @@ int main(int argc, char** argv) {
         std::puts("W07 causal graph model smoke passed");
         return 0;
     }
+    if(argc>=3 && std::string_view(argv[1])=="--smoke-replay") {
+        if(!workspace.open_trace(argv[2]) || !workspace.replay() ||
+           workspace.replay()->resources.empty() || !workspace.loaded()) {
+            std::fprintf(stderr,"W08 replay smoke failed: %s\n",workspace.error().c_str());
+            return 3;
+        }
+        std::puts("W08 offline time-travel replay smoke passed");
+        return 0;
+    }
     if(argc>=3 && (std::string_view(argv[1])=="--smoke-ui" ||
-                   std::string_view(argv[1])=="--smoke-ui-graph")) {
+                   std::string_view(argv[1])=="--smoke-ui-graph" ||
+                   std::string_view(argv[1])=="--smoke-ui-replay")) {
         smoke_ui=true;
         smoke_graph=std::string_view(argv[1])=="--smoke-ui-graph";
+        smoke_replay=std::string_view(argv[1])=="--smoke-ui-replay";
         load_path=argv[2];
     } else if(argc>=3 && std::string_view(argv[1])=="--trace")
         load_path=argv[2];
@@ -168,6 +182,7 @@ int main(int argc, char** argv) {
         }
     }
     if (smoke_graph) workspace.show_graph();
+    if (smoke_replay) workspace.show_replay();
     glfwSetErrorCallback(glfw_error);
     if(!glfwInit()) { std::fputs("GLFW initialization failed\n",stderr); return 3; }
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);
@@ -225,7 +240,8 @@ int main(int argc, char** argv) {
     glfwTerminate();
     if(smoke_ui) {
         std::printf("Desktop font: %s\n",font_name.c_str());
-        std::puts(smoke_graph ? "W07 graph GLFW+OpenGL UI smoke passed" :
+        std::puts(smoke_replay ? "W08 replay GLFW+OpenGL UI smoke passed" :
+                  smoke_graph ? "W07 graph GLFW+OpenGL UI smoke passed" :
                                 "W05/W06 Dear ImGui GLFW+OpenGL UI smoke passed");
     }
     return 0;
