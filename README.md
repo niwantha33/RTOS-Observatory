@@ -30,6 +30,20 @@ Run the desktop with `--trace examples/timeline.trace` after building; this samp
 
 The host can receive a bounded finite normalized trace using standalone Asio and one strand per session, validate rows and report progress during reception, then save it for offline replay. See [build and demo instructions](docs/ASIO_CAPTURE.md). This is an early W17/W18 transport foundation; device adapters and continuously updating diagnostic analysis remain planned.
 
+## W19 — physical target qualification: deferred, evidence tooling available
+
+The first hardware target is MSPM0G3507/XDS110. A read-only offline
+[W19 evidence validator](docs/W19_HARDWARE_QUALIFICATION.md) checks SHA256
+source artifacts, exact board/probe/firmware identity, and independently
+reviewable overhead/throughput claims. Synthetic fixtures **never pass the
+hardware gate**; a physically labelled manifest is **still only pending
+independent review**. No board, RTT, probe or running-target memory is
+accessed by the validator.
+
+```sh
+python tools/w19_qualification.py --manifest examples/w19-synthetic.json
+```
+
 ## W18 — opt-in live trace epochs (unverified software stage)
 
 The desktop now has a **Live trace epochs** panel, backed by a bounded
