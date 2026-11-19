@@ -307,6 +307,7 @@ bool Workspace::open_live_file(const std::string& path) {
         std::optional<LiveSession> fresh(std::in_place);
         live_session_=std::move(fresh);
         live_file_offset_=0;
+        live_active_file_=path;
         live_follow_=true;
         live_error_.clear();
         std::snprintf(live_file_path_.data(),live_file_path_.size(),"%s",path.c_str());
@@ -322,7 +323,7 @@ bool Workspace::open_live_file(const std::string& path) {
 bool Workspace::poll_live_file() {
     if(!live_session_)return false;
     try {
-        const auto file=file_path(live_file_path_.data());
+        const auto file=file_path(live_active_file_);
         if(std::filesystem::is_symlink(file) ||
            !std::filesystem::is_regular_file(file))
             throw Error("W18 spool disappeared or became a symlink");
