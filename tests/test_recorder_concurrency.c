@@ -90,7 +90,14 @@ int main(void) {
         const bool done =
             atomic_load_explicit(&producers[0].done,memory_order_acquire) &&
             atomic_load_explicit(&producers[1].done,memory_order_acquire);
-        if(done)break;
+        if(done) {
+            // A producer may publish after the pop() empty check but before
+            // its done flag became visible: drain again before terminating.
+            obs_recorder_stats_t first,second;
+            assert(obs_recorder_stats(&recorder,0u,&first));
+            assert(obs_recorder_stats(&recorder,1u,&second));
+            if(first.pending==0u && second.pending==0u)break;
+        }
         assert(++idle_spins<100000000u);
 #if defined(_WIN32)
         Sleep(0);
