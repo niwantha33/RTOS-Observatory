@@ -99,6 +99,26 @@ void Workspace::update_diagnostics() {
         notice_ = e.what();
     }
 }
+void Workspace::update_resources() {
+    resources_.reset();
+    if (!controller_.loaded()) return;
+    try {
+        resources_ = analyze_resource_observations(controller_.trace(),
+                                                   controller_.report().complete);
+        if (!resource_selected_.empty()) {
+            const auto found = std::find_if(resources_->resources.begin(),
+                resources_->resources.end(), [&](const ResourceSummary& entry) {
+                    return entry.name == resource_selected_;
+                });
+            if (found == resources_->resources.end())
+                resource_selected_.clear();
+        }
+        if (resource_selected_.empty() && !resources_->resources.empty())
+            resource_selected_ = resources_->resources.front().name;
+    } catch (const std::exception& e) {
+        notice_ = e.what();
+    }
+}
 void Workspace::update_replay() {
     replay_.reset();
     if (!controller_.loaded()) return;
@@ -138,6 +158,8 @@ bool Workspace::open_trace(const std::string& path, const std::string& decoder) 
         deadline_task_.fill(0);
         update_replay();
         update_diagnostics();
+        resource_selected_.clear();
+        update_resources();
         error_.clear();
         std::snprintf(path_.data(), path_.size(), "%s", path.c_str());
         recent(path, decoder, false);
@@ -160,6 +182,8 @@ bool Workspace::open_session(const std::string& path) {
         deadline_task_.fill(0);
         update_replay();
         update_diagnostics();
+        resource_selected_.clear();
+        update_resources();
         error_.clear();
         std::snprintf(path_.data(), path_.size(), "%s", path.c_str());
         recent(path, "", true);
@@ -248,8 +272,9 @@ void Workspace::draw_menus() {
         ImGui::MenuItem("Show navigation",nullptr,&show_sidebar_);
         if(ImGui::BeginMenu("Go to panel")) {
             constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
-                "Causal graph","Time-travel replay","Scheduling diagnostics","Events","Findings","Evidence details"};
-            for(int i=0;i<9;++i)
+                "Causal graph","Time-travel replay","Scheduling diagnostics",
+                "Resources and waits","Events","Findings","Evidence details"};
+            for(int i=0;i<10;++i)
                 if(ImGui::MenuItem(names[i],nullptr,static_cast<int>(page_)==i))
                     page_=static_cast<Page>(i);
             ImGui::EndMenu();
@@ -279,6 +304,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Causal graph studio",nullptr,false,loaded())) page_=Page::Graph;
         if(ImGui::MenuItem("Time-travel replay",nullptr,false,loaded())) page_=Page::Replay;
         if(ImGui::MenuItem("Scheduling diagnostics",nullptr,false,loaded())) page_=Page::Diagnostics;
+        if(ImGui::MenuItem("Resources and waits",nullptr,false,loaded())) page_=Page::Resources;
         if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
@@ -366,8 +392,8 @@ void Workspace::draw_sidebar() {
     header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
                                       "Causal graph", "Time-travel replay", "Scheduling diagnostics",
-                                      "Events", "Findings", "Evidence details"};
-    for (int i=0; i<9; ++i) {
+                                      "Resources and waits", "Events", "Findings", "Evidence details"};
+    for (int i=0; i<10; ++i) {
         if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
                               ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
@@ -911,6 +937,111 @@ void Workspace::draw_diagnostics() {
     }
 }
 
+void Workspace::draw_resources() {
+    if (!controller_.loaded() || !resources_) {
+        ImGui::TextDisabled("Open a normalized offline trace to inspect recorded resource operations.");
+        return;
+    }
+    header("Resource and wait observations");
+    const auto& view = *resources_;
+    ImGui::TextDisabled("Task/resource events only. Queue depth, semaphore count and wakeup cause are unknown.");
+    ImGui::TextDisabled("Mutex owner is the LAST RECORDED acquire, not guaranteed current kernel ownership.");
+    if (!view.evidence_verified || view.limited)
+        ImGui::TextColored(ImVec4(1.f,.76f,.42f,1.f),
+            "Unverified/capped evidence: missing resource transitions must remain unknown.");
+    ImGui::Text("Examined %zu events | %zu resources | RTOS label: %s | Clock: %s",
+        view.examined_events, view.resources.size(), view.rtos_label.c_str(),
+        view.clock_domain.c_str());
+    for (const auto& warning : view.warnings)
+        ImGui::TextWrapped("%s", warning.c_str());
+    ImGui::SetNextItemWidth(270.f);
+    ImGui::InputText("Find resource", resource_filter_.data(), resource_filter_.size());
+    if (ImGui::BeginTable("resources-list", 7, table_flags, ImVec2(0, 255.f))) {
+        for (const char* col : {"Resource","Type","Wait began","Completed waits",
+                                "Unresolved waits","Max completed (us)","Last mutex owner"})
+            ImGui::TableSetupColumn(col);
+        ImGui::TableHeadersRow();
+        for (std::size_t i = 0; i < view.resources.size(); ++i) {
+            const auto& r = view.resources[i];
+            if (resource_filter_[0] != '\0' &&
+                r.name.find(resource_filter_.data()) == std::string::npos) continue;
+            ImGui::PushID(static_cast<int>(i));
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            if (ImGui::Selectable(r.name.c_str(),r.name == resource_selected_,
+                                  ImGuiSelectableFlags_SpanAllColumns))
+                resource_selected_ = r.name;
+            cell(resource_kind_name(r.kind));
+            cell(as_text(r.observed_wait_starts));
+            cell(as_text(r.completed_waits));
+            cell(as_text(r.unresolved_waits));
+            cell(r.max_completed_wait_us ? as_text(*r.max_completed_wait_us) : "Unknown");
+            cell(r.owner_observation_valid && r.last_recorded_owner ?
+                 *r.last_recorded_owner + " (observed)" : "Unknown / released");
+            if (ImGui::IsItemHovered() && r.continuity_lost)
+                ImGui::SetTooltip("Ownership/wait continuity was lost; no inferred state.");
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    if (resource_selected_.empty()) {
+        ImGui::TextDisabled("Select a resource to inspect source events and anomalies.");
+        return;
+    }
+    header("Evidence for selected resource");
+    ImGui::Text("Selected: %s",resource_selected_.c_str());
+    ImGui::TextDisabled("Only matched starts/ends yield completed wait durations.");
+    if (ImGui::BeginTable("resource-evidence",5,table_flags,ImVec2(0,235.f))) {
+        for(const char* name : {"Time (us)","Event","Task","Completed wait (us)","Source"})
+            ImGui::TableSetupColumn(name);
+        ImGui::TableHeadersRow();
+        std::size_t shown = 0;
+        for (const auto& observation : view.observations) {
+            if (observation.resource != resource_selected_) continue;
+            if (shown++ >= 160) break; // bounded on-screen detail
+            ImGui::PushID(static_cast<int>(observation.event_index));
+            ImGui::TableNextRow();
+            cell(as_text(observation.timestamp_us));
+            cell(observation.type);
+            cell(observation.task);
+            cell(observation.completed_wait_us ?
+                 as_text(*observation.completed_wait_us) : "Not a completed wait");
+            ImGui::TableNextColumn();
+            if (ImGui::SmallButton("Inspect event")) {
+                focused_event_ = observation.event_index;
+                rebuild_event_filter();
+                page_ = Page::Events;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Source event #%zu, line %zu, clock %s%s",
+                    observation.event_index, observation.source_line, view.clock_domain.c_str(),
+                    observation.evidence_verified ? "" : "\nContinuity unverified");
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    header("Observed anomalies (not proven root causes)");
+    std::size_t anomaly_rows = 0;
+    for (const auto& item : view.anomalies) {
+        if (item.resource != resource_selected_ &&
+            !item.resource.empty() && item.resource != "-") continue;
+        if (anomaly_rows++ >= 50) break;
+        ImGui::PushID(static_cast<int>(item.event_index));
+        if (ImGui::SmallButton("Show source")) {
+            focused_event_ = item.event_index;
+            rebuild_event_filter();
+            page_ = Page::Events;
+        }
+        ImGui::SameLine();
+        ImGui::TextWrapped("%s [%s / %s]: %s", item.code.c_str(),
+                           item.task.c_str(), item.resource.c_str(), item.explanation.c_str());
+        ImGui::PopID();
+    }
+    if (anomaly_rows == 0)
+        ImGui::TextDisabled("No recorded inconsistency for this resource in the scanned window.");
+}
+
 void Workspace::draw_events() {
     if(!controller_.loaded()) return;
     header("Recorded events");
@@ -1032,6 +1163,7 @@ void Workspace::draw() {
       case Page::Graph: draw_graph();break;
       case Page::Replay: draw_replay();break;
       case Page::Diagnostics: draw_diagnostics();break;
+      case Page::Resources: draw_resources();break;
       case Page::Events: draw_events();break;
       case Page::Findings: draw_findings();break;
       case Page::Evidence: draw_evidence();break;

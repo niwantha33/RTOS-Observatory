@@ -27,7 +27,7 @@ The first event must be `0 SESSION - <session-id> 0` (with tabs). Resets require
 | `TASK_BEGIN` / `TASK_FINISH` | task ID | `-` | `0` | Application-cycle begin/finish markers |
 | `DROP` | `-` | `-` | lost count > 0 | Discontinuity; invalidate state |
 
-Use `sem:`, `queue:`, `event:`, `notify:` prefixes in generic resource IDs to identify the resource type. No queue depth or notification value is implied by the existence of a wait.
+Use `sem:`, `queue:`, `gate:`, `mailbox:`, `event:`, and `notify:` prefixes in generic resource IDs for **display classification only**. `MUTEX_*` event types identify mutex operations even when the object has no `mutex:` prefix. Generic `WAIT_BEGIN` / `WAIT_END` does **not** prove semaphore count, queue depth, gate admission, mailbox occupancy, event-bit values, notification values or a wakeup cause. Names must not be interpreted as qualified vendor RTOS semantics; see [W10 resource observations](W10_RESOURCES.md).
 
 This schema is **not a claimed raw Zephyr CTF parser**. A source adapter must verify its original format, metadata, clock basis, task ID reuse, buffer-loss information, priority direction and RTOS version before emitting normalised events. This prototype consumes only the normalised format.
 
