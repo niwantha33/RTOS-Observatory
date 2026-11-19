@@ -101,6 +101,7 @@ inline CausalView analyze_causal_patterns(const DecodedTrace& trace, const Repor
         return std::any_of(it->second.begin(),it->second.end(),
             [&](const Priority& p) { return p.time > from && p.time <= to; });
     };
+    std::size_t total_interval_inspections = 0;
     auto add = [&](CausalFinding f) {
         if (result.findings.size() < limits.max_findings) {
             std::sort(f.evidence_events.begin(),f.evidence_events.end());
@@ -216,11 +217,11 @@ inline CausalView analyze_causal_patterns(const DecodedTrace& trace, const Repor
                             released >= w.since && released <= e.timestamp_us &&
                             !changed(e.task,w.since,e.timestamp_us) &&
                             !changed(w.owner_task,w.since,e.timestamp_us)) {
-                            std::size_t inspected=0;
                             for (const auto& span : report.intervals) {
-                                if (++inspected > limits.max_intervals) {
+                                if (total_interval_inspections >= limits.max_intervals) {
                                     result.limited = true; break;
                                 }
+                                ++total_interval_inspections;
                                 if (span.state != "running" || span.task == e.task ||
                                     span.task == w.owner_task || span.end_us <= w.since ||
                                     span.start_us >= released) continue;
