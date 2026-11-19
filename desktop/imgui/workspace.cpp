@@ -65,6 +65,9 @@ Workspace::Workspace() {
     std::snprintf(path_.data(), path_.size(), "%s", "examples/timeline.trace");
     std::snprintf(export_path_.data(), export_path_.size(), "%s", "investigation.json");
     std::snprintf(fault_path_.data(), fault_path_.size(), "%s", "examples/fault-snapshot.tsv");
+    std::snprintf(symbol_manifest_path_.data(), symbol_manifest_path_.size(), "%s", "symbols.tsv");
+    std::snprintf(symbol_elf_path_.data(), symbol_elf_path_.size(), "%s", "firmware.elf");
+    std::snprintf(symbol_source_root_.data(), symbol_source_root_.size(), "%s", ".");
 }
 void Workspace::recent(const std::string& path, const std::string& decoder, bool session) {
     recents_.erase(std::remove_if(recents_.begin(), recents_.end(),
@@ -229,6 +232,30 @@ bool Workspace::open_fault_snapshot(const std::string& path) {
         return false;
     }
 }
+bool Workspace::open_source_index(const std::string& manifest,
+                                  const std::string& elf,
+                                  const std::string& source_root) {
+    try {
+        std::ifstream file(file_path(manifest),std::ios::binary);
+        if (!file) throw Error("Cannot open local symbol/source sidecar");
+        auto next=parse_source_index(file);
+        auto verified=verify_source_index(next,file_path(elf),file_path(source_root));
+        symbols_=std::move(next);
+        symbol_verification_=std::move(verified);
+        selected_symbol_=0;
+        source_excerpt_.reset();
+        address_lookup_=0;
+        std::snprintf(symbol_manifest_path_.data(),symbol_manifest_path_.size(),"%s",manifest.c_str());
+        std::snprintf(symbol_elf_path_.data(),symbol_elf_path_.size(),"%s",elf.c_str());
+        std::snprintf(symbol_source_root_.data(),symbol_source_root_.size(),"%s",source_root.c_str());
+        error_.clear();
+        page_=Page::SourceGraph;
+        return true;
+    } catch (const std::exception& e) {
+        error_=e.what();
+        return false;
+    }
+}
 bool Workspace::export_report(const std::string& path) {
     try {
         controller_.export_report(file_path(path));
@@ -280,6 +307,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Open trace...")) pending_open_=OpenDialog::Trace;
         if(ImGui::MenuItem("Open saved session...")) pending_open_=OpenDialog::Session;
         if(ImGui::MenuItem("Open fault snapshot...")) page_=Page::Faults;
+        if(ImGui::MenuItem("Open C/C++/Rust symbol index...")) page_=Page::SourceGraph;
         if(ImGui::BeginMenu("Recent files",!recents_.empty())) {
             for(std::size_t i=0;i<recents_.size();++i) {
                 ImGui::PushID(static_cast<int>(i));
@@ -312,8 +340,9 @@ void Workspace::draw_menus() {
         if(ImGui::BeginMenu("Go to panel")) {
             constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
                 "Causal graph","Time-travel replay","Scheduling diagnostics",
-                "Resources and waits","Causal diagnostics","Fault & memory","Events","Findings","Evidence details"};
-            for(int i=0;i<12;++i)
+                "Resources and waits","Causal diagnostics","Fault & memory","Source/symbol graph",
+                "Events","Findings","Evidence details"};
+            for(int i=0;i<13;++i)
                 if(ImGui::MenuItem(names[i],nullptr,static_cast<int>(page_)==i))
                     page_=static_cast<Page>(i);
             ImGui::EndMenu();
@@ -346,6 +375,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Resources and waits",nullptr,false,loaded())) page_=Page::Resources;
         if(ImGui::MenuItem("Causal diagnostics",nullptr,false,loaded())) page_=Page::Causality;
         if(ImGui::MenuItem("Fault & memory snapshots")) page_=Page::Faults;
+        if(ImGui::MenuItem("Source/symbol graph")) page_=Page::SourceGraph;
         if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
@@ -430,13 +460,14 @@ void Workspace::draw_sidebar() {
     if (ImGui::Button("Open saved session", ImVec2(-1, 0)))
         (void)open_session(path_.data());
     if (ImGui::Button("Fault snapshot...", ImVec2(-1, 0))) page_=Page::Faults;
+    if (ImGui::Button("Source/symbol map...", ImVec2(-1, 0))) page_=Page::SourceGraph;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
     header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
                                       "Causal graph", "Time-travel replay", "Scheduling diagnostics",
                                       "Resources and waits", "Causal diagnostics", "Fault & memory",
-                                      "Events", "Findings", "Evidence details"};
-    for (int i=0; i<12; ++i) {
+                                      "Source/symbol graph", "Events", "Findings", "Evidence details"};
+    for (int i=0; i<13; ++i) {
         if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
                               ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
@@ -1370,6 +1401,219 @@ void Workspace::draw_faults() {
     ImGui::TextDisabled("Decoded Cortex-M status bits require confirmed architecture + target metadata.");
 }
 
+void Workspace::draw_source_graph() {
+    header("C / C++ / Rust source and symbol graph");
+    ImGui::TextDisabled("Offline, read-only. ELF and source SHA-256 matching is required for source navigation.");
+    ImGui::TextDisabled("Function/call/lock relationships are declared by a sidecar, NOT extracted or validated from DWARF.");
+    ImGui::SetNextItemWidth(510.f);
+    ImGui::InputText("Sidecar TSV",symbol_manifest_path_.data(),symbol_manifest_path_.size());
+    ImGui::SetNextItemWidth(510.f);
+    ImGui::InputText("Local ELF",symbol_elf_path_.data(),symbol_elf_path_.size());
+    ImGui::SetNextItemWidth(510.f);
+    ImGui::InputText("Source root",symbol_source_root_.data(),symbol_source_root_.size());
+    if(ImGui::Button("Open and verify source index")) {
+        (void)open_source_index(symbol_manifest_path_.data(),
+                                symbol_elf_path_.data(),symbol_source_root_.data());
+    }
+    if(!symbols_) {
+        ImGui::TextDisabled("Load a v1 source sidecar, local ELF and matching source directory.");
+        return;
+    }
+    const auto& index=*symbols_;
+    const auto& verification=symbol_verification_;
+    ImGui::Text("Firmware label: %s  |  %u-bit | functions: %zu  | calls: %zu  | locks: %zu",
+        index.firmware_label.c_str(),index.address_bits,index.functions.size(),
+        index.calls.size(),index.locks.size());
+    ImGui::TextColored(verification.elf_matches ? ImVec4(.46f,.85f,.69f,1.f) :
+                                                 ImVec4(1.f,.73f,.41f,1.f),
+        "ELF content SHA-256: %s (byte identity only, not proof of valid symbol records)",
+        verification.elf_matches ? "MATCHED" : "UNKNOWN / MISMATCH");
+    ImGui::Text("Source checksums: %zu of %zu matched",
+        verification.verified_sources.size(),index.source_sha256.size());
+    for(const auto& warning:verification.warnings)
+        ImGui::TextWrapped("%s",warning.c_str());
+    if(index.functions.empty()) {
+        ImGui::TextDisabled("No source function records were supplied.");
+        return;
+    }
+    selected_symbol_=std::min(selected_symbol_,index.functions.size()-1);
+    header("Address to symbol (exact declared range only)");
+    ImGui::SetNextItemWidth(205.f);
+    ImGui::InputScalar("PC/address (decimal)",ImGuiDataType_U64,&address_lookup_);
+    ImGui::SameLine();
+    if(ImGui::Button("Resolve address")) {
+        const auto resolved=resolve_source_pc(index,verification,address_lookup_);
+        if(resolved.function_index) {
+            selected_symbol_=*resolved.function_index;
+            source_excerpt_.reset();
+            error_.clear();
+        } else error_=resolved.ambiguous ?
+            "Overlapping function ranges: address resolution ambiguous" :
+            "No unique symbol for PC (or ELF identity unverified)";
+    }
+    if(fault_snapshot_) {
+        const auto label_match=fault_snapshot_->firmware_label==index.firmware_label &&
+                               fault_snapshot_->address_bits==index.address_bits;
+        if(!label_match)
+            ImGui::TextColored(ImVec4(1.f,.73f,.41f,1.f),
+                "W12 snapshot firmware/width labels differ: automatic PC association withheld.");
+        else if(verification.elf_matches) {
+            for(const auto& reg:fault_snapshot_->registers) {
+                if(reg.name!="PC" || !reg.value)continue;
+                const auto matched=resolve_source_pc(index,verification,*reg.value);
+                ImGui::PushID(static_cast<int>(reg.line));
+                if(matched.function_index) {
+                    const auto& f=index.functions[*matched.function_index];
+                    const std::string message=reg.context+" PC -> "+f.name+" (source-sidecar candidate)";
+                    if(ImGui::SmallButton("Inspect saved PC")) {
+                        selected_symbol_=*matched.function_index;
+                        address_lookup_=*reg.value;
+                        source_excerpt_.reset();
+                    }
+                    ImGui::SameLine();
+                    label(message);
+                } else if(matched.ambiguous) {
+                    ImGui::TextDisabled("%s PC: overlapping function ranges",reg.context.c_str());
+                } else ImGui::TextDisabled("%s PC: no declared matching function",reg.context.c_str());
+                ImGui::PopID();
+            }
+            ImGui::TextDisabled("Firmware labels are self-reported; W12 snapshot and ELF are not cryptographically paired.");
+        }
+    }
+    header("Declared functions");
+    if(ImGui::BeginTable("source_function_list",5,table_flags,ImVec2(0,175.f))) {
+        for(const char* col:{"Function","Language","PC start","Bytes","Declared file:line"})
+            ImGui::TableSetupColumn(col);
+        ImGui::TableHeadersRow();
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(index.functions.size()));
+        while(clipper.Step())for(int row=clipper.DisplayStart;row<clipper.DisplayEnd;++row) {
+            const std::size_t i=static_cast<std::size_t>(row);
+            const auto& f=index.functions[i];
+            ImGui::PushID(row);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            if(ImGui::Selectable(f.name.c_str(),selected_symbol_==i,
+                                 ImGuiSelectableFlags_SpanAllColumns)) {
+                selected_symbol_=i;
+                source_excerpt_.reset();
+            }
+            cell(f.language);
+            char pc[32];std::snprintf(pc,sizeof(pc),"0x%llx",
+                static_cast<unsigned long long>(f.address));
+            cell(pc);
+            cell(as_text(f.size));
+            cell(f.path+":"+std::to_string(f.line));
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    const auto& selected=index.functions[selected_symbol_];
+    header("Source relationship graph");
+    const auto target_name=[&](const std::string& id)->std::string {
+        const auto it=std::find_if(index.functions.begin(),index.functions.end(),
+            [&](const SourceFunction& f){return f.id==id;});
+        return it==index.functions.end() ? "Unknown" : it->name;
+    };
+    std::vector<std::string> inbound,outbound,locks;
+    std::size_t extra_in=0,extra_out=0,extra_lock=0;
+    for(const auto& call:index.calls) {
+        if(call.callee==selected.id) {
+            if(inbound.size()<4)inbound.push_back(target_name(call.caller));
+            else ++extra_in;
+        }
+        if(call.caller==selected.id) {
+            if(outbound.size()<4)outbound.push_back(target_name(call.callee));
+            else ++extra_out;
+        }
+    }
+    for(const auto& lock:index.locks)if(lock.function==selected.id) {
+        if(locks.size()<4)locks.push_back(lock.operation+": "+lock.resource);
+        else ++extra_lock;
+    }
+    if(ImGui::BeginChild("source_graph_canvas",ImVec2(0,230),ImGuiChildFlags_Borders,
+                         ImGuiWindowFlags_HorizontalScrollbar)) {
+        const ImVec2 o=ImGui::GetCursorScreenPos();
+        ImDrawList* draw=ImGui::GetWindowDrawList();
+        const auto line=IM_COL32(113,164,210,245);
+        const auto rectangle=[&](float x,float y,const std::string& text,bool focus=false) {
+            const ImVec2 p(o.x+x,o.y+y);
+            draw->AddRectFilled(p,ImVec2(p.x+170.f,p.y+32.f),
+                                focus ? IM_COL32(35,106,149,255) : IM_COL32(43,57,75,255),6.f);
+            draw->AddRect(p,ImVec2(p.x+170.f,p.y+32.f),line,6.f);
+            const std::string clipped=text.size()>23 ? text.substr(0,20)+"..." : text;
+            draw->AddText(ImVec2(p.x+7.f,p.y+9.f),IM_COL32(244,249,255,255),clipped.c_str());
+        };
+        rectangle(330.f,72.f,selected.name,true);
+        for(std::size_t i=0;i<inbound.size();++i) {
+            const float y=8.f+43.f*static_cast<float>(i);
+            rectangle(35.f,y,inbound[i]);
+            draw->AddLine(ImVec2(o.x+205.f,o.y+y+16.f),
+                          ImVec2(o.x+330.f,o.y+88.f),line,2.f);
+        }
+        for(std::size_t i=0;i<outbound.size();++i) {
+            const float y=8.f+43.f*static_cast<float>(i);
+            rectangle(625.f,y,outbound[i]);
+            draw->AddLine(ImVec2(o.x+500.f,o.y+88.f),
+                          ImVec2(o.x+625.f,o.y+y+16.f),line,2.f);
+        }
+        for(std::size_t i=0;i<locks.size();++i) {
+            const float x=200.f+170.f*static_cast<float>(i);
+            rectangle(x,173.f,locks[i]);
+            draw->AddLine(ImVec2(o.x+415.f,o.y+104.f),
+                          ImVec2(o.x+x+85.f,o.y+173.f),IM_COL32(232,183,88,255),2.f);
+        }
+        ImGui::Dummy(ImVec2(920.f,218.f));
+    }
+    ImGui::EndChild();
+    if(extra_in || extra_out || extra_lock)
+        ImGui::TextDisabled("Visual preview omits %zu incoming, %zu outgoing and %zu lock links; see sidecar evidence.",
+            extra_in,extra_out,extra_lock);
+    ImGui::TextDisabled("Graph edges are sidecar-declared only; no dynamic call stacks or actual locking proven.");
+    header("Declared relationships and evidence lines");
+    for(const auto& call:index.calls) {
+        if(call.caller!=selected.id && call.callee!=selected.id)continue;
+        ImGui::TextWrapped("CALL  %s  ->  %s  (declared source line %llu; manifest line %zu)",
+            target_name(call.caller).c_str(),target_name(call.callee).c_str(),
+            static_cast<unsigned long long>(call.line),call.manifest_line);
+    }
+    for(const auto& lock:index.locks)if(lock.function==selected.id)
+        ImGui::TextWrapped("LOCK  %s  %s  (declared source line %llu; manifest line %zu)",
+            lock.operation.c_str(),lock.resource.c_str(),
+            static_cast<unsigned long long>(lock.line),lock.manifest_line);
+    header("Verified local source preview");
+    const auto verified_file=verification.verified_sources.contains(selected.path);
+    if(!verification.elf_matches || !verified_file)
+        ImGui::TextColored(ImVec4(1.f,.73f,.41f,1.f),
+            "Source jump blocked: ELF and selected source must both pass SHA-256 comparison.");
+    ImGui::BeginDisabled(!verification.elf_matches || !verified_file);
+    if(ImGui::Button("Jump to declared function line (local read-only)")) {
+        try {
+            source_excerpt_=read_verified_source_excerpt(index,verification,selected_symbol_,7);
+            error_.clear();
+        } catch(const std::exception& e) {
+            source_excerpt_.reset();
+            error_=e.what();
+        }
+    }
+    ImGui::EndDisabled();
+    if(source_excerpt_) {
+        ImGui::TextDisabled("%s:%llu  (source hash rechecked on click)",
+            source_excerpt_->path.c_str(),
+            static_cast<unsigned long long>(source_excerpt_->target_line));
+        if(ImGui::BeginChild("source_preview",ImVec2(0,170),ImGuiChildFlags_Borders,
+                             ImGuiWindowFlags_HorizontalScrollbar)) {
+            for(const auto& [number,line]:source_excerpt_->lines) {
+                const std::string row=std::to_string(number)+"  "+line;
+                if(number==source_excerpt_->target_line)
+                    ImGui::TextColored(ImVec4(.53f,.89f,.68f,1.f),"%s",row.c_str());
+                else ImGui::TextUnformatted(row.c_str());
+            }
+        }
+        ImGui::EndChild();
+    }
+}
+
 void Workspace::draw_findings() {
     if(!controller_.loaded()) return;
     header("Observed findings");
@@ -1457,6 +1701,7 @@ void Workspace::draw() {
       case Page::Resources: draw_resources();break;
       case Page::Causality: draw_causality();break;
       case Page::Faults: draw_faults();break;
+      case Page::SourceGraph: draw_source_graph();break;
       case Page::Events: draw_events();break;
       case Page::Findings: draw_findings();break;
       case Page::Evidence: draw_evidence();break;
