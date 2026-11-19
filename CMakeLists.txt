@@ -31,6 +31,9 @@ if(OBSERVATORY_BUILD_TESTS)
   add_executable(observatory_graph_tests tests/test_graph.cpp)
   target_link_libraries(observatory_graph_tests PRIVATE observatory_core)
   add_test(NAME observatory_graph_evidence COMMAND observatory_graph_tests)
+  add_executable(observatory_replay_tests tests/test_replay.cpp)
+  target_link_libraries(observatory_replay_tests PRIVATE observatory_core)
+  add_test(NAME observatory_replay_navigation COMMAND observatory_replay_tests)
   add_test(NAME observatory_timeline_accounting COMMAND observatory_timeline_tests)
   add_test(NAME observatory_core_tests COMMAND observatory_tests)
   find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -48,7 +51,7 @@ if(OBSERVATORY_BUILD_TESTS)
 endif()
 
 if(OBSERVATORY_BUILD_TESTS)
-  foreach(test_target observatory_tests observatory_timeline_tests observatory_graph_tests observatory_ring_tests)
+  foreach(test_target observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_ring_tests)
     if(MSVC)
       target_compile_options(${test_target} PRIVATE /UNDEBUG)
     else()
@@ -192,13 +195,16 @@ if(OBSERVATORY_BUILD_DESKTOP)
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
     add_test(NAME observatory_desktop_graph_smoke COMMAND rtos-observatory-desktop --smoke-graph
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
+    add_test(NAME observatory_desktop_replay_smoke COMMAND rtos-observatory-desktop --smoke-replay
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
     if(Python3_Interpreter_FOUND)
       add_test(NAME observatory_desktop_build_info COMMAND
         ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_desktop_build_info.py
         $<TARGET_FILE:rtos-observatory-desktop> ${PROJECT_VERSION})
     endif()
     set_tests_properties(observatory_desktop_smoke observatory_desktop_timeline_smoke
-      observatory_desktop_graph_smoke PROPERTIES TIMEOUT 30)
+      observatory_desktop_graph_smoke observatory_desktop_replay_smoke
+      PROPERTIES TIMEOUT 30)
     # Linux CI xvfb-run provides a genuine hidden GLFW/OpenGL render smoke.
     if(UNIX AND NOT APPLE)
       find_program(OBSERVATORY_XVFB_RUN xvfb-run)
@@ -209,8 +215,11 @@ if(OBSERVATORY_BUILD_DESKTOP)
         add_test(NAME observatory_imgui_graph_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
           $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-graph
           ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
+        add_test(NAME observatory_imgui_replay_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
+          $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-replay
+          ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
         set_tests_properties(observatory_imgui_ui_smoke observatory_imgui_graph_ui_smoke
-          PROPERTIES TIMEOUT 30)
+          observatory_imgui_replay_ui_smoke PROPERTIES TIMEOUT 30)
       endif()
     endif()
   endif()

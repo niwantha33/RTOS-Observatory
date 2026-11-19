@@ -3,6 +3,7 @@
 #include "observatory/desktop/session_controller.hpp"
 #include "observatory/timeline.hpp"
 #include "observatory/graph.hpp"
+#include "observatory/replay.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -24,22 +25,26 @@ public:
     bool loaded() const noexcept { return controller_.loaded(); }
     const GraphView* graph() const noexcept { return graph_ ? &*graph_ : nullptr; }
     void show_graph() noexcept { page_ = Page::Graph; }
+    void show_replay() noexcept { page_ = Page::Replay; }
+    const ReplaySnapshot* replay() const noexcept { return replay_ ? &*replay_ : nullptr; }
     const std::string& error() const noexcept { return error_; }
     const SessionController& controller() const noexcept { return controller_; }
     const TimelineView* timeline() const noexcept { return timeline_ ? &*timeline_ : nullptr; }
 private:
-    enum class Page { Overview, Timeline, CpuWaits, Graph, Events, Findings, Evidence };
+    enum class Page { Overview, Timeline, CpuWaits, Graph, Replay, Events, Findings, Evidence };
     enum class OpenDialog { None, Trace, Session };
     void draw_menus();
     void draw_dialogs();
     void update_timeline();
     void update_graph();
+    void update_replay();
     void rebuild_event_filter();
     void draw_sidebar();
     void draw_overview();
     void draw_timeline();
     void draw_cpu();
     void draw_graph();
+    void draw_replay();
     void draw_events();
     void draw_findings();
     void draw_evidence();
@@ -49,6 +54,9 @@ private:
     SessionController controller_;
     std::optional<TimelineView> timeline_;
     std::optional<GraphView> graph_;
+    std::optional<ReplaySnapshot> replay_;
+    std::optional<std::size_t> graph_event_boundary_;
+    std::uint64_t replay_cursor_{};
     std::optional<std::size_t> focused_event_;
     std::string graph_selected_;
     bool graph_show_evidence_{true};

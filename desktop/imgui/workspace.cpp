@@ -80,10 +80,25 @@ void Workspace::update_graph() {
     graph_.reset();
     if (!controller_.loaded()) return;
     try {
-        graph_ = build_causal_graph(controller_.trace(), begin_us_, end_us_, graph_filter_.data());
+        graph_ = build_causal_graph(controller_.trace(), begin_us_, end_us_, graph_filter_.data(),
+                                     {}, graph_event_boundary_);
         if (std::none_of(graph_->nodes.begin(), graph_->nodes.end(),
                          [&](const GraphNode& node) { return node.id == graph_selected_; }))
             graph_selected_.clear();
+    } catch (const std::exception& e) {
+        notice_ = e.what();
+    }
+}
+void Workspace::update_replay() {
+    replay_.reset();
+    if (!controller_.loaded()) return;
+    try {
+        const auto& events = controller_.trace().capture.events;
+        if (!events.empty()) {
+            const auto capped_count = std::min<std::size_t>(events.size(), 100000);
+            replay_cursor_ = std::min<std::uint64_t>(replay_cursor_, capped_count - 1);
+        }
+        replay_ = replay_at(controller_.trace(), static_cast<std::size_t>(replay_cursor_));
     } catch (const std::exception& e) {
         notice_ = e.what();
     }
@@ -103,6 +118,13 @@ void Workspace::update_timeline() {
 bool Workspace::open_trace(const std::string& path, const std::string& decoder) {
     try {
         controller_.open_trace(file_path(path), decoder);
+        focused_event_.reset();
+        graph_selected_.clear();
+        graph_event_boundary_.reset();
+        replay_cursor_ = controller_.trace().capture.events.empty() ? 0 :
+            static_cast<std::uint64_t>(
+                std::min<std::size_t>(controller_.trace().capture.events.size(), 100000) - 1);
+        update_replay();
         error_.clear();
         std::snprintf(path_.data(), path_.size(), "%s", path.c_str());
         recent(path, decoder, false);
@@ -115,6 +137,13 @@ bool Workspace::open_trace(const std::string& path, const std::string& decoder) 
 bool Workspace::open_session(const std::string& path) {
     try {
         controller_.open_session(file_path(path));
+        focused_event_.reset();
+        graph_selected_.clear();
+        graph_event_boundary_.reset();
+        replay_cursor_ = controller_.trace().capture.events.empty() ? 0 :
+            static_cast<std::uint64_t>(
+                std::min<std::size_t>(controller_.trace().capture.events.size(), 100000) - 1);
+        update_replay();
         error_.clear();
         std::snprintf(path_.data(), path_.size(), "%s", path.c_str());
         recent(path, "", true);
@@ -203,8 +232,8 @@ void Workspace::draw_menus() {
         ImGui::MenuItem("Show navigation",nullptr,&show_sidebar_);
         if(ImGui::BeginMenu("Go to panel")) {
             constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
-                "Causal graph","Events","Findings","Evidence details"};
-            for(int i=0;i<7;++i)
+                "Causal graph","Time-travel replay","Events","Findings","Evidence details"};
+            for(int i=0;i<8;++i)
                 if(ImGui::MenuItem(names[i],nullptr,static_cast<int>(page_)==i))
                     page_=static_cast<Page>(i);
             ImGui::EndMenu();
@@ -232,6 +261,7 @@ void Workspace::draw_menus() {
         ImGui::Separator();
         if(ImGui::MenuItem("CPU and wait analysis",nullptr,false,loaded())) page_=Page::CpuWaits;
         if(ImGui::MenuItem("Causal graph studio",nullptr,false,loaded())) page_=Page::Graph;
+        if(ImGui::MenuItem("Time-travel replay",nullptr,false,loaded())) page_=Page::Replay;
         if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
@@ -318,8 +348,8 @@ void Workspace::draw_sidebar() {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
     header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
-                                      "Causal graph", "Events", "Findings", "Evidence details"};
-    for (int i=0; i<7; ++i) {
+                                      "Causal graph", "Time-travel replay", "Events", "Findings", "Evidence details"};
+    for (int i=0; i<8; ++i) {
         if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
                               ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
@@ -518,6 +548,14 @@ void Workspace::draw_graph() {
             "INCOMPLETE / CAPPED: unobserved states and relations remain unknown");
     for (const auto& warning : view.warnings)
         ImGui::TextWrapped("%s", warning.c_str());
+    if (graph_event_boundary_) {
+        ImGui::Text("Replayed only through recorded event #%zu", *graph_event_boundary_);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Show all events in time range")) {
+            graph_event_boundary_.reset();
+            update_graph();
+        }
+    }
     ImGui::TextDisabled("Drag with middle mouse to pan; mouse wheel to zoom; click a node for linked events.");
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     const ImVec2 canvas_size(std::max(500.f, ImGui::GetContentRegionAvail().x), 450.f);
@@ -669,6 +707,97 @@ void Workspace::draw_cpu() {
         ImGui::TextColored(ImVec4(1.f,.75f,.42f,1),"%s",warning.c_str());
     ImGui::TextDisabled("Busy includes ISR time; unknown scheduler time is never assumed idle.");
 }
+void Workspace::draw_replay() {
+    if (!controller_.loaded()) {
+        ImGui::TextDisabled("Open a capture to navigate its recorded event history.");
+        return;
+    }
+    header("Time-travel replay");
+    ImGui::TextDisabled("Deterministic offline observations, not live or reconstructed RTOS memory state.");
+    const auto& events = controller_.trace().capture.events;
+    if (events.empty()) {
+        ImGui::TextDisabled("Capture contains no events.");
+        return;
+    }
+    const std::size_t count = std::min<std::size_t>(events.size(), 100000);
+    const std::uint64_t first = 0;
+    const std::uint64_t last = static_cast<std::uint64_t>(count - 1);
+    bool changed = false;
+    if (ImGui::Button("First event")) { replay_cursor_ = first; changed = true; }
+    ImGui::SameLine();
+    if (ImGui::Button("Previous") && replay_cursor_ > first) {
+        --replay_cursor_; changed = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Next") && replay_cursor_ < last) {
+        ++replay_cursor_; changed = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Last in budget")) { replay_cursor_ = last; changed = true; }
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::SliderScalar("Event index", ImGuiDataType_U64, &replay_cursor_, &first, &last))
+        changed = true;
+    if (changed || !replay_) update_replay();
+    if (!replay_) return;
+    const auto& state = *replay_;
+    const auto& event = events[static_cast<std::size_t>(replay_cursor_)];
+    ImGui::Text("Event #%llu | %s | %llu us | Line %zu | Clock: %s",
+        static_cast<unsigned long long>(replay_cursor_), event.type.c_str(),
+        static_cast<unsigned long long>(event.timestamp_us),
+        event.line, state.clock_domain.c_str());
+    if (events.size() > count)
+        ImGui::TextColored(ImVec4(1.f,.75f,.42f,1.f),
+            "Preview capped at first %zu events; later history is not replayed.", count);
+    if (!state.integrity_verified)
+        ImGui::TextColored(ImVec4(1.f,.75f,.42f,1.f),
+            "UNVERIFIED continuity: observations cannot establish exact historic state.");
+    for (const auto& warning : state.warnings)
+        ImGui::TextWrapped("%s", warning.c_str());
+    if (ImGui::Button("Inspect this event")) {
+        focused_event_ = static_cast<std::size_t>(replay_cursor_);
+        rebuild_event_filter();
+        page_ = Page::Events;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Open causal graph at this event")) {
+        graph_event_boundary_ = static_cast<std::size_t>(replay_cursor_);
+        begin_us_ = controller_.report().start_us;
+        end_us_ = event.timestamp_us;
+        update_timeline();
+        page_ = Page::Graph;
+    }
+    header("Last recorded mutex/resource transitions");
+    ImGui::TextDisabled("Acquired/released means last observed transition; continuity is not independently proved.");
+    if (ImGui::BeginTable("replay_resources", 5, table_flags, ImVec2(0, 245))) {
+        for (const char* col : {"Resource","Observed transition","Last task","Event","Time (us)"})
+            ImGui::TableSetupColumn(col);
+        ImGui::TableHeadersRow();
+        for (const auto& item : state.resources) {
+            ImGui::TableNextRow();
+            cell(item.id);
+            cell(item.kind == ReplayResourceKind::Acquired ? "Acquire recorded" :
+                 item.kind == ReplayResourceKind::Released ? "Release recorded" : "Unknown");
+            cell(item.last_owner.empty() ? "Unknown" : item.last_owner);
+            cell(as_text(item.event_index));
+            cell(as_text(item.timestamp_us));
+        }
+        ImGui::EndTable();
+    }
+    header("Last recorded task waits");
+    if (ImGui::BeginTable("replay_waits", 4, table_flags, ImVec2(0, 190))) {
+        for (const char* col : {"Task","Resource","Last transition","Event"})
+            ImGui::TableSetupColumn(col);
+        ImGui::TableHeadersRow();
+        for (const auto& item : state.waits) {
+            ImGui::TableNextRow();
+            cell(item.task); cell(item.resource);
+            cell(!item.known ? "Unknown" : item.active ? "Wait began" : "Wait ended");
+            cell(as_text(item.event_index));
+        }
+        ImGui::EndTable();
+    }
+}
+
 void Workspace::draw_events() {
     if(!controller_.loaded()) return;
     header("Recorded events");
@@ -788,6 +917,7 @@ void Workspace::draw() {
       case Page::Timeline: draw_timeline();break;
       case Page::CpuWaits: draw_cpu();break;
       case Page::Graph: draw_graph();break;
+      case Page::Replay: draw_replay();break;
       case Page::Events: draw_events();break;
       case Page::Findings: draw_findings();break;
       case Page::Evidence: draw_evidence();break;
