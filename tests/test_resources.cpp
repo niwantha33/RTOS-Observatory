@@ -108,6 +108,22 @@ int main() {
     gaps.evidence.missing_events = 1;
     assert(!analyze_resource_observations(gaps).evidence_verified);
 
+    // At equal timestamps, decoder order still defines a zero-length completed wait.
+    DecodedTrace equal_time;
+    equal_time.evidence.sequence_available = true;
+    equal_time.capture.events = {
+        {0,"SESSION","-","same-time",0,1},
+        {2,"WAIT_BEGIN","T","queue:Q",0,2},
+        {2,"WAIT_END","T","queue:Q",0,3}
+    };
+    const auto simultaneous = analyze_resource_observations(equal_time);
+    assert(simultaneous.evidence_verified);
+    assert(resource(simultaneous,"queue:Q").completed_waits == 1);
+    assert(resource(simultaneous,"queue:Q").max_completed_wait_us &&
+           *resource(simultaneous,"queue:Q").max_completed_wait_us == 0);
+    assert(simultaneous.observations[1].wait_start_event &&
+           *simultaneous.observations[1].wait_start_event == 1);
+
     // Invalid direct input must not create fake resource nodes.
     DecodedTrace malformed;
     malformed.evidence.sequence_available = true;
