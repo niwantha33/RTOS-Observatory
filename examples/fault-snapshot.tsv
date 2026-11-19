@@ -1,0 +1,18 @@
+RTOS-OBSERVATORY-FAULT	1	cortex-m4	32	fw-synthetic-v1	crash-demo	unverified
+# Synthetic evidence. Not an MCU dump, GDB transcript, or certified fault.
+REGION	flash	flash	0x08000000	0x20000	rx
+REGION	ram	ram	0x20000000	0x8000	rw
+REGION	periph	peripheral	0x40000000	0x100	rw
+THREAD	Control	0x20000020	0x80	0x20001000	0x800	0x200017fc	0x400
+THREAD	Faulted	0x20000200	0x80	0x20002000	0x800	0x20003000	0x900
+HEAP	heap0	0x20004000	0x1000	0x400	0x1300
+REG	cpu0	PC	0x08000400	ok
+REG	cpu0	CFSR	0x200	ok
+REG	cpu0	HFSR	0x40000000	ok
+REG	cpu0	BFAR	-	failed
+REG	cpu1	PC	0x40000002	ok
+FAULT	HardFault	cpu0	0x08000400
+MEM	ram	0x20001000	deadbeef	ok
+MEM	ram	0x20001004	-	failed
+MEM	periph	0x40000000	1234	ok
+MEM	ghost	0x20001008	aabb	ok

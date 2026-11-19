@@ -7,6 +7,7 @@
 #include "observatory/diagnostics.hpp"
 #include "observatory/resource_analysis.hpp"
 #include "observatory/causal_diagnostics.hpp"
+#include "observatory/fault_evidence.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -22,6 +23,7 @@ public:
     // Safe to call without graphics initialization, including headless smoke tests.
     bool open_trace(const std::string& path, const std::string& decoder = "universal-v1");
     bool open_session(const std::string& path);
+    bool open_fault_snapshot(const std::string& path);
     bool export_report(const std::string& path);
     void accept_drop(const std::string& path);
     void draw();
@@ -36,12 +38,14 @@ public:
     void show_resources() noexcept { page_ = Page::Resources; }
     const CausalView* causality() const noexcept { return causality_ ? &*causality_ : nullptr; }
     void show_causality() noexcept { page_ = Page::Causality; }
+    void show_faults() noexcept { page_ = Page::Faults; }
+    const FaultView* fault_view() const noexcept { return fault_view_ ? &*fault_view_ : nullptr; }
     const ReplaySnapshot* replay() const noexcept { return replay_ ? &*replay_ : nullptr; }
     const std::string& error() const noexcept { return error_; }
     const SessionController& controller() const noexcept { return controller_; }
     const TimelineView* timeline() const noexcept { return timeline_ ? &*timeline_ : nullptr; }
 private:
-    enum class Page { Overview, Timeline, CpuWaits, Graph, Replay, Diagnostics, Resources, Causality, Events, Findings, Evidence };
+    enum class Page { Overview, Timeline, CpuWaits, Graph, Replay, Diagnostics, Resources, Causality, Faults, Events, Findings, Evidence };
     enum class OpenDialog { None, Trace, Session };
     void draw_menus();
     void draw_dialogs();
@@ -61,6 +65,7 @@ private:
     void draw_diagnostics();
     void draw_resources();
     void draw_causality();
+    void draw_faults();
     void draw_events();
     void draw_findings();
     void draw_evidence();
@@ -74,6 +79,11 @@ private:
     std::optional<DiagnosticsView> diagnostics_;
     std::optional<ResourceView> resources_;
     std::optional<CausalView> causality_;
+    std::optional<FaultSnapshot> fault_snapshot_;
+    std::optional<FaultView> fault_view_;
+    std::string fault_origin_;
+    std::size_t fault_selected_finding_{};
+    std::array<char,2048> fault_path_{};
     std::uint64_t long_mutex_wait_threshold_us_{0};
     std::size_t selected_causal_finding_{};
     std::string resource_selected_;

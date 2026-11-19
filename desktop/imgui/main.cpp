@@ -113,6 +113,8 @@ int main(int argc, char** argv) {
     bool smoke_diagnostics=false;
     bool smoke_resources=false;
     bool smoke_causal=false;
+    bool smoke_fault=false;
+    std::string fault_load_path;
     std::string load_path;
     bool session=false;
     if(argc>=2 && std::string_view(argv[1])=="--version") {
@@ -136,6 +138,9 @@ int main(int argc, char** argv) {
                   "  --smoke-ui-resources PATH  Hidden W10 resource panel UI smoke\n"
                   "  --smoke-causal PATH  Headless W11 causal pattern smoke\n"
                   "  --smoke-ui-causal PATH  Hidden W11 causal evidence UI smoke\n"
+                  "  --fault-snapshot PATH  View a local, offline W12 snapshot\n"
+                  "  --smoke-fault PATH  Headless W12 fault snapshot/model smoke\n"
+                  "  --smoke-ui-fault PATH  Hidden W12 fault evidence panel smoke\n"
                   "Drag a trace file onto the window or enter a filename in the sidebar.");
         return 0;
     }
@@ -198,20 +203,34 @@ int main(int argc, char** argv) {
         std::puts("W11 source-linked causal diagnostics model smoke passed");
         return 0;
     }
+    if(argc>=3 && std::string_view(argv[1])=="--smoke-fault") {
+        if(!workspace.open_fault_snapshot(argv[2]) || !workspace.fault_view() ||
+           workspace.fault_view()->findings.empty()) {
+            std::fprintf(stderr,"W12 fault snapshot smoke failed: %s\n",workspace.error().c_str());
+            return 3;
+        }
+        std::puts("W12 offline stack, TCB, fault and memory evidence smoke passed");
+        return 0;
+    }
     if(argc>=3 && (std::string_view(argv[1])=="--smoke-ui" ||
                    std::string_view(argv[1])=="--smoke-ui-graph" ||
                    std::string_view(argv[1])=="--smoke-ui-replay" ||
                    std::string_view(argv[1])=="--smoke-ui-diagnostics" ||
                    std::string_view(argv[1])=="--smoke-ui-resources" ||
-                   std::string_view(argv[1])=="--smoke-ui-causal")) {
+                   std::string_view(argv[1])=="--smoke-ui-causal" ||
+                   std::string_view(argv[1])=="--smoke-ui-fault")) {
         smoke_ui=true;
         smoke_graph=std::string_view(argv[1])=="--smoke-ui-graph";
         smoke_replay=std::string_view(argv[1])=="--smoke-ui-replay";
         smoke_diagnostics=std::string_view(argv[1])=="--smoke-ui-diagnostics";
         smoke_resources=std::string_view(argv[1])=="--smoke-ui-resources";
         smoke_causal=std::string_view(argv[1])=="--smoke-ui-causal";
-        load_path=argv[2];
-    } else if(argc>=3 && std::string_view(argv[1])=="--trace")
+        smoke_fault=std::string_view(argv[1])=="--smoke-ui-fault";
+        if(smoke_fault) fault_load_path=argv[2];
+        else load_path=argv[2];
+    } else if(argc>=3 && std::string_view(argv[1])=="--fault-snapshot")
+        fault_load_path=argv[2];
+    else if(argc>=3 && std::string_view(argv[1])=="--trace")
         load_path=argv[2];
     else if(argc>=3 && std::string_view(argv[1])=="--session") {
         load_path=argv[2];
@@ -228,7 +247,12 @@ int main(int argc, char** argv) {
     if (smoke_replay) workspace.show_replay();
     if (smoke_diagnostics) workspace.show_diagnostics();
     if (smoke_resources) workspace.show_resources();
+    if (!fault_load_path.empty() && !workspace.open_fault_snapshot(fault_load_path)) {
+        std::fprintf(stderr,"Cannot load W12 fault evidence: %s\n",workspace.error().c_str());
+        return 2;
+    }
     if (smoke_causal) workspace.show_causality();
+    if (smoke_fault) workspace.show_faults();
     glfwSetErrorCallback(glfw_error);
     if(!glfwInit()) { std::fputs("GLFW initialization failed\n",stderr); return 3; }
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);

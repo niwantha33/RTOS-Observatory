@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -63,6 +64,7 @@ void hover(const std::string& description) {
 Workspace::Workspace() {
     std::snprintf(path_.data(), path_.size(), "%s", "examples/timeline.trace");
     std::snprintf(export_path_.data(), export_path_.size(), "%s", "investigation.json");
+    std::snprintf(fault_path_.data(), fault_path_.size(), "%s", "examples/fault-snapshot.tsv");
 }
 void Workspace::recent(const std::string& path, const std::string& decoder, bool session) {
     recents_.erase(std::remove_if(recents_.begin(), recents_.end(),
@@ -208,6 +210,25 @@ bool Workspace::open_session(const std::string& path) {
         return true;
     } catch (const std::exception& e) { error_ = e.what(); return false; }
 }
+bool Workspace::open_fault_snapshot(const std::string& path) {
+    try {
+        std::ifstream input(file_path(path), std::ios::binary);
+        if (!input) throw Error("Cannot open local fault snapshot");
+        auto next_snapshot = parse_fault_snapshot(input);
+        auto next_view = analyze_fault_snapshot(next_snapshot);
+        fault_snapshot_ = std::move(next_snapshot);
+        fault_view_ = std::move(next_view);
+        fault_selected_finding_ = 0;
+        fault_origin_ = path;
+        std::snprintf(fault_path_.data(), fault_path_.size(), "%s", path.c_str());
+        error_.clear();
+        page_ = Page::Faults;
+        return true;
+    } catch (const std::exception& e) {
+        error_ = e.what();
+        return false;
+    }
+}
 bool Workspace::export_report(const std::string& path) {
     try {
         controller_.export_report(file_path(path));
@@ -217,7 +238,9 @@ bool Workspace::export_report(const std::string& path) {
     } catch (const std::exception& e) { error_ = e.what(); return false; }
 }
 void Workspace::accept_drop(const std::string& path) {
-    if (std::filesystem::is_directory(file_path(path))) (void)open_session(path);
+    if (path.ends_with(".fault.tsv") || path.ends_with("fault-snapshot.tsv"))
+        (void)open_fault_snapshot(path);
+    else if (std::filesystem::is_directory(file_path(path))) (void)open_session(path);
     else (void)open_trace(path, legacy_decoder_ ? "legacy-tsv" : "universal-v1");
 }
 void Workspace::rebuild_event_filter() {
@@ -256,6 +279,7 @@ void Workspace::draw_menus() {
     if(ImGui::BeginMenu("File")) {
         if(ImGui::MenuItem("Open trace...")) pending_open_=OpenDialog::Trace;
         if(ImGui::MenuItem("Open saved session...")) pending_open_=OpenDialog::Session;
+        if(ImGui::MenuItem("Open fault snapshot...")) page_=Page::Faults;
         if(ImGui::BeginMenu("Recent files",!recents_.empty())) {
             for(std::size_t i=0;i<recents_.size();++i) {
                 ImGui::PushID(static_cast<int>(i));
@@ -288,8 +312,8 @@ void Workspace::draw_menus() {
         if(ImGui::BeginMenu("Go to panel")) {
             constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
                 "Causal graph","Time-travel replay","Scheduling diagnostics",
-                "Resources and waits","Causal diagnostics","Events","Findings","Evidence details"};
-            for(int i=0;i<11;++i)
+                "Resources and waits","Causal diagnostics","Fault & memory","Events","Findings","Evidence details"};
+            for(int i=0;i<12;++i)
                 if(ImGui::MenuItem(names[i],nullptr,static_cast<int>(page_)==i))
                     page_=static_cast<Page>(i);
             ImGui::EndMenu();
@@ -321,6 +345,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Scheduling diagnostics",nullptr,false,loaded())) page_=Page::Diagnostics;
         if(ImGui::MenuItem("Resources and waits",nullptr,false,loaded())) page_=Page::Resources;
         if(ImGui::MenuItem("Causal diagnostics",nullptr,false,loaded())) page_=Page::Causality;
+        if(ImGui::MenuItem("Fault & memory snapshots")) page_=Page::Faults;
         if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
@@ -404,12 +429,14 @@ void Workspace::draw_sidebar() {
         (void)open_trace(path_.data(), legacy_decoder_ ? "legacy-tsv" : "universal-v1");
     if (ImGui::Button("Open saved session", ImVec2(-1, 0)))
         (void)open_session(path_.data());
+    if (ImGui::Button("Fault snapshot...", ImVec2(-1, 0))) page_=Page::Faults;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
     header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
                                       "Causal graph", "Time-travel replay", "Scheduling diagnostics",
-                                      "Resources and waits", "Causal diagnostics", "Events", "Findings", "Evidence details"};
-    for (int i=0; i<11; ++i) {
+                                      "Resources and waits", "Causal diagnostics", "Fault & memory",
+                                      "Events", "Findings", "Evidence details"};
+    for (int i=0; i<12; ++i) {
         if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
                               ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
@@ -1172,6 +1199,177 @@ void Workspace::draw_causality() {
     }
 }
 
+void Workspace::draw_faults() {
+    header("Fault and memory evidence");
+    ImGui::TextDisabled("Local, read-only, self-reported snapshots. No target/probe reads or guessed TCB layout.");
+    ImGui::SetNextItemWidth(520.f);
+    ImGui::InputText("Snapshot file",fault_path_.data(),fault_path_.size());
+    ImGui::SameLine();
+    if(ImGui::Button("Open fault snapshot")) (void)open_fault_snapshot(fault_path_.data());
+    if(!fault_snapshot_ || !fault_view_) {
+        ImGui::TextDisabled("Open a versioned W12 fault snapshot to inspect TCB, stack, registers and saved bytes.");
+        ImGui::TextDisabled("Try examples/fault-snapshot.tsv (synthetic, not a physical board dump).");
+        return;
+    }
+    const auto& s=*fault_snapshot_;
+    const auto& view=*fault_view_;
+    ImGui::Text("Architecture label: %s / %u-bit | Firmware label: %s",
+                s.architecture.c_str(),s.address_bits,s.firmware_label.c_str());
+    ImGui::Text("Capture: %s | Source records: %zu",
+                s.capture_id.c_str(),view.examined_records);
+    ImGui::TextColored(ImVec4(1.f,.76f,.42f,1.f),
+        "Not attested. Source claims coherence: %s; acquisition was not independently checked.",
+        view.claimed_coherent?"yes":"unverified");
+    for (const auto& msg:view.warnings) ImGui::TextWrapped("%s",msg.c_str());
+    if (ImGui::CollapsingHeader("Memory map",ImGuiTreeNodeFlags_DefaultOpen)) {
+        if(ImGui::BeginTable("fault_regions",5,table_flags,ImVec2(0,145.f))) {
+            for(const char* h:{"Region","Kind","Base (hex)","Bytes (hex)","Access"})
+                ImGui::TableSetupColumn(h);
+            ImGui::TableHeadersRow();
+            for(const auto& r:s.regions) {
+                ImGui::TableNextRow();
+                cell(r.name); cell(r.kind);
+                char addr[32],bytes[32];
+                std::snprintf(addr,sizeof(addr),"0x%llx",
+                              static_cast<unsigned long long>(r.address));
+                std::snprintf(bytes,sizeof(bytes),"0x%llx",
+                              static_cast<unsigned long long>(r.size));
+                cell(addr);cell(bytes);cell(r.access);
+            }
+            ImGui::EndTable();
+        }
+    }
+    if (ImGui::CollapsingHeader("Explicit task/TCB/stack metadata",ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextDisabled("Stack bytes used are source-reported only, never computed by scanning memory.");
+        if(ImGui::BeginTable("fault_threads",6,table_flags,ImVec2(0,145.f))) {
+            for(const char* h:{"Task","TCB address","TCB bytes","Stack base","Stack bytes","Recorded SP"})
+                ImGui::TableSetupColumn(h);
+            ImGui::TableHeadersRow();
+            for(const auto& t:s.threads) {
+                ImGui::TableNextRow();
+                cell(t.name);
+                char b[32];
+                std::snprintf(b,sizeof(b),"0x%llx",static_cast<unsigned long long>(t.tcb_address));cell(b);
+                cell(as_text(t.tcb_size));
+                std::snprintf(b,sizeof(b),"0x%llx",static_cast<unsigned long long>(t.stack_address));cell(b);
+                cell(as_text(t.stack_size));
+                if(t.observed_sp) {
+                    std::snprintf(b,sizeof(b),"0x%llx",static_cast<unsigned long long>(*t.observed_sp));
+                    cell(b);
+                } else cell("Unknown (not read)");
+                if(ImGui::IsItemHovered() && t.reported_stack_used_bytes)
+                    ImGui::SetTooltip("Reported stack used: %llu bytes (unverified)",
+                       static_cast<unsigned long long>(*t.reported_stack_used_bytes));
+            }
+            ImGui::EndTable();
+        }
+    }
+    if(ImGui::CollapsingHeader("Source-reported heap metadata",ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextDisabled("Heap used and peak are source-provided statistics, not a reconstructed allocation graph.");
+        if(ImGui::BeginTable("fault_heaps",5,table_flags,ImVec2(0,100.f))) {
+            for(const char* h:{"Heap","Base (hex)","Capacity (bytes)","Used (bytes)","Peak (bytes)"})
+                ImGui::TableSetupColumn(h);
+            ImGui::TableHeadersRow();
+            for(const auto& h:s.heaps) {
+                ImGui::TableNextRow();
+                cell(h.name);
+                char addr[32];
+                std::snprintf(addr,sizeof(addr),"0x%llx",
+                    static_cast<unsigned long long>(h.address));
+                cell(addr);
+                cell(as_text(h.size));
+                cell(h.reported_used_bytes ? as_text(*h.reported_used_bytes) : "Unknown");
+                cell(h.reported_peak_bytes ? as_text(*h.reported_peak_bytes) : "Unknown");
+            }
+            ImGui::EndTable();
+        }
+    }
+    if(ImGui::CollapsingHeader("Saved registers and fault markers",ImGuiTreeNodeFlags_DefaultOpen)) {
+        if(ImGui::BeginTable("fault_regs",4,table_flags,ImVec2(0,145.f))) {
+            for(const char* h:{"Context","Register","Value","Source line"})
+                ImGui::TableSetupColumn(h);
+            ImGui::TableHeadersRow();
+            for(const auto& r:s.registers) {
+                ImGui::TableNextRow();cell(r.context);cell(r.name);
+                if(r.value) {
+                    char b[32];
+                    std::snprintf(b,sizeof(b),"0x%llx",static_cast<unsigned long long>(*r.value));
+                    cell(b);
+                } else cell("READ FAILED");
+                cell(as_text(r.line));
+            }
+            ImGui::EndTable();
+        }
+    }
+    if(ImGui::CollapsingHeader("Saved memory read samples")) {
+        ImGui::TextDisabled("Preview is limited to 16 bytes per record; failed reads have no assumed bytes.");
+        if(ImGui::BeginTable("fault_mem",5,table_flags,ImVec2(0,135.f))) {
+            for(const char* h:{"Region","Address","Read","Bytes","Hex preview"})
+                ImGui::TableSetupColumn(h);
+            ImGui::TableHeadersRow();
+            static constexpr char digits[]="0123456789abcdef";
+            for(const auto& m:s.memory) {
+                ImGui::TableNextRow();
+                cell(m.region);
+                char addr[32];std::snprintf(addr,sizeof(addr),"0x%llx",
+                    static_cast<unsigned long long>(m.address));cell(addr);
+                cell(m.read_succeeded?"Recorded":"FAILED");
+                cell(as_text(m.bytes.size()));
+                std::string preview;
+                for(std::size_t i=0;i<std::min<std::size_t>(16,m.bytes.size());++i) {
+                    if(i)preview+=' ';
+                    preview+=digits[m.bytes[i]>>4];
+                    preview+=digits[m.bytes[i]&15];
+                }
+                cell(preview.empty()?"Unknown":preview);
+            }
+            ImGui::EndTable();
+        }
+    }
+    header("Evidence-linked checks (candidate findings only)");
+    ImGui::TextDisabled("Each source is a physical line in the opened local snapshot file.");
+    if(view.findings.empty()) {
+        ImGui::TextDisabled("No structural inconsistencies recorded. This is not a clean-bill-of-health verdict.");
+        return;
+    }
+    if(ImGui::BeginTable("fault_findings",3,table_flags,ImVec2(0,220.f))) {
+        for(const char* h:{"Finding","Subject","Source line(s)"})ImGui::TableSetupColumn(h);
+        ImGui::TableHeadersRow();
+        for(std::size_t i=0;i<view.findings.size();++i) {
+            const auto& f=view.findings[i];
+            ImGui::PushID(static_cast<int>(i));
+            ImGui::TableNextRow();ImGui::TableNextColumn();
+            if(ImGui::Selectable(f.code.c_str(),fault_selected_finding_==i,
+                                 ImGuiSelectableFlags_SpanAllColumns))
+                fault_selected_finding_=i;
+            cell(f.subject);
+            std::string lines;
+            for(const auto l:f.source_lines) {
+                if(!lines.empty())lines+=", ";
+                lines+=std::to_string(l);
+            }
+            cell(lines);
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    const auto& f=view.findings[std::min(fault_selected_finding_,view.findings.size()-1)];
+    ImGui::SeparatorText("Selected evidence");
+    ImGui::TextWrapped("%s",f.explanation.c_str());
+    for(std::size_t i=0;i<f.source_lines.size();++i) {
+        const auto line=f.source_lines[i];
+        ImGui::PushID(static_cast<int>(i));
+        ImGui::Text("Snapshot source line %zu",line);
+        ImGui::SameLine();
+        if(ImGui::SmallButton("Copy source reference")) {
+            const auto reference=fault_origin_+":"+std::to_string(line);
+            ImGui::SetClipboardText(reference.c_str());
+        }
+        ImGui::PopID();
+    }
+    ImGui::TextDisabled("Decoded Cortex-M status bits require confirmed architecture + target metadata.");
+}
+
 void Workspace::draw_findings() {
     if(!controller_.loaded()) return;
     header("Observed findings");
@@ -1258,6 +1456,7 @@ void Workspace::draw() {
       case Page::Diagnostics: draw_diagnostics();break;
       case Page::Resources: draw_resources();break;
       case Page::Causality: draw_causality();break;
+      case Page::Faults: draw_faults();break;
       case Page::Events: draw_events();break;
       case Page::Findings: draw_findings();break;
       case Page::Evidence: draw_evidence();break;
