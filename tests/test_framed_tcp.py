@@ -81,4 +81,32 @@ check(valid, 1, ("frame budget",), ("--max-frames", "1"))
 check(valid, 1, ("idle timeout",), ("--idle-ms", "60"), 0.2)
 check(valid, 1, ("duration exceeded",),
       ("--duration-ms", "60", "--idle-ms", "1000"), 0.2)
+
+# W18: exact raw bytes are opt-in, flushed to a NEW local spool file.
+with tempfile.TemporaryDirectory() as tmp:
+    spool = pathlib.Path(tmp) / "live.rtob"
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+        def serve_spool():
+            conn, _ = server.accept()
+            with conn:
+                for pos in range(0, len(valid), 5):
+                    conn.sendall(valid[pos:pos+5])
+        thread = threading.Thread(target=serve_spool)
+        thread.start()
+        result = subprocess.run(
+            [capture, "--port", str(port), "--spool", str(spool)],
+            capture_output=True, text=True, timeout=8)
+        thread.join(timeout=6)
+        assert not thread.is_alive()
+        assert result.returncode == 0, (result.stdout,result.stderr)
+        assert spool.read_bytes() == valid, (len(spool.read_bytes()),len(valid))
+    # This guard fires before any socket attempt; existing spool is immutable.
+    second = subprocess.run([capture, "--port", "1", "--spool", str(spool)],
+                            capture_output=True, text=True, timeout=5)
+    assert second.returncode == 1
+    assert "already exists" in second.stderr
+
 print("W17 framed TCP loopback/CRC/fragment/timeouts passed")
