@@ -20,9 +20,14 @@ target_compile_features(observatory_target_wire PUBLIC c_std_11)
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
   # Only Microsoft's C compiler needs this option; clang-cl supports C11 atomics
   # without it, and warns when passed /experimental:c11atomics.
-  target_compile_options(observatory_target_ring PUBLIC /experimental:c11atomics)
-  target_compile_options(observatory_target_recorder PUBLIC /experimental:c11atomics)
-  target_compile_options(observatory_target_wire PUBLIC /experimental:c11atomics)
+  # MSVC's C11 atomic option must not propagate into C++20 GUI compilation.
+  # PUBLIC is retained for C clients of the ring/recorder.
+  target_compile_options(observatory_target_ring PUBLIC
+    "$<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>")
+  target_compile_options(observatory_target_recorder PUBLIC
+    "$<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>")
+  target_compile_options(observatory_target_wire PUBLIC
+    "$<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>")
 endif()
 add_library(observatory_core src/engine.cpp src/session.cpp src/timeline.cpp)
 target_include_directories(observatory_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
