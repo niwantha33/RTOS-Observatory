@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # RTOS Observatory — project status
 
-**Verified baseline:** 2026-11-19 — W01–W07 offline features merged with reported CI qualification; W08–W11 also manually merged, but their latest-head automated qualifications were queued/unverified at merger. W12 has also been manually merged; W13 PR #27 is manually merged; W14 PR #28 is manually merged, but Eclipse installed-plugin qualification is outstanding; W15 PR #29 and Windows test fix PR #31 have now merged; W16 PR #32 has merged into main; W17 framed transport source is under PR preparation. Installed Eclipse and physical hardware qualification remain outstanding. [PR #17](https://github.com/niwantha33/RTOS-Observatory/pull/17) improved type, contrast, spacing and language, bumped the app to v0.2.1, and merged at [commit `3f1e6c50a`](https://github.com/niwantha33/RTOS-Observatory/commit/3f1e6c50a00b8e72a97f344a98df9f71e5faba92). All **10 PR-triggered** native/desktop Windows+Linux and clang-cl CI jobs passed. This is a dated snapshot, not a live CI dashboard; post-merge UI appearance on a physical monitor is not certified.
+**Verified baseline:** 2026-11-19 — W01–W07 offline features merged with reported CI qualification; W08–W11 also manually merged, but their latest-head automated qualifications were queued/unverified at merger. W12 has also been manually merged; W13 PR #27 is manually merged; W14 PR #28 is manually merged, but Eclipse installed-plugin qualification is outstanding; W15 PR #29 and Windows test fix PR #31 have now merged; W16 PR #32 has merged into main; W17 PR #33 has merged, and W18 live epoch/timeline source is under CI review. Installed Eclipse and physical hardware qualification remain outstanding. [PR #17](https://github.com/niwantha33/RTOS-Observatory/pull/17) improved type, contrast, spacing and language, bumped the app to v0.2.1, and merged at [commit `3f1e6c50a`](https://github.com/niwantha33/RTOS-Observatory/commit/3f1e6c50a00b8e72a97f344a98df9f71e5faba92). All **10 PR-triggered** native/desktop Windows+Linux and clang-cl CI jobs passed. This is a dated snapshot, not a live CI dashboard; post-merge UI appearance on a physical monitor is not certified.
 
 [Master issue #8](https://github.com/niwantha33/RTOS-Observatory/issues/8) · [Master plan](MASTER_PLAN.md) · [Bug guide](BUG_TRACKING.md)
 
@@ -12,7 +12,7 @@
 | **P0 Foundation and architecture** | **W01–W04** | **Done for bounded offline foundation** | [#2](https://github.com/niwantha33/RTOS-Observatory/issues/2) | [Merged PR #1](https://github.com/niwantha33/RTOS-Observatory/pull/1), [main CI passed](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44326850607) |
 | P1 Modern graphical interface | W05–W08 | W05–W08 merged (offline); W07 CI verified, W08 latest-head CI acceptance outstanding | [#3](https://github.com/niwantha33/RTOS-Observatory/issues/3) | [W07 PR #20](https://github.com/niwantha33/RTOS-Observatory/pull/20) · [W08 PR #21](https://github.com/niwantha33/RTOS-Observatory/pull/21) |
 | P2 Intelligent RTOS diagnostics | W09–W13 | W09–W13 merged (offline scope); latest-head CI/review qualification pending for manual merges | [#4](https://github.com/niwantha33/RTOS-Observatory/issues/4) | [W09 PR #22](https://github.com/niwantha33/RTOS-Observatory/pull/22) · [W10 PR #23](https://github.com/niwantha33/RTOS-Observatory/pull/23) · [W11 PR #25](https://github.com/niwantha33/RTOS-Observatory/pull/25) · [W12 PR #26](https://github.com/niwantha33/RTOS-Observatory/pull/26) · [W13 PR #27](https://github.com/niwantha33/RTOS-Observatory/pull/27) |
-| P3 Debugger and live hardware | W14–W19 | W14–W16 source-stage work merged; W17 bounded framed transport in review. ZEW installed plugin and physical transports unqualified | [#5](https://github.com/niwantha33/RTOS-Observatory/issues/5) | [W14 PR #28](https://github.com/niwantha33/RTOS-Observatory/pull/28) · [W15 PR #29](https://github.com/niwantha33/RTOS-Observatory/pull/29) · [Windows test fix #31](https://github.com/niwantha33/RTOS-Observatory/pull/31) · [W16 PR #32](https://github.com/niwantha33/RTOS-Observatory/pull/32) · [W17 branch](https://github.com/niwantha33/RTOS-Observatory/tree/feature/w17-bounded-framed-transport) |
+| P3 Debugger and live hardware | W14–W19 | W14–W17 source-stage code merged; W18 bounded live epoch/timeline GUI under review. ZEW plugin and hardware qualification pending | [#5](https://github.com/niwantha33/RTOS-Observatory/issues/5) | [W14 PR #28](https://github.com/niwantha33/RTOS-Observatory/pull/28) · [W15 PR #29](https://github.com/niwantha33/RTOS-Observatory/pull/29) · [Windows test fix #31](https://github.com/niwantha33/RTOS-Observatory/pull/31) · [W16 PR #32](https://github.com/niwantha33/RTOS-Observatory/pull/32) · [W17 PR #33](https://github.com/niwantha33/RTOS-Observatory/pull/33) · [W18 source](https://github.com/niwantha33/RTOS-Observatory/tree/feature/w18-live-epoch-timeline) |
 | P4 Multi-RTOS ecosystem | W20–W24 | Planned | [#6](https://github.com/niwantha33/RTOS-Observatory/issues/6) | — |
 | P5 AI reports and innovation | W25–W27 | Planned | [#7](https://github.com/niwantha33/RTOS-Observatory/issues/7) | — |
 
@@ -35,12 +35,13 @@
 | W14 | Merged; acceptance pending | PR #28 / merge `7cfcffca61fe`; passive Eclipse DSF owner lifecycle observer; **not installed/qualified as ZEW plugin** |
 | W15 | Merged; installed ZEW qualification pending | PR #29 / commit `e811dc44`; consent-gated snapshots, source-only DSF read adapter + local receipt viewer; **not integrated into installed ZEW** |
 | W16 | Merged; target qualification pending | PR #32 / commit `e82f4418b793`; bounded allocation-free C11 producer-lane recorder, loss counters, one drain and host concurrency tests; no MCU WCET proof |
-| **W17** | **Draft PR — CI and hardware validation pending** | CRC32/LE bounded frames, sender backpressure/epoch, host decoder, optional owned TCP receiver and synthetic loopback tests. UART/USB/RTT drivers not qualified |
-| W18–W19 | Not started (P3) | Live session/clock mapping and board qualification planned |
+| W17 | Merged; target qualification pending | PR #33 / commit `43f3e7f3aef8`; CRC32/LE bounded frames, staged sender backpressure, host parser and optional owned TCP receiver. Target UART/USB/RTT hardware drivers unqualified |
+| **W18** | Draft PR; native/GUI qualification pending | Bounded incremental W17 epoch/loss/clock coordinator, opt-in TCP spool + local GUI event arrivals, binary fixture and CTest; **not a qualified RTOS CPU scheduler timeline** |
+| W19 | Not started (P3) | Physical board/probe and timing qualification deferred |
 | W20–W24 | Not started (P4) | Native vendor/version-aware RTOS adapters not yet qualified |
 | W25–W27 | Not started (P5) | Rich reports, optional AI/MCP and what-if simulator future work |
 
-**Totals:** 27 packages planned · **16 merged** (W01–W16), of which **7 have stated CI acceptance** (W01–W07); **W08–W16 full qualification pending**, W17 draft PR, W18–W27 not started. **No production live trace or physical-board qualification is claimed**.
+**Totals:** 27 packages planned · **17 merged** (W01–W17), of which **7 have stated CI acceptance** (W01–W07); **W08–W17 complete qualification pending**, W18 draft PR, W19–W27 not started. **No production live trace or physical-board qualification is claimed**.
 
 ## Recent CI / PR activity
 
@@ -76,8 +77,8 @@
 ## W16–W17 handoff — 2026-11-19
 
 - **W16** [PR #32](https://github.com/niwantha33/RTOS-Observatory/pull/32) manually merged at `e82f4418b793057caacf3dd9a5ec5c6c9f980ffb`; host software recorder exists. MCU overhead/ISR timing are not qualified.
-- **W17** `feature/w17-bounded-framed-transport`: bounded C11 little-endian wire protocol, CRC32, source/wire loss and explicit epochs; nonblocking one-frame platform transport adapter; optional standalone Asio binary TCP receiver with loopback tests. [Technical scope](W17_TRANSPORT.md). Actual UART/USB/RTT driver qualification and live desktop session ingestion remain outstanding.
-- **W18** next only after W17 software gates. Hardware remains deferred to W19.
+- **W17** [PR #33](https://github.com/niwantha33/RTOS-Observatory/pull/33) manually merged at `43f3e7f3aef84db91f89ffb727deab8e4ad2a193`. Physical UART/USB/RTT device drivers and real MCU timings still unqualified. [Protocol](W17_TRANSPORT.md).
+- **W18** branch `feature/w18-live-epoch-timeline`: opt-in bounded binary spool follower, epoch-aware W17 parser, explicit user clock mapping, observed-arrival GUI, safe C11/C++ type extraction and deterministic tests. [Scope and blockers](W18_LIVE_EPOCHS.md). No real task scheduling/CPU load inference yet; hardware remains deferred to W19.
 
 ## Open constraints / risks
 
