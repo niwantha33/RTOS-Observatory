@@ -55,6 +55,7 @@ private:
     std::optional<TimelineView> timeline_;
     std::optional<GraphView> graph_;
     std::optional<ReplaySnapshot> replay_;
+    std::optional<std::size_t> graph_event_boundary_;
     std::uint64_t replay_cursor_{};
     std::optional<std::size_t> focused_event_;
     std::string graph_selected_;
