@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <limits>
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -117,6 +118,18 @@ int main(int argc,char** argv) {
     assert(refuses([&] {epoch_limit.feed(c.data(),c.size());}));
     assert(epoch_limit.status().poisoned);
 
+    // Epoch identities are not reusable even when a W17 publisher restarts.
+    LiveSession replayed_epoch(LiveLimits{1024,10,3,3});
+    replayed_epoch.feed(a.data(),a.size());
+    replayed_epoch.feed(c.data(),c.size());
+    assert(refuses([&] {replayed_epoch.feed(a.data(),a.size());}));
+    assert(replayed_epoch.status().poisoned);
+    // Range/overflow-safe user-supplied clock mapping, never wrapped.
+    LiveSession clock_overflow;
+    clock_overflow.feed(a.data(),a.size());
+    assert(clock_overflow.set_clock({1,100,
+        std::numeric_limits<std::uint64_t>::max()-10u,1u}));
+    assert(!clock_overflow.tick_us(1,101));
     LiveSession delayed(LiveLimits{1024,10,3,3});
     assert(refuses([&] {delayed.finish();}));
     assert(refuses([] {LiveSession bad(LiveLimits{0,1,1,1});}));
