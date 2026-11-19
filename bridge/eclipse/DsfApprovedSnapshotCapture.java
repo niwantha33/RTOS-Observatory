@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
@@ -95,7 +96,7 @@ public final class DsfApprovedSnapshotCapture {
                item.length()>MAX_PER_READ || total+item.length()>MAX_BYTES)
                 throw new IllegalArgumentException("W15: address/size outside limits");
             final BigInteger end=item.address().add(BigInteger.valueOf(item.length()));
-            if(end.bitLength()>33)
+            if(end.compareTo(BigInteger.ONE.shiftLeft(32))>0)
                 throw new IllegalArgumentException("W15: address range overflow");
             boolean safe=false;
             for(final QualifiedRamRegion ram:c.ramRegions()) {
@@ -121,6 +122,7 @@ public final class DsfApprovedSnapshotCapture {
     public static void capture(GdbLaunch launch, IDMContext selected,
                                Consent consent, Path receiptFile,
                                Consumer<String> finished) {
+        Objects.requireNonNull(finished,"W15 completion callback required");
         try {
             validate(consent);
             if(launch==null || selected==null || receiptFile==null ||
@@ -128,6 +130,8 @@ public final class DsfApprovedSnapshotCapture {
                 throw new IllegalArgumentException("No existing DSF launch/context/output");
             final String key=consent.sessionNonce()+":"+consent.epoch()+":"+
                              consent.approvalId();
+            if(CONSUMED.size()>=1024)
+                throw new IllegalArgumentException("W15 approval registry full; restart the owner plugin");
             if(!CONSUMED.add(key))
                 throw new IllegalArgumentException("W15 approval already consumed");
             final DsfSession session=launch.getSession();
