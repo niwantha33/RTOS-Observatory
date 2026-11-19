@@ -112,6 +112,7 @@ int main(int argc, char** argv) {
     bool smoke_replay=false;
     bool smoke_diagnostics=false;
     bool smoke_resources=false;
+    bool smoke_causal=false;
     std::string load_path;
     bool session=false;
     if(argc>=2 && std::string_view(argv[1])=="--version") {
@@ -133,6 +134,8 @@ int main(int argc, char** argv) {
                   "  --smoke-ui-diagnostics PATH  Hidden W09 diagnostics UI smoke\n"
                   "  --smoke-resources PATH  Headless W10 resource semantics smoke\n"
                   "  --smoke-ui-resources PATH  Hidden W10 resource panel UI smoke\n"
+                  "  --smoke-causal PATH  Headless W11 causal pattern smoke\n"
+                  "  --smoke-ui-causal PATH  Hidden W11 causal evidence UI smoke\n"
                   "Drag a trace file onto the window or enter a filename in the sidebar.");
         return 0;
     }
@@ -186,16 +189,27 @@ int main(int argc, char** argv) {
         std::puts("W10 resource observation model smoke passed");
         return 0;
     }
+    if(argc>=3 && std::string_view(argv[1])=="--smoke-causal") {
+        if(!workspace.open_trace(argv[2]) || !workspace.causality() ||
+           workspace.causality()->findings.empty()) {
+            std::fprintf(stderr,"W11 causal model smoke failed: %s\n",workspace.error().c_str());
+            return 3;
+        }
+        std::puts("W11 source-linked causal diagnostics model smoke passed");
+        return 0;
+    }
     if(argc>=3 && (std::string_view(argv[1])=="--smoke-ui" ||
                    std::string_view(argv[1])=="--smoke-ui-graph" ||
                    std::string_view(argv[1])=="--smoke-ui-replay" ||
                    std::string_view(argv[1])=="--smoke-ui-diagnostics" ||
-                   std::string_view(argv[1])=="--smoke-ui-resources")) {
+                   std::string_view(argv[1])=="--smoke-ui-resources" ||
+                   std::string_view(argv[1])=="--smoke-ui-causal")) {
         smoke_ui=true;
         smoke_graph=std::string_view(argv[1])=="--smoke-ui-graph";
         smoke_replay=std::string_view(argv[1])=="--smoke-ui-replay";
         smoke_diagnostics=std::string_view(argv[1])=="--smoke-ui-diagnostics";
         smoke_resources=std::string_view(argv[1])=="--smoke-ui-resources";
+        smoke_causal=std::string_view(argv[1])=="--smoke-ui-causal";
         load_path=argv[2];
     } else if(argc>=3 && std::string_view(argv[1])=="--trace")
         load_path=argv[2];
@@ -214,6 +228,7 @@ int main(int argc, char** argv) {
     if (smoke_replay) workspace.show_replay();
     if (smoke_diagnostics) workspace.show_diagnostics();
     if (smoke_resources) workspace.show_resources();
+    if (smoke_causal) workspace.show_causality();
     glfwSetErrorCallback(glfw_error);
     if(!glfwInit()) { std::fputs("GLFW initialization failed\n",stderr); return 3; }
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);
@@ -271,7 +286,8 @@ int main(int argc, char** argv) {
     glfwTerminate();
     if(smoke_ui) {
         std::printf("Desktop font: %s\n",font_name.c_str());
-        std::puts(smoke_resources ? "W10 resource panel UI smoke passed" :
+        std::puts(smoke_causal ? "W11 causal panel UI smoke passed" :
+                  smoke_resources ? "W10 resource panel UI smoke passed" :
                   smoke_diagnostics ? "W09 scheduler UI smoke passed" :
                   smoke_replay ? "W08 replay GLFW+OpenGL UI smoke passed" :
                   smoke_graph ? "W07 graph GLFW+OpenGL UI smoke passed" :
