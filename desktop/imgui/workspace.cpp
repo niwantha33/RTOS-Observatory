@@ -89,6 +89,16 @@ void Workspace::update_graph() {
         notice_ = e.what();
     }
 }
+void Workspace::update_diagnostics() {
+    diagnostics_.reset();
+    if (!controller_.loaded()) return;
+    try {
+        diagnostics_ = analyze_scheduling(controller_.trace(),
+                                          controller_.report(), relative_deadlines_);
+    } catch (const std::exception& e) {
+        notice_ = e.what();
+    }
+}
 void Workspace::update_replay() {
     replay_.reset();
     if (!controller_.loaded()) return;
@@ -124,7 +134,10 @@ bool Workspace::open_trace(const std::string& path, const std::string& decoder) 
         replay_cursor_ = controller_.trace().capture.events.empty() ? 0 :
             static_cast<std::uint64_t>(
                 std::min<std::size_t>(controller_.trace().capture.events.size(), 100000) - 1);
+        relative_deadlines_.clear();
+        deadline_task_.fill(0);
         update_replay();
+        update_diagnostics();
         error_.clear();
         std::snprintf(path_.data(), path_.size(), "%s", path.c_str());
         recent(path, decoder, false);
@@ -143,7 +156,10 @@ bool Workspace::open_session(const std::string& path) {
         replay_cursor_ = controller_.trace().capture.events.empty() ? 0 :
             static_cast<std::uint64_t>(
                 std::min<std::size_t>(controller_.trace().capture.events.size(), 100000) - 1);
+        relative_deadlines_.clear();
+        deadline_task_.fill(0);
         update_replay();
+        update_diagnostics();
         error_.clear();
         std::snprintf(path_.data(), path_.size(), "%s", path.c_str());
         recent(path, "", true);
@@ -232,8 +248,8 @@ void Workspace::draw_menus() {
         ImGui::MenuItem("Show navigation",nullptr,&show_sidebar_);
         if(ImGui::BeginMenu("Go to panel")) {
             constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
-                "Causal graph","Time-travel replay","Events","Findings","Evidence details"};
-            for(int i=0;i<8;++i)
+                "Causal graph","Time-travel replay","Scheduling diagnostics","Events","Findings","Evidence details"};
+            for(int i=0;i<9;++i)
                 if(ImGui::MenuItem(names[i],nullptr,static_cast<int>(page_)==i))
                     page_=static_cast<Page>(i);
             ImGui::EndMenu();
@@ -262,6 +278,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("CPU and wait analysis",nullptr,false,loaded())) page_=Page::CpuWaits;
         if(ImGui::MenuItem("Causal graph studio",nullptr,false,loaded())) page_=Page::Graph;
         if(ImGui::MenuItem("Time-travel replay",nullptr,false,loaded())) page_=Page::Replay;
+        if(ImGui::MenuItem("Scheduling diagnostics",nullptr,false,loaded())) page_=Page::Diagnostics;
         if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
@@ -348,8 +365,9 @@ void Workspace::draw_sidebar() {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
     header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
-                                      "Causal graph", "Time-travel replay", "Events", "Findings", "Evidence details"};
-    for (int i=0; i<8; ++i) {
+                                      "Causal graph", "Time-travel replay", "Scheduling diagnostics",
+                                      "Events", "Findings", "Evidence details"};
+    for (int i=0; i<9; ++i) {
         if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
                               ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
@@ -798,6 +816,101 @@ void Workspace::draw_replay() {
     }
 }
 
+void Workspace::draw_diagnostics() {
+    if (!controller_.loaded() || !diagnostics_) {
+        ImGui::TextDisabled("Open a normalized trace to see observed timing diagnostics.");
+        return;
+    }
+    header("Scheduling diagnostics");
+    ImGui::TextDisabled("Observed release jitter, drift, response and execution interruption patterns.");
+    ImGui::TextDisabled("Observed maximum is not theoretical WCET; TASK_BEGIN is not scheduler switch-in.");
+    ImGui::TextDisabled("Deadlines must be explicitly supplied: no period-as-deadline assumption.");
+    const auto& d = *diagnostics_;
+    if (!d.evidence_verified)
+        ImGui::TextColored(ImVec4(1.f,.75f,.42f,1.f),
+            "Unverified/incomplete evidence: exact scheduler history is unknown.");
+    for (const auto& warning : d.warnings) ImGui::TextWrapped("%s", warning.c_str());
+    header("Optional relative deadline");
+    ImGui::SetNextItemWidth(175);
+    ImGui::InputText("Task ID",deadline_task_.data(),deadline_task_.size());
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(150);
+    ImGui::InputScalar("Deadline (us)",ImGuiDataType_U64,&deadline_value_us_);
+    ImGui::SameLine();
+    if (ImGui::Button("Apply deadline")) {
+        const std::string task = deadline_task_.data();
+        const auto exists = std::any_of(controller_.report().threads.begin(),
+                                        controller_.report().threads.end(),
+            [&](const Thread& item) { return item.id == task; });
+        if (!exists || deadline_value_us_ == 0 ||
+            deadline_value_us_ > static_cast<std::uint64_t>(
+                std::numeric_limits<std::int64_t>::max())) {
+            error_ = "Choose an observed task and a positive 64-bit relative deadline.";
+        } else {
+            relative_deadlines_[task] = deadline_value_us_;
+            error_.clear();
+            update_diagnostics();
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear deadline")) {
+        relative_deadlines_.erase(deadline_task_.data());
+        update_diagnostics();
+    }
+    if (ImGui::BeginTable("diagnostic-summary", 8, table_flags, ImVec2(0, 230))) {
+        for (const char* col : {"Task","Releases","Response max","Begin delay max",
+                               "Abs jitter max","Last phase","Deadline misses","Interruptions"})
+            ImGui::TableSetupColumn(col);
+        ImGui::TableHeadersRow();
+        for (const auto& task : d.tasks) {
+            ImGui::TableNextRow();
+            cell(task.task);
+            cell(as_text(task.releases));
+            cell(task.max_response_us ? as_text(*task.max_response_us)+" us" : "Unknown");
+            cell(task.max_dispatch_delay_us ? as_text(*task.max_dispatch_delay_us)+" us" : "Unknown");
+            cell(task.max_abs_release_jitter_us ? as_text(*task.max_abs_release_jitter_us)+" us" : "Unknown");
+            cell(task.last_phase_drift_us ? std::to_string(*task.last_phase_drift_us)+" us" : "Unknown");
+            cell(task.explicit_deadline_us ? as_text(task.observed_deadline_misses) : "No deadline");
+            cell(as_text(task.observed_interruptions));
+        }
+        ImGui::EndTable();
+    }
+    header("Measured samples and linked evidence");
+    ImGui::TextDisabled("Each record links its last supporting source event. No inferred missing events.");
+    if (ImGui::BeginTable("diagnostic-samples", 6, table_flags, ImVec2(0, -1))) {
+        for (const char* col : {"Metric","Task","Start (us)","End (us)","Value (us)","Evidence"})
+            ImGui::TableSetupColumn(col);
+        ImGui::TableHeadersRow();
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(d.samples.size()));
+        while (clipper.Step()) for (int row=clipper.DisplayStart;row<clipper.DisplayEnd;++row) {
+            const auto& sample = d.samples[static_cast<std::size_t>(row)];
+            ImGui::PushID(row);
+            ImGui::TableNextRow();
+            cell(sample.code);
+            cell(sample.task);
+            cell(as_text(sample.from_us));
+            cell(as_text(sample.to_us));
+            cell(std::to_string(sample.measured_us));
+            ImGui::TableNextColumn();
+            if (sample.last_event &&
+                *sample.last_event < controller_.trace().capture.events.size()) {
+                if (ImGui::SmallButton("Inspect source")) {
+                    focused_event_ = *sample.last_event;
+                    rebuild_event_filter();
+                    page_ = Page::Events;
+                }
+            } else ImGui::TextDisabled("Unlinked");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s\n%s",sample.detail.c_str(),
+                                  sample.evidence_verified ? "Evidence continuity verified" :
+                                                             "Incomplete/unverified provenance");
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+}
+
 void Workspace::draw_events() {
     if(!controller_.loaded()) return;
     header("Recorded events");
@@ -918,6 +1031,7 @@ void Workspace::draw() {
       case Page::CpuWaits: draw_cpu();break;
       case Page::Graph: draw_graph();break;
       case Page::Replay: draw_replay();break;
+      case Page::Diagnostics: draw_diagnostics();break;
       case Page::Events: draw_events();break;
       case Page::Findings: draw_findings();break;
       case Page::Evidence: draw_evidence();break;
