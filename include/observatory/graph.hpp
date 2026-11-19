@@ -51,7 +51,8 @@ struct GraphView {
 inline GraphView build_causal_graph(const DecodedTrace& trace,
                                    std::uint64_t begin_us, std::uint64_t end_us,
                                    std::string_view task_filter = {},
-                                   GraphLimits limits = {}) {
+                                   GraphLimits limits = {},
+                                   std::optional<std::size_t> through_event = {}) {
     if (begin_us > end_us)
         throw Error("Graph time window must have start <= end");
     if (limits.max_nodes < 3 || limits.max_edges < 3 || !limits.max_scanned_events)
@@ -75,7 +76,9 @@ inline GraphView build_causal_graph(const DecodedTrace& trace,
         out.nodes.push_back({std::move(id), std::move(label), kind, event_index});
         return position;
     };
-    const auto scan_count = std::min(events.size(), limits.max_scanned_events);
+    const auto requested = through_event && *through_event < events.size() ?
+                           *through_event + 1 : events.size();
+    const auto scan_count = std::min(requested, limits.max_scanned_events);
     for (std::size_t i = 0; i < scan_count; ++i) {
         const auto& event = events[i];
         if (event.type == "DROP") out.evidence_complete = false;
@@ -115,7 +118,7 @@ inline GraphView build_causal_graph(const DecodedTrace& trace,
         out.edges.push_back({evidence, resource, "supports", i,
                              event.line, event.timestamp_us});
     }
-    if (events.size() > scan_count) out.truncated = true;
+    if (requested > scan_count) out.truncated = true;
     if (!out.evidence_complete)
         out.warnings.emplace_back("Trace sequence/loss integrity is incomplete or unverified; no unobserved state is inferred");
     if (out.truncated)
