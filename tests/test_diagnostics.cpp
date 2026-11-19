@@ -45,6 +45,11 @@ int main() {
     assert(a.explicit_deadline_us && *a.explicit_deadline_us==60);
     assert(a.observed_deadline_misses==1);
     assert(has(normal,"RELEASE_JITTER") && has(normal,"RELEASE_PHASE_DRIFT"));
+    const auto jitter = std::find_if(normal.samples.begin(),normal.samples.end(),
+        [](const auto& item){ return item.code=="RELEASE_JITTER"; });
+    assert(jitter != normal.samples.end() && jitter->first_event &&
+           *jitter->first_event==1 && jitter->last_event &&
+           *jitter->last_event==4 && jitter->evidence_verified);
     assert(has(normal,"APPLICATION_BEGIN_DELAY") && has(normal,"OBSERVED_RESPONSE"));
     assert(has(normal,"EXPLICIT_DEADLINE_EXCEEDED"));
     const auto deadline = std::find_if(normal.samples.begin(),normal.samples.end(),
