@@ -141,6 +141,17 @@ if(OBSERVATORY_BUILD_LIVE)
   include(cmake/Asio.cmake)
   add_library(observatory_live src/live.cpp)
   target_link_libraries(observatory_live PUBLIC observatory_core observatory_asio_headers)
+  # W17 uses the same owned Asio socket stack as legacy finite TSV capture,
+  # but validates bounded framed binary data via the shared C11 wire codec.
+  add_library(observatory_framed_live src/framed_tcp.cpp)
+  target_include_directories(observatory_framed_live PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(observatory_framed_live PUBLIC
+    observatory_target_wire observatory_core observatory_asio_headers)
+  target_compile_features(observatory_framed_live PUBLIC cxx_std_20)
+  add_executable(rtos-observatory-framed-capture src/framed_capture_main.cpp)
+  target_link_libraries(rtos-observatory-framed-capture PRIVATE observatory_framed_live)
+  install(TARGETS rtos-observatory-framed-capture RUNTIME DESTINATION bin)
   add_executable(rtos-observatory-capture src/capture_main.cpp)
   target_link_libraries(rtos-observatory-capture PRIVATE observatory_live)
   install(TARGETS rtos-observatory-capture RUNTIME DESTINATION bin)
@@ -152,6 +163,10 @@ if(OBSERVATORY_BUILD_LIVE)
     add_test(NAME observatory_live_lifecycle COMMAND observatory_live_tests)
   endif()
   if(OBSERVATORY_BUILD_TESTS AND Python3_Interpreter_FOUND)
+    add_test(NAME observatory_wire_tcp_loopback COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_framed_tcp.py
+      $<TARGET_FILE:rtos-observatory-framed-capture>)
+    set_tests_properties(observatory_wire_tcp_loopback PROPERTIES TIMEOUT 90)
     add_test(NAME observatory_tcp_capture COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_tcp_capture.py $<TARGET_FILE:rtos-observatory-capture>
       $<TARGET_FILE:rtos-observatory> ${CMAKE_CURRENT_SOURCE_DIR}/examples/foundation.trace)
