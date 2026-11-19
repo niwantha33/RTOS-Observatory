@@ -144,7 +144,8 @@ inline bool inside(const std::filesystem::path& root,
 }
 inline std::string file_sha256(const std::filesystem::path& path,
                                std::uint64_t limit,
-                               bool require_elf=false) {
+                               bool require_elf=false,
+                               unsigned expected_elf_bits=0) {
     if(!std::filesystem::is_regular_file(path) ||
        std::filesystem::file_size(path)>limit)
         throw Error("Symbol identity file absent or exceeds configured size limit");
@@ -169,17 +170,22 @@ inline std::string file_sha256(const std::filesystem::path& path,
     }
     if(!in.eof())throw Error("Identity file read failed");
     if(require_elf) {
-        if(prefix_size<64 || prefix[0]!=0x7f || prefix[1]!='E' ||
+        if(prefix_size<16 || prefix[0]!=0x7f || prefix[1]!='E' ||
            prefix[2]!='L' || prefix[3]!='F' ||
-           (prefix[4]!=1 && prefix[4]!=2) || prefix[5]!=1)
+           (prefix[4]!=1 && prefix[4]!=2) ||
+           prefix[5]!=1 || prefix[6]!=1)
             throw Error("Not a supported little-endian ELF32/ELF64 header");
+        if(expected_elf_bits &&
+           ((expected_elf_bits==32 && prefix[4]!=1) ||
+            (expected_elf_bits==64 && prefix[4]!=2)))
+            throw Error("ELF address class contradicts declared symbol index");
         const auto expected_header=prefix[4]==1 ? 52u : 64u;
         const auto actual_header=prefix[4]==1 ?
             static_cast<unsigned>(prefix[40]) |
                (static_cast<unsigned>(prefix[41])<<8) :
             static_cast<unsigned>(prefix[52]) |
                (static_cast<unsigned>(prefix[53])<<8);
-        if(actual_header!=expected_header)
+        if(prefix_size<expected_header || actual_header!=expected_header)
             throw Error("ELF header size field inconsistent with ELF class");
     }
     return sha.digest();
@@ -294,7 +300,7 @@ inline SymbolVerification verify_source_index(
     const std::filesystem::path& root,SymbolLimits limits={}) {
     SymbolVerification out;
     try {
-        const auto elf_hash=symbol_detail::file_sha256(elf,limits.max_elf_bytes,true);
+        const auto elf_hash=symbol_detail::file_sha256(elf,limits.max_elf_bytes,true,index.address_bits);
         out.elf_matches=elf_hash==index.elf_sha256;
         if(!out.elf_matches)
             out.warnings.push_back("ELF SHA-256 differs from the sidecar: address/source navigation disabled");
