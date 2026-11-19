@@ -52,6 +52,13 @@ if(OBSERVATORY_BUILD_TESTS)
   target_link_libraries(observatory_bridge_tests PRIVATE observatory_core)
   add_test(NAME observatory_dsf_bridge_lifecycle COMMAND observatory_bridge_tests
     ${CMAKE_CURRENT_BINARY_DIR}/w14-synthetic-bridge.tsv)
+  add_executable(observatory_snapshot_policy_tests tests/test_snapshot_acquisition.cpp)
+  target_link_libraries(observatory_snapshot_policy_tests PRIVATE observatory_core)
+  add_test(NAME observatory_snapshot_permission_policy COMMAND observatory_snapshot_policy_tests)
+  add_executable(observatory_snapshot_receipt_tests tests/test_snapshot_receipt.cpp)
+  target_link_libraries(observatory_snapshot_receipt_tests PRIVATE observatory_core)
+  add_test(NAME observatory_snapshot_receipt_bounds COMMAND observatory_snapshot_receipt_tests
+    ${CMAKE_CURRENT_BINARY_DIR}/w15-synthetic-receipt.tsv)
   add_test(NAME observatory_symbol_identity COMMAND observatory_source_tests
     ${CMAKE_CURRENT_BINARY_DIR}/w13-symbol-test-fixture)
   set_tests_properties(observatory_symbol_identity PROPERTIES
@@ -82,7 +89,7 @@ if(OBSERVATORY_BUILD_TESTS)
 endif()
 
 if(OBSERVATORY_BUILD_TESTS)
-  foreach(test_target observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_fault_tests observatory_source_tests observatory_bridge_tests observatory_ring_tests)
+  foreach(test_target observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_fault_tests observatory_source_tests observatory_bridge_tests observatory_snapshot_policy_tests observatory_snapshot_receipt_tests observatory_ring_tests)
     if(MSVC)
       target_compile_options(${test_target} PRIVATE /UNDEBUG)
     else()
