@@ -1024,7 +1024,8 @@ void Workspace::draw_resources() {
     header("Observed anomalies (not proven root causes)");
     std::size_t anomaly_rows = 0;
     for (const auto& item : view.anomalies) {
-        if (item.resource != resource_selected_) continue;
+        if (item.resource != resource_selected_ &&
+            !item.resource.empty() && item.resource != "-") continue;
         if (anomaly_rows++ >= 50) break;
         ImGui::PushID(static_cast<int>(item.event_index));
         if (ImGui::SmallButton("Show source")) {
@@ -1033,7 +1034,8 @@ void Workspace::draw_resources() {
             page_ = Page::Events;
         }
         ImGui::SameLine();
-        ImGui::TextWrapped("%s: %s", item.code.c_str(), item.explanation.c_str());
+        ImGui::TextWrapped("%s [%s / %s]: %s", item.code.c_str(),
+                           item.task.c_str(), item.resource.c_str(), item.explanation.c_str());
         ImGui::PopID();
     }
     if (anomaly_rows == 0)
