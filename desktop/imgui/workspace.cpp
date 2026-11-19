@@ -1264,6 +1264,26 @@ void Workspace::draw_faults() {
             ImGui::EndTable();
         }
     }
+    if(ImGui::CollapsingHeader("Source-reported heap metadata",ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextDisabled("Heap used and peak are source-provided statistics, not a reconstructed allocation graph.");
+        if(ImGui::BeginTable("fault_heaps",5,table_flags,ImVec2(0,100.f))) {
+            for(const char* h:{"Heap","Base (hex)","Capacity (bytes)","Used (bytes)","Peak (bytes)"})
+                ImGui::TableSetupColumn(h);
+            ImGui::TableHeadersRow();
+            for(const auto& h:s.heaps) {
+                ImGui::TableNextRow();
+                cell(h.name);
+                char addr[32];
+                std::snprintf(addr,sizeof(addr),"0x%llx",
+                    static_cast<unsigned long long>(h.address));
+                cell(addr);
+                cell(as_text(h.size));
+                cell(h.reported_used_bytes ? as_text(*h.reported_used_bytes) : "Unknown");
+                cell(h.reported_peak_bytes ? as_text(*h.reported_peak_bytes) : "Unknown");
+            }
+            ImGui::EndTable();
+        }
+    }
     if(ImGui::CollapsingHeader("Saved registers and fault markers",ImGuiTreeNodeFlags_DefaultOpen)) {
         if(ImGui::BeginTable("fault_regs",4,table_flags,ImVec2(0,145.f))) {
             for(const char* h:{"Context","Register","Value","Source line"})
