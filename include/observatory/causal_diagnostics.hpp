@@ -158,6 +158,7 @@ inline CausalView analyze_causal_patterns(const DecodedTrace& trace, const Repor
             // The resulting cycle is a snapshot candidate, not a proven deadlock.
             std::set<std::string> seen{e.task};
             std::vector<std::size_t> proof{i};
+            push(proof,w.owner_acquire);
             std::string current = w.owner_task;
             for (std::size_t depth=0; depth < limits.max_tasks && !current.empty(); ++depth) {
                 if (current == e.task) {
@@ -176,7 +177,6 @@ inline CausalView analyze_causal_patterns(const DecodedTrace& trace, const Repor
                 proof.push_back(owner->second.acquired);
                 current = owner->second.task;
             }
-            if (w.owner_acquire) proof.push_back(*w.owner_acquire);
         } else if (e.type == "MUTEX_UNLOCK") {
             auto owner = held.find(e.object);
             if (owner == held.end() || owner->second.task != e.task) {
@@ -296,8 +296,10 @@ inline CausalView analyze_causal_patterns(const DecodedTrace& trace, const Repor
                  w.since,observed_end,observed_end-w.since,proof});
         }
     }
-    if (!result.evidence_complete)
+    if (!result.evidence_complete) {
+        for (auto& f : result.findings) f.confidence = "unverified";
         result.warnings.push_back("Sequence/loss/analyzer evidence incomplete; findings are not qualified");
+    }
     if (result.limited)
         result.warnings.push_back("Bounded scan or findings cap reached; unseen relations remain unknown");
     if (!long_wait_threshold_us)
