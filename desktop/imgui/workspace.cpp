@@ -1564,8 +1564,8 @@ void Workspace::draw_source_graph() {
                           ImVec2(o.x+x+85.f,o.y+173.f),IM_COL32(232,183,88,255),2.f);
         }
         ImGui::Dummy(ImVec2(920.f,218.f));
-        ImGui::EndChild();
     }
+    ImGui::EndChild();
     if(extra_in || extra_out || extra_lock)
         ImGui::TextDisabled("Visual preview omits %zu incoming, %zu outgoing and %zu lock links; see sidecar evidence.",
             extra_in,extra_out,extra_lock);
@@ -1609,8 +1609,8 @@ void Workspace::draw_source_graph() {
                     ImGui::TextColored(ImVec4(.53f,.89f,.68f,1.f),"%s",row.c_str());
                 else ImGui::TextUnformatted(row.c_str());
             }
-            ImGui::EndChild();
         }
+        ImGui::EndChild();
     }
 }
 
