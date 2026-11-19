@@ -5,9 +5,14 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
+#include <algorithm>
+#include <array>
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 namespace {
 void glfw_error(int code, const char* description) {
@@ -21,21 +26,83 @@ void drop(GLFWwindow* window, int count, const char** paths) {
 void dark_style() {
     ImGui::StyleColorsDark();
     auto& style=ImGui::GetStyle();
-    style.WindowRounding=6.f;
-    style.ChildRounding=6.f;
-    style.FrameRounding=5.f;
-    style.GrabRounding=5.f;
-    style.FramePadding=ImVec2(8,6);
-    style.ItemSpacing=ImVec2(8,7);
+    style.WindowPadding=ImVec2(16.f,14.f);
+    style.FramePadding=ImVec2(10.f,7.f);
+    style.ItemSpacing=ImVec2(10.f,9.f);
+    style.ItemInnerSpacing=ImVec2(8.f,6.f);
+    style.WindowRounding=9.f;
+    style.ChildRounding=9.f;
+    style.PopupRounding=8.f;
+    style.FrameRounding=6.f;
+    style.GrabRounding=6.f;
+    style.ScrollbarRounding=7.f;
+    style.WindowBorderSize=0.f;
+    style.ChildBorderSize=1.f;
+    style.FrameBorderSize=0.f;
     auto* c=style.Colors;
-    c[ImGuiCol_WindowBg]=ImVec4(.046f,.078f,.13f,1.f);
-    c[ImGuiCol_ChildBg]=ImVec4(.075f,.119f,.19f,1.f);
-    c[ImGuiCol_FrameBg]=ImVec4(.13f,.20f,.30f,1.f);
-    c[ImGuiCol_Header]=ImVec4(.17f,.34f,.60f,.63f);
-    c[ImGuiCol_HeaderHovered]=ImVec4(.21f,.41f,.74f,.85f);
-    c[ImGuiCol_Button]=ImVec4(.14f,.34f,.68f,1.f);
-    c[ImGuiCol_ButtonHovered]=ImVec4(.20f,.42f,.81f,1.f);
-    c[ImGuiCol_TitleBgActive]=ImVec4(.08f,.14f,.22f,1.f);
+    c[ImGuiCol_Text]=ImVec4(.93f,.95f,.98f,1.f);
+    c[ImGuiCol_TextDisabled]=ImVec4(.66f,.72f,.80f,1.f);
+    c[ImGuiCol_WindowBg]=ImVec4(.050f,.067f,.094f,1.f);
+    c[ImGuiCol_ChildBg]=ImVec4(.074f,.098f,.136f,1.f);
+    c[ImGuiCol_PopupBg]=ImVec4(.085f,.108f,.150f,.99f);
+    c[ImGuiCol_Border]=ImVec4(.19f,.25f,.33f,.85f);
+    c[ImGuiCol_FrameBg]=ImVec4(.120f,.163f,.222f,1.f);
+    c[ImGuiCol_FrameBgHovered]=ImVec4(.165f,.215f,.294f,1.f);
+    c[ImGuiCol_FrameBgActive]=ImVec4(.193f,.258f,.345f,1.f);
+    c[ImGuiCol_Header]=ImVec4(.16f,.34f,.54f,.70f);
+    c[ImGuiCol_HeaderHovered]=ImVec4(.20f,.41f,.64f,.86f);
+    c[ImGuiCol_HeaderActive]=ImVec4(.22f,.45f,.69f,.93f);
+    c[ImGuiCol_Button]=ImVec4(.16f,.36f,.60f,1.f);
+    c[ImGuiCol_ButtonHovered]=ImVec4(.22f,.45f,.71f,1.f);
+    c[ImGuiCol_ButtonActive]=ImVec4(.16f,.36f,.61f,1.f);
+    c[ImGuiCol_TitleBgActive]=ImVec4(.075f,.11f,.16f,1.f);
+    c[ImGuiCol_TableRowBgAlt]=ImVec4(.12f,.16f,.21f,.35f);
+    c[ImGuiCol_Separator]=ImVec4(.24f,.31f,.40f,.70f);
+    c[ImGuiCol_CheckMark]=ImVec4(.45f,.76f,.99f,1.f);
+}
+
+// Font files remain user/system supplied: no network fetch or binary font bundle.
+// Inter is preferred when installed; Segoe UI / Noto / DejaVu and a larger built-in
+// font remain safe fallbacks on Windows and Linux.
+std::string setup_fonts(GLFWwindow* window) {
+    float scale_x=1.f,scale_y=1.f;
+    glfwGetWindowContentScale(window,&scale_x,&scale_y);
+    const float scale=std::clamp(std::max(scale_x,scale_y),1.f,2.f);
+    ImGui::GetStyle().ScaleAllSizes(scale);
+    auto* fonts=ImGui::GetIO().Fonts;
+    const auto add_font=[&](const std::filesystem::path& path,const char* name)->bool {
+        std::error_code ec;
+        if(path.empty() || !std::filesystem::is_regular_file(path,ec)) return false;
+        const std::string filename=path.string();
+        return fonts->AddFontFromFileTTF(filename.c_str(),17.f*scale)!=nullptr;
+    };
+    if(const char* custom=std::getenv("OBSERVATORY_UI_FONT"); custom && *custom) {
+        if(add_font(std::filesystem::path(custom),"Custom")) return "Custom";
+    }
+#ifdef _WIN32
+    const std::filesystem::path fonts_dir=[] {
+        if(const char* win=std::getenv("WINDIR"); win && *win)
+            return std::filesystem::path(win)/"Fonts";
+        return std::filesystem::path("C:/Windows/Fonts");
+    }();
+    if(add_font(fonts_dir/"Inter-Regular.ttf","Inter")) return "Inter";
+    if(add_font(fonts_dir/"segoeui.ttf","Segoe UI")) return "Segoe UI";
+#else
+    const std::array<std::pair<const char*,const char*>,6> candidates{{
+        {"/usr/share/fonts/truetype/inter/Inter-Regular.ttf","Inter"},
+        {"/usr/share/fonts/opentype/inter/Inter-Regular.otf","Inter"},
+        {"/usr/local/share/fonts/Inter-Regular.ttf","Inter"},
+        {"/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf","Noto Sans"},
+        {"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","DejaVu Sans"},
+        {"/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf","Liberation Sans"}
+    }};
+    for(const auto& [path,name]:candidates)
+        if(add_font(path,name)) return name;
+#endif
+    ImFontConfig fallback;
+    fallback.SizePixels=17.f*scale;
+    fonts->AddFontDefault(&fallback);
+    return "Built-in (17px)";
 }
 } // namespace
 int main(int argc, char** argv) {
@@ -104,6 +171,7 @@ int main(int argc, char** argv) {
     io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;
     io.IniFilename=nullptr; // No user profile or trace identity persisted without consent.
     dark_style();
+    const std::string font_name=setup_fonts(window);
     if(!ImGui_ImplGlfw_InitForOpenGL(window,true)) {
         std::fputs("ImGui GLFW backend initialization failed\n",stderr);
         ImGui::DestroyContext();glfwDestroyWindow(window);glfwTerminate();return 5;
@@ -129,7 +197,7 @@ int main(int argc, char** argv) {
         int display_width=0,display_height=0;
         glfwGetFramebufferSize(window,&display_width,&display_height);
         glViewport(0,0,display_width,display_height);
-        glClearColor(.046f,.078f,.13f,1.f);
+        glClearColor(.050f,.067f,.094f,1.f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(window);
@@ -140,6 +208,9 @@ int main(int argc, char** argv) {
     ImGui::DestroyContext();
     glfwDestroyWindow(window);
     glfwTerminate();
-    if(smoke_ui) std::puts("W05/W06 Dear ImGui GLFW+OpenGL UI smoke passed");
+    if(smoke_ui) {
+        std::printf("Desktop font: %s\n",font_name.c_str());
+        std::puts("W05/W06 Dear ImGui GLFW+OpenGL UI smoke passed");
+    }
     return 0;
 }

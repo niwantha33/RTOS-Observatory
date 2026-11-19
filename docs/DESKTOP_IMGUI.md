@@ -112,3 +112,23 @@ there is not yet a native operating-system file picker.
 
 The dedicated `observatory_desktop_build_info` CTest validates `--version` output,
 while existing controller, model, timeline and graphical smoke tests remain in CI.
+
+## UI typography and readability (v0.2.1)
+
+The desktop uses a 17-pixel regular UI font (scaled once for the display's
+content scale at window creation) and more legible spacing, contrast, section
+headings and labels. It prefers a **locally installed Inter Regular** font. If
+Inter is unavailable, Windows uses Segoe UI; Linux checks Noto Sans, DejaVu Sans
+and Liberation Sans; ImGui's built-in font is the last fallback at 17 px.
+
+No font downloads, font binary redistribution, online initialization or extra
+build dependency are introduced. To use a custom accessible TTF/OTF font, set
+`OBSERVATORY_UI_FONT` to its file path before launching the desktop.
+Install Inter locally if the Inter appearance is desired across machines.
+The font is selected at launch; dynamic font rebuilding after moving between
+monitors of different DPI is not yet supported. Linux UI smoke prints the
+selected font name to its GitHub Actions log.
+
+Navigation, menu actions, decoder selection, evidence warnings and report
+integrity remain intact. CPU metrics and unknown periods retain their original
+evidence rules. This is a readability iteration, not W07/W08 or live debugging.

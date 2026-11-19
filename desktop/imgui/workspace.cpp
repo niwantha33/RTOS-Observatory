@@ -38,7 +38,9 @@ void cell(const std::string& text) {
     ImGui::TextUnformatted(text.c_str());
 }
 void header(const char* title) {
+    ImGui::Spacing();
     ImGui::SeparatorText(title);
+    ImGui::Spacing();
 }
 constexpr ImGuiTableFlags table_flags = ImGuiTableFlags_BordersInnerV |
                                         ImGuiTableFlags_RowBg |
@@ -48,7 +50,7 @@ constexpr ImGuiTableFlags table_flags = ImGuiTableFlags_BordersInnerV |
 void small_metric(const char* title, const std::string& value) {
     ImGui::BeginGroup();
     ImGui::TextDisabled("%s", title);
-    ImGui::SetWindowFontScale(1.55f);
+    ImGui::SetWindowFontScale(1.40f);
     label(value);
     ImGui::SetWindowFontScale(1.0f);
     ImGui::EndGroup();
@@ -152,8 +154,8 @@ void Workspace::draw_menus() {
     if(!ImGui::BeginMenuBar()) return;
     if(ImGui::BeginMenu("File")) {
         if(ImGui::MenuItem("Open trace...")) pending_open_=OpenDialog::Trace;
-        if(ImGui::MenuItem("Open indexed session...")) pending_open_=OpenDialog::Session;
-        if(ImGui::BeginMenu("Recent evidence",!recents_.empty())) {
+        if(ImGui::MenuItem("Open saved session...")) pending_open_=OpenDialog::Session;
+        if(ImGui::BeginMenu("Recent files",!recents_.empty())) {
             for(std::size_t i=0;i<recents_.size();++i) {
                 ImGui::PushID(static_cast<int>(i));
                 const auto entry=recents_[i];
@@ -168,21 +170,21 @@ void Workspace::draw_menus() {
             ImGui::EndMenu();
         }
         ImGui::Separator();
-        if(ImGui::MenuItem("Export investigation report...",nullptr,false,loaded()))
+        if(ImGui::MenuItem("Export report...",nullptr,false,loaded()))
             export_dialog_requested_=true;
         ImGui::Separator();
         if(ImGui::MenuItem("Exit")) exit_requested_=true;
         ImGui::EndMenu();
     }
     if(ImGui::BeginMenu("Settings")) {
-        ImGui::MenuItem("Legacy TSV decoder",nullptr,&legacy_decoder_);
+        ImGui::MenuItem("Use legacy TSV format",nullptr,&legacy_decoder_);
         ImGui::MenuItem("Compact spacing",nullptr,&compact_spacing_);
-        ImGui::TextDisabled("Changes apply to this run only");
+        ImGui::TextDisabled("Display choices reset when the app closes");
         ImGui::EndMenu();
     }
     if(ImGui::BeginMenu("Window")) {
         ImGui::MenuItem("Show navigation",nullptr,&show_sidebar_);
-        if(ImGui::BeginMenu("Go to view")) {
+        if(ImGui::BeginMenu("Go to panel")) {
             constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
                 "Events","Findings","Evidence details"};
             for(int i=0;i<6;++i)
@@ -190,7 +192,7 @@ void Workspace::draw_menus() {
                     page_=static_cast<Page>(i);
             ImGui::EndMenu();
         }
-        if(ImGui::MenuItem("Reset workspace view")) {
+        if(ImGui::MenuItem("Reset layout")) {
             show_sidebar_=true;
             page_=Page::Overview;
             if(loaded()) fit();
@@ -211,8 +213,8 @@ void Workspace::draw_menus() {
             page_=Page::Timeline;
         }
         ImGui::Separator();
-        if(ImGui::MenuItem("CPU and resource waits",nullptr,false,loaded())) page_=Page::CpuWaits;
-        if(ImGui::MenuItem("Evidence quality",nullptr,false,loaded())) page_=Page::Evidence;
+        if(ImGui::MenuItem("CPU and wait analysis",nullptr,false,loaded())) page_=Page::CpuWaits;
+        if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
     if(ImGui::BeginMenu("Help")) {
@@ -229,10 +231,10 @@ void Workspace::draw_dialogs() {
     }
     if(ImGui::BeginPopupModal("Open evidence",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted(active_open_==OpenDialog::Trace ?
-            "Open a local trace file" : "Open a verified indexed-session directory");
+            "Open a local trace file" : "Open an indexed session folder");
         ImGui::SetNextItemWidth(520.f);
         ImGui::InputText("Path",path_.data(),path_.size());
-        if(active_open_==OpenDialog::Trace) ImGui::Checkbox("Legacy TSV decoder",&legacy_decoder_);
+        if(active_open_==OpenDialog::Trace) ImGui::Checkbox("Use legacy TSV format",&legacy_decoder_);
         if(ImGui::Button("Open")) {
             const bool ok=active_open_==OpenDialog::Session ?
                 open_session(path_.data()) :
@@ -249,7 +251,7 @@ void Workspace::draw_dialogs() {
         ImGui::OpenPopup("Export report");
     }
     if(ImGui::BeginPopupModal("Export report",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted("Save a JSON investigation report (existing files are protected).");
+        ImGui::TextUnformatted("Save an investigation report as JSON. Existing files will not be replaced.");
         ImGui::SetNextItemWidth(520.f);
         ImGui::InputText("Output file",export_path_.data(),export_path_.size());
         if(ImGui::Button("Export") && export_report(export_path_.data()))
@@ -277,28 +279,34 @@ void Workspace::draw_dialogs() {
     }
 }
 void Workspace::draw_sidebar() {
-    ImGui::BeginChild("Navigation", ImVec2(242, -28.f), ImGuiChildFlags_Borders);
-    ImGui::TextColored(ImVec4(0.33f, 0.77f, 1.0f, 1), "RTOS OBSERVATORY");
-    ImGui::TextDisabled("Offline trace investigation");
+    const float footer_height=ImGui::GetTextLineHeightWithSpacing()+14.f;
+    ImGui::BeginChild("Navigation", ImVec2(ImGui::GetFontSize()*17.f,-footer_height),
+                      ImGuiChildFlags_Borders);
+    ImGui::SetWindowFontScale(1.13f);
+    ImGui::TextColored(ImVec4(.79f,.89f,1.f,1.f),"RTOS Observatory");
+    ImGui::SetWindowFontScale(1.f);
+    ImGui::TextDisabled("Offline trace analysis");
     ImGui::Spacing();
-    header("LOAD EVIDENCE");
+    header("Open files");
+    ImGui::TextDisabled("Trace file or saved session folder");
     ImGui::SetNextItemWidth(-1);
     ImGui::InputText("##input_path", path_.data(), path_.size());
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Enter a trace file or indexed-session directory, or drop one on the window.");
-    ImGui::Checkbox("Legacy TSV decoder", &legacy_decoder_);
+    ImGui::Checkbox("Use legacy TSV format", &legacy_decoder_);
     if (ImGui::Button("Open trace", ImVec2(-1, 0)))
         (void)open_trace(path_.data(), legacy_decoder_ ? "legacy-tsv" : "universal-v1");
-    if (ImGui::Button("Open indexed session", ImVec2(-1, 0)))
+    if (ImGui::Button("Open saved session", ImVec2(-1, 0)))
         (void)open_session(path_.data());
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
-    header("WORKSPACE");
+    header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
                                       "Events", "Findings", "Evidence details"};
     for (int i=0; i<6; ++i) {
-        if (ImGui::Selectable(names[i], static_cast<int>(page_)==i))
+        if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
+                              ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
     }
-    header("RECENT IN THIS PROCESS");
+    header("Recent files");
     for (std::size_t i=0; i<recents_.size(); ++i) {
         ImGui::PushID(static_cast<int>(i));
         const auto r=recents_[i]; // reloading may mutate recents_ storage
@@ -312,19 +320,24 @@ void Workspace::draw_sidebar() {
         ImGui::PopID();
     }
     ImGui::Separator();
-    ImGui::TextDisabled("No hardware probe, GDB or live decoder.");
+    ImGui::TextDisabled("Offline analysis only. Live capture is not connected.");
     ImGui::EndChild();
 }
 void Workspace::draw_overview() {
-    if (!controller_.loaded()) { ImGui::TextDisabled("Open a normalized trace or indexed session."); return; }
+    if (!controller_.loaded()) { ImGui::TextDisabled("Open a trace or a saved session to start your investigation."); return; }
     const auto& report=controller_.report();
     const auto& trace=controller_.trace();
-    small_metric("Recorded events",as_text(trace.capture.events.size()));
-    ImGui::SameLine(240);
-    small_metric("Observed tasks",as_text(report.threads.size()));
-    ImGui::SameLine(450);
-    small_metric("Findings",as_text(report.findings.size()));
-    header("TASKS / OBSERVED DEFINITIONS");
+    if(ImGui::BeginTable("overview-metrics",3,ImGuiTableFlags_SizingStretchSame)) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        small_metric("Recorded events",as_text(trace.capture.events.size()));
+        ImGui::TableNextColumn();
+        small_metric("Observed tasks",as_text(report.threads.size()));
+        ImGui::TableNextColumn();
+        small_metric("Findings",as_text(report.findings.size()));
+        ImGui::EndTable();
+    }
+    header("Observed tasks");
     if (ImGui::BeginTable("tasks",4,table_flags,ImVec2(0,240))) {
         for (const auto* h: {"Task", "Priority", "Period (us)", "Idle"}) ImGui::TableSetupColumn(h);
         ImGui::TableHeadersRow();
@@ -336,7 +349,7 @@ void Workspace::draw_overview() {
         }
         ImGui::EndTable();
     }
-    header("EVIDENCE QUALITY");
+    header("Trace integrity");
     const bool complete=report.complete && trace.evidence.sequence_available &&
                         !trace.evidence.missing_events && !trace.evidence.declared_drops;
     ImGui::TextColored(complete ? ImVec4(.35f,.85f,.67f,1) : ImVec4(1,.73f,.40f,1),
@@ -348,9 +361,9 @@ void Workspace::draw_overview() {
         ImGui::BulletText("Declared drops: %llu",static_cast<unsigned long long>(trace.evidence.declared_drops));
 }
 void Workspace::draw_timeline() {
-    if (!controller_.loaded()) { ImGui::TextDisabled("No execution intervals loaded."); return; }
-    header("EXECUTION TIMELINE / MICROSECONDS");
-    ImGui::TextDisabled("Blue task / green idle / amber ISR / hatched unknown / purple completed wait");
+    if (!controller_.loaded()) { ImGui::TextDisabled("Open a trace to see the execution timeline."); return; }
+    header("Execution timeline");
+    ImGui::TextDisabled("Blue: task   |   Green: idle   |   Amber: interrupt   |   Grey: unknown   |   Purple: completed wait");
     ImGui::SetNextItemWidth(185);
     const bool start_changed=ImGui::InputScalar("From (us)",ImGuiDataType_U64,&begin_us_);
     ImGui::SameLine();
@@ -366,7 +379,7 @@ void Workspace::draw_timeline() {
     if (ImGui::Button("Zoom -")) zoom(false);
     if (!timeline_) { ImGui::TextColored(ImVec4(1,.65f,.45f,1),"%s",notice_.c_str()); return; }
     if (!timeline_->evidence_complete)
-        ImGui::TextColored(ImVec4(1,.75f,.45f,1),"INCOMPLETE EVIDENCE: exact CPU percentages suppressed");
+        ImGui::TextColored(ImVec4(1,.75f,.45f,1),"Incomplete trace: exact CPU percentages are unavailable");
     const auto& view=*timeline_;
     std::vector<std::pair<std::string,std::string>> rows;
     for (const auto& core:view.cores) rows.emplace_back("core",core.core);
@@ -458,7 +471,8 @@ void Workspace::draw_timeline() {
 }
 void Workspace::draw_cpu() {
     if(!timeline_) { ImGui::TextDisabled("Select a valid observed time window in Execution timeline."); return; }
-    header("PER-CORE CPU ACCOUNTING / NO UNQUALIFIED MULTICORE AGGREGATE");
+    header("CPU time by core");
+    ImGui::TextDisabled("Each core is reported separately. Unobserved time remains unknown.");
     if(ImGui::BeginTable("cpu",6,table_flags,ImVec2(0,230))) {
         for(const char* col: {"Core","Running (us)","ISR (us)","Idle (us)","Unknown (us)","Busy %"})
             ImGui::TableSetupColumn(col);
@@ -471,7 +485,7 @@ void Workspace::draw_cpu() {
         }
         ImGui::EndTable();
     }
-    header("TASK EXECUTION AND COMPLETED RESOURCE WAITS");
+    header("Task activity and completed waits");
     if(ImGui::BeginTable("waits",4,table_flags,ImVec2(0,260))) {
         for(const char* col: {"Task","Running (us)","Completed wait (us)","Wait count"})
             ImGui::TableSetupColumn(col);
@@ -492,7 +506,7 @@ void Workspace::draw_cpu() {
 }
 void Workspace::draw_events() {
     if(!controller_.loaded()) return;
-    header("EVENTS / CAPTURE ORDER / READ ONLY");
+    header("Recorded events");
     if(ImGui::InputText("Filter type, task, object or time",filter_.data(),filter_.size()))
         rebuild_event_filter();
     ImGui::TextDisabled("Displaying %zu rows; preview capped at first 20,000 events.",
@@ -516,7 +530,8 @@ void Workspace::draw_events() {
 }
 void Workspace::draw_findings() {
     if(!controller_.loaded()) return;
-    header("FINDINGS / OBSERVED PATTERNS ARE NOT PROVEN ROOT CAUSES");
+    header("Observed findings");
+    ImGui::TextDisabled("Patterns in the trace are not confirmed root causes.");
     if(ImGui::BeginTable("findings",6,table_flags,ImVec2(0,-1))) {
         for(const char* col: {"Code","Confidence","Task","Resource","Observed (us)","Description"})
             ImGui::TableSetupColumn(col);
@@ -533,7 +548,7 @@ void Workspace::draw_evidence() {
     if(!controller_.loaded()) return;
     const auto& decoded=controller_.trace();
     const auto& evidence=decoded.evidence;
-    header("SOURCE IDENTITY / INTEGRITY / LOSS");
+    header("Trace source and integrity");
     for(const auto& [name,value]:std::vector<std::pair<std::string,std::string>>{
         {"Path",controller_.origin().string()},
         {"Mode",controller_.mode()},
@@ -551,11 +566,11 @@ void Workspace::draw_evidence() {
         ImGui::SameLine(270);
         label(value);
     }
-    header("EXPORT NON-DESTRUCTIVELY");
+    header("Export investigation report");
     ImGui::SetNextItemWidth(540);
     ImGui::InputText("##export",export_path_.data(),export_path_.size());
     ImGui::SameLine();
-    if(ImGui::Button("Export report JSON")) (void)export_report(export_path_.data());
+    if(ImGui::Button("Export JSON report")) (void)export_report(export_path_.data());
     ImGui::TextDisabled("Existing files and immutable session directories cannot be overwritten.");
     ImGui::TextDisabled("Offline normalized evidence only. No live target connection or raw CTF adapter.");
 }
@@ -573,8 +588,11 @@ void Workspace::draw() {
         draw_sidebar();
         ImGui::SameLine();
     }
-    ImGui::BeginChild("Investigation",ImVec2(0,-28.f),ImGuiChildFlags_None);
-    ImGui::TextColored(ImVec4(.92f,.96f,1.f,1.f),"RTOS OBSERVATORY  /  TRACE INVESTIGATION");
+    const float footer_height=ImGui::GetTextLineHeightWithSpacing()+14.f;
+    ImGui::BeginChild("Investigation",ImVec2(0,-footer_height),ImGuiChildFlags_None);
+    ImGui::SetWindowFontScale(1.18f);
+    ImGui::TextColored(ImVec4(.92f,.96f,1.f,1.f),"Trace investigation");
+    ImGui::SetWindowFontScale(1.f);
     if(controller_.loaded()) {
         ImGui::SameLine();
         ImGui::TextDisabled("Session: %s",controller_.report().session.c_str());
@@ -597,7 +615,7 @@ void Workspace::draw() {
     }
     ImGui::EndChild();
     ImGui::Separator();
-    ImGui::TextDisabled("v%s  |  Commit %s  |  Configured %s",
+    ImGui::TextDisabled("v%s   |   Source %s   |   Configured %s",
         observatory::build_info::version,observatory::build_info::commit,
         observatory::build_info::configured_utc);
     draw_dialogs();
