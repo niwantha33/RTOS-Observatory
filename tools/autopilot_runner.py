@@ -250,7 +250,11 @@ class Controller:
             if any(self.journal.task(dep)["status"] != "done" for dep in item.get("dependencies", [])):
                 return "dependency_pending"
             if item["kind"] == "bootstrap":
-                return self.check_bootstrap(item)
+                try:
+                    return self.check_bootstrap(item)
+                except (OSError, RuntimeError, KeyError, ValueError, json.JSONDecodeError) as error:
+                    self.journal.blocked(identifier, f"Bootstrap verification failed: {error}")
+                    return "blocked"
             branch = item["branch"]
             try:
                 self.ensure_exclusive(branch)
