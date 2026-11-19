@@ -207,6 +207,7 @@ class Controller:
             if current_branch != branch:
                 self.journal.blocked(item["id"], "Existing branch mismatch: manual intervention required")
                 return False
+        old_commit = self.command(["git", "rev-parse", "HEAD"], cwd=self.worktree)
         state["status"] = "agent_running"
         state["agent_attempts"] = state.get("agent_attempts", 0) + 1
         self.journal.save()
@@ -220,6 +221,9 @@ class Controller:
             return False
         if self.command(["git", "status", "--porcelain"], cwd=self.worktree):
             self.journal.event(item["id"], "agent_failed", "Agent left uncommitted files; no auto-staging")
+            return False
+        if self.command(["git", "rev-parse", "HEAD"], cwd=self.worktree) == old_commit:
+            self.journal.event(item["id"], "agent_failed", "Agent did not produce a new commit")
             return False
         if int(self.command(["git", "rev-list", "--count", "origin/main..HEAD"], cwd=self.worktree)) < 1:
             self.journal.event(item["id"], "agent_failed", "No new commit relative to origin/main")
