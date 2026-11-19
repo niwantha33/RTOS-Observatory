@@ -65,6 +65,9 @@ Workspace::Workspace() {
     std::snprintf(path_.data(), path_.size(), "%s", "examples/timeline.trace");
     std::snprintf(export_path_.data(), export_path_.size(), "%s", "investigation.json");
     std::snprintf(fault_path_.data(), fault_path_.size(), "%s", "examples/fault-snapshot.tsv");
+    std::snprintf(symbol_manifest_path_.data(), symbol_manifest_path_.size(), "%s", "symbols.tsv");
+    std::snprintf(symbol_elf_path_.data(), symbol_elf_path_.size(), "%s", "firmware.elf");
+    std::snprintf(symbol_source_root_.data(), symbol_source_root_.size(), "%s", ".");
 }
 void Workspace::recent(const std::string& path, const std::string& decoder, bool session) {
     recents_.erase(std::remove_if(recents_.begin(), recents_.end(),
@@ -229,6 +232,30 @@ bool Workspace::open_fault_snapshot(const std::string& path) {
         return false;
     }
 }
+bool Workspace::open_source_index(const std::string& manifest,
+                                  const std::string& elf,
+                                  const std::string& source_root) {
+    try {
+        std::ifstream file(file_path(manifest),std::ios::binary);
+        if (!file) throw Error("Cannot open local symbol/source sidecar");
+        auto next=parse_source_index(file);
+        auto verified=verify_source_index(next,file_path(elf),file_path(source_root));
+        symbols_=std::move(next);
+        symbol_verification_=std::move(verified);
+        selected_symbol_=0;
+        source_excerpt_.reset();
+        address_lookup_=0;
+        std::snprintf(symbol_manifest_path_.data(),symbol_manifest_path_.size(),"%s",manifest.c_str());
+        std::snprintf(symbol_elf_path_.data(),symbol_elf_path_.size(),"%s",elf.c_str());
+        std::snprintf(symbol_source_root_.data(),symbol_source_root_.size(),"%s",source_root.c_str());
+        error_.clear();
+        page_=Page::SourceGraph;
+        return true;
+    } catch (const std::exception& e) {
+        error_=e.what();
+        return false;
+    }
+}
 bool Workspace::export_report(const std::string& path) {
     try {
         controller_.export_report(file_path(path));
@@ -280,6 +307,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Open trace...")) pending_open_=OpenDialog::Trace;
         if(ImGui::MenuItem("Open saved session...")) pending_open_=OpenDialog::Session;
         if(ImGui::MenuItem("Open fault snapshot...")) page_=Page::Faults;
+        if(ImGui::MenuItem("Open C/C++/Rust symbol index...")) page_=Page::SourceGraph;
         if(ImGui::BeginMenu("Recent files",!recents_.empty())) {
             for(std::size_t i=0;i<recents_.size();++i) {
                 ImGui::PushID(static_cast<int>(i));
@@ -312,8 +340,9 @@ void Workspace::draw_menus() {
         if(ImGui::BeginMenu("Go to panel")) {
             constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
                 "Causal graph","Time-travel replay","Scheduling diagnostics",
-                "Resources and waits","Causal diagnostics","Fault & memory","Events","Findings","Evidence details"};
-            for(int i=0;i<12;++i)
+                "Resources and waits","Causal diagnostics","Fault & memory","Source/symbol graph",
+                "Events","Findings","Evidence details"};
+            for(int i=0;i<13;++i)
                 if(ImGui::MenuItem(names[i],nullptr,static_cast<int>(page_)==i))
                     page_=static_cast<Page>(i);
             ImGui::EndMenu();
@@ -346,6 +375,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Resources and waits",nullptr,false,loaded())) page_=Page::Resources;
         if(ImGui::MenuItem("Causal diagnostics",nullptr,false,loaded())) page_=Page::Causality;
         if(ImGui::MenuItem("Fault & memory snapshots")) page_=Page::Faults;
+        if(ImGui::MenuItem("Source/symbol graph")) page_=Page::SourceGraph;
         if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
@@ -430,13 +460,14 @@ void Workspace::draw_sidebar() {
     if (ImGui::Button("Open saved session", ImVec2(-1, 0)))
         (void)open_session(path_.data());
     if (ImGui::Button("Fault snapshot...", ImVec2(-1, 0))) page_=Page::Faults;
+    if (ImGui::Button("Source/symbol map...", ImVec2(-1, 0))) page_=Page::SourceGraph;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
     header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
                                       "Causal graph", "Time-travel replay", "Scheduling diagnostics",
                                       "Resources and waits", "Causal diagnostics", "Fault & memory",
-                                      "Events", "Findings", "Evidence details"};
-    for (int i=0; i<12; ++i) {
+                                      "Source/symbol graph", "Events", "Findings", "Evidence details"};
+    for (int i=0; i<13; ++i) {
         if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
                               ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
@@ -1457,6 +1488,7 @@ void Workspace::draw() {
       case Page::Resources: draw_resources();break;
       case Page::Causality: draw_causality();break;
       case Page::Faults: draw_faults();break;
+      case Page::SourceGraph: draw_source_graph();break;
       case Page::Events: draw_events();break;
       case Page::Findings: draw_findings();break;
       case Page::Evidence: draw_evidence();break;
