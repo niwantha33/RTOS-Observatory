@@ -63,6 +63,7 @@ class LiveSession final {
     std::deque<LivePoint> recent_;
     std::array<std::optional<obs_wire_stats_t>,OBS_WIRE_MAX_LANES> stats_{};
     std::vector<LiveClockMapping> clocks_;
+    bool finalized_{};
     void poison(const std::string& error) {
         status_.poisoned=true;status_.incomplete=true;status_.error=error;
         throw Error(error);
@@ -83,6 +84,7 @@ public:
         lane_stats() const noexcept {return stats_;}
     void feed(const std::uint8_t* bytes,std::size_t length) {
         if(status_.poisoned)throw Error("W18 poisoned live session");
+        if(finalized_)throw Error("W18 finalized live session cannot be reopened");
         if(!length)return;
         if(!bytes)poison("W18 null input");
         if(length>limits_.max_input_bytes-status_.consumed_bytes)
@@ -146,6 +148,7 @@ public:
         if(status_.poisoned)throw Error("W18 poisoned live session");
         if(decoder_.used!=0u)poison("W18 truncated binary frame at EOF");
         if(epochs_.empty())poison("W18 no valid framed observations");
+        finalized_=true;
     }
     bool set_clock(LiveClockMapping mapping) {
         if(!mapping.epoch || !mapping.ticks_per_second ||
