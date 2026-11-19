@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "workspace.hpp"
+#include "observatory_build_info.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -42,8 +43,15 @@ int main(int argc, char** argv) {
     bool smoke_ui=false;
     std::string load_path;
     bool session=false;
+    if(argc>=2 && std::string_view(argv[1])=="--version") {
+        std::printf("RTOS Observatory %s\nCommit: %s\nBuild configured (UTC): %s\n",
+            observatory::build_info::version, observatory::build_info::commit,
+            observatory::build_info::configured_utc);
+        return 0;
+    }
     if(argc>=2 && std::string_view(argv[1])=="--help") {
         std::puts("rtos-observatory-desktop [--trace PATH | --session PATH]\n"
+                  "  --version        Version, source commit and UTC build configuration time\n"
                   "  --smoke PATH     Headless decoder/controller/timeline test (no graphics)\n"
                   "  --smoke-ui PATH  Hidden GLFW/OpenGL+ImGui one-frame integration test\n"
                   "Drag a trace file onto the window or enter a filename in the sidebar.");
@@ -83,7 +91,8 @@ int main(int argc, char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,0);
     if(smoke_ui) glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);
-    GLFWwindow* window=glfwCreateWindow(1280,800,"RTOS Observatory - Dear ImGui",nullptr,nullptr);
+    const std::string title="RTOS Observatory v"+std::string(observatory::build_info::version);
+    GLFWwindow* window=glfwCreateWindow(1280,800,title.c_str(),nullptr,nullptr);
     if(!window) { glfwTerminate(); return 4; }
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
@@ -115,6 +124,7 @@ int main(int argc, char** argv) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         workspace.draw();
+        if(workspace.exit_requested()) glfwSetWindowShouldClose(window,GLFW_TRUE);
         ImGui::Render();
         int display_width=0,display_height=0;
         glfwGetFramebufferSize(window,&display_width,&display_height);

@@ -19,12 +19,16 @@ public:
     bool export_report(const std::string& path);
     void accept_drop(const std::string& path);
     void draw();
+    bool exit_requested() const noexcept { return exit_requested_; }
     bool loaded() const noexcept { return controller_.loaded(); }
     const std::string& error() const noexcept { return error_; }
     const SessionController& controller() const noexcept { return controller_; }
     const TimelineView* timeline() const noexcept { return timeline_ ? &*timeline_ : nullptr; }
 private:
     enum class Page { Overview, Timeline, CpuWaits, Events, Findings, Evidence };
+    enum class OpenDialog { None, Trace, Session };
+    void draw_menus();
+    void draw_dialogs();
     void update_timeline();
     void rebuild_event_filter();
     void draw_sidebar();
@@ -43,6 +47,13 @@ private:
     std::string notice_;
     Page page_{Page::Overview};
     bool legacy_decoder_{};
+    bool show_sidebar_{true};
+    bool compact_spacing_{};
+    bool exit_requested_{};
+    bool show_about_{};
+    bool export_dialog_requested_{};
+    OpenDialog pending_open_{OpenDialog::None};
+    OpenDialog active_open_{OpenDialog::None};
     std::array<char, 2048> path_{};
     std::array<char, 2048> export_path_{};
     std::array<char, 160> filter_{};
