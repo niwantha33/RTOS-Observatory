@@ -43,6 +43,12 @@ if(OBSERVATORY_BUILD_TESTS)
   add_executable(observatory_causal_tests tests/test_causal_diagnostics.cpp)
   target_link_libraries(observatory_causal_tests PRIVATE observatory_core)
   add_test(NAME observatory_causal_patterns COMMAND observatory_causal_tests)
+  add_test(NAME observatory_causal_fixture_parse COMMAND rtos-observatory
+    --input ${CMAKE_CURRENT_SOURCE_DIR}/examples/causal-drift.trace
+    --output ${CMAKE_CURRENT_BINARY_DIR}/w11-drift-report.json)
+  add_test(NAME observatory_circular_fixture_parse COMMAND rtos-observatory
+    --input ${CMAKE_CURRENT_SOURCE_DIR}/examples/causal-cycle.trace
+    --output ${CMAKE_CURRENT_BINARY_DIR}/w11-cycle-report.json)
   add_test(NAME observatory_resource_fixture_parse COMMAND rtos-observatory
     --input ${CMAKE_CURRENT_SOURCE_DIR}/examples/resources.trace
     --output ${CMAKE_CURRENT_BINARY_DIR}/resource-fixture-report.json)
@@ -213,6 +219,8 @@ if(OBSERVATORY_BUILD_DESKTOP)
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
     add_test(NAME observatory_desktop_resource_smoke COMMAND rtos-observatory-desktop --smoke-resources
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/resources.trace)
+    add_test(NAME observatory_desktop_causal_smoke COMMAND rtos-observatory-desktop --smoke-causal
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/causal-drift.trace)
     if(Python3_Interpreter_FOUND)
       add_test(NAME observatory_desktop_build_info COMMAND
         ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_desktop_build_info.py
@@ -221,7 +229,7 @@ if(OBSERVATORY_BUILD_DESKTOP)
     set_tests_properties(observatory_desktop_smoke observatory_desktop_timeline_smoke
       observatory_desktop_graph_smoke observatory_desktop_replay_smoke
       observatory_desktop_diagnostics_smoke observatory_desktop_resource_smoke
-      PROPERTIES TIMEOUT 30)
+      observatory_desktop_causal_smoke PROPERTIES TIMEOUT 30)
     # Linux CI xvfb-run provides a genuine hidden GLFW/OpenGL render smoke.
     if(UNIX AND NOT APPLE)
       find_program(OBSERVATORY_XVFB_RUN xvfb-run)
@@ -241,9 +249,13 @@ if(OBSERVATORY_BUILD_DESKTOP)
         add_test(NAME observatory_imgui_resource_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
           $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-resources
           ${CMAKE_CURRENT_SOURCE_DIR}/examples/resources.trace)
+        add_test(NAME observatory_imgui_causal_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
+          $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-causal
+          ${CMAKE_CURRENT_SOURCE_DIR}/examples/causal-drift.trace)
         set_tests_properties(observatory_imgui_ui_smoke observatory_imgui_graph_ui_smoke
           observatory_imgui_replay_ui_smoke observatory_imgui_diagnostics_ui_smoke
-          observatory_imgui_resource_ui_smoke PROPERTIES TIMEOUT 30)
+          observatory_imgui_resource_ui_smoke observatory_imgui_causal_ui_smoke
+          PROPERTIES TIMEOUT 30)
       endif()
     endif()
   endif()
