@@ -190,13 +190,15 @@ if(OBSERVATORY_BUILD_DESKTOP)
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/foundation.trace)
     add_test(NAME observatory_desktop_timeline_smoke COMMAND rtos-observatory-desktop --smoke
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
+    add_test(NAME observatory_desktop_graph_smoke COMMAND rtos-observatory-desktop --smoke-graph
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
     if(Python3_Interpreter_FOUND)
       add_test(NAME observatory_desktop_build_info COMMAND
         ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_desktop_build_info.py
         $<TARGET_FILE:rtos-observatory-desktop> ${PROJECT_VERSION})
     endif()
     set_tests_properties(observatory_desktop_smoke observatory_desktop_timeline_smoke
-      PROPERTIES TIMEOUT 30)
+      observatory_desktop_graph_smoke PROPERTIES TIMEOUT 30)
     # Linux CI xvfb-run provides a genuine hidden GLFW/OpenGL render smoke.
     if(UNIX AND NOT APPLE)
       find_program(OBSERVATORY_XVFB_RUN xvfb-run)
@@ -204,7 +206,11 @@ if(OBSERVATORY_BUILD_DESKTOP)
         add_test(NAME observatory_imgui_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
           $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui
           ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
-        set_tests_properties(observatory_imgui_ui_smoke PROPERTIES TIMEOUT 30)
+        add_test(NAME observatory_imgui_graph_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
+          $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-graph
+          ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
+        set_tests_properties(observatory_imgui_ui_smoke observatory_imgui_graph_ui_smoke
+          PROPERTIES TIMEOUT 30)
       endif()
     endif()
   endif()
