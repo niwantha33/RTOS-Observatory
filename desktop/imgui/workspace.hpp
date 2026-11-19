@@ -10,6 +10,7 @@
 #include "observatory/fault_evidence.hpp"
 #include "observatory/source_index.hpp"
 #include "observatory/debug_bridge.hpp"
+#include "observatory/snapshot_receipt.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -28,6 +29,7 @@ public:
     bool open_fault_snapshot(const std::string& path);
     bool open_source_index(const std::string& manifest,const std::string& elf,const std::string& source_root);
     bool open_bridge_status(const std::string& path);
+    bool open_snapshot_receipt(const std::string& path);
     bool export_report(const std::string& path);
     void accept_drop(const std::string& path);
     void draw();
@@ -47,6 +49,8 @@ public:
     const SourceIndex* symbols() const noexcept { return symbols_ ? &*symbols_ : nullptr; }
     const BridgeObservation* bridge_observation() const noexcept { return bridge_observation_ ? &*bridge_observation_ : nullptr; }
     void show_debug_bridge() noexcept { page_ = Page::DebugBridge; }
+    void show_snapshot_receipt() noexcept { page_ = Page::Snapshot; }
+    const SnapshotCapture* snapshot_receipt() const noexcept { return snapshot_receipt_ ? &*snapshot_receipt_ : nullptr; }
     const SymbolVerification& symbol_verification() const noexcept { return symbol_verification_; }
     const FaultView* fault_view() const noexcept { return fault_view_ ? &*fault_view_ : nullptr; }
     const ReplaySnapshot* replay() const noexcept { return replay_ ? &*replay_ : nullptr; }
@@ -54,7 +58,7 @@ public:
     const SessionController& controller() const noexcept { return controller_; }
     const TimelineView* timeline() const noexcept { return timeline_ ? &*timeline_ : nullptr; }
 private:
-    enum class Page { Overview, Timeline, CpuWaits, Graph, Replay, Diagnostics, Resources, Causality, Faults, SourceGraph, DebugBridge, Events, Findings, Evidence };
+    enum class Page { Overview, Timeline, CpuWaits, Graph, Replay, Diagnostics, Resources, Causality, Faults, SourceGraph, DebugBridge, Snapshot, Events, Findings, Evidence };
     enum class OpenDialog { None, Trace, Session };
     void draw_menus();
     void draw_dialogs();
@@ -77,6 +81,7 @@ private:
     void draw_faults();
     void draw_source_graph();
     void draw_debug_bridge();
+    void draw_snapshot_receipt();
     void draw_events();
     void draw_findings();
     void draw_evidence();
@@ -92,6 +97,8 @@ private:
     std::optional<CausalView> causality_;
     std::optional<FaultSnapshot> fault_snapshot_;
     std::optional<FaultView> fault_view_;
+    std::optional<SnapshotCapture> snapshot_receipt_;
+    std::array<char,2048> snapshot_receipt_path_{};
     BridgeMonitor bridge_monitor_;
     std::optional<BridgeObservation> bridge_observation_;
     std::array<char,2048> bridge_file_path_{};
