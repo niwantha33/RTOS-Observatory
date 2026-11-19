@@ -3,6 +3,7 @@
 #include "observatory_build_info.hpp"
 #include "imgui.h"
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <cstdio>
 #include <filesystem>
@@ -68,6 +69,7 @@ Workspace::Workspace() {
     std::snprintf(symbol_manifest_path_.data(), symbol_manifest_path_.size(), "%s", "symbols.tsv");
     std::snprintf(symbol_elf_path_.data(), symbol_elf_path_.size(), "%s", "firmware.elf");
     std::snprintf(symbol_source_root_.data(), symbol_source_root_.size(), "%s", ".");
+    std::snprintf(bridge_file_path_.data(),bridge_file_path_.size(),"%s","rtos-observatory-dsf-status.tsv");
 }
 void Workspace::recent(const std::string& path, const std::string& decoder, bool session) {
     recents_.erase(std::remove_if(recents_.begin(), recents_.end(),
@@ -256,6 +258,28 @@ bool Workspace::open_source_index(const std::string& manifest,
         return false;
     }
 }
+bool Workspace::open_bridge_status(const std::string& path) {
+    try {
+        const auto snapshot=read_bridge_file(file_path(path));
+        const auto now=std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        if(now<0)throw Error("Local clock predates Unix epoch");
+        auto observed=bridge_monitor_.observe(snapshot,static_cast<std::uint64_t>(now));
+        bridge_observation_=std::move(observed);
+        if(!bridge_observation_->accepted) {
+            error_="W14 lifecycle publication rejected: "+bridge_observation_->status;
+            page_=Page::DebugBridge;
+            return false;
+        }
+        std::snprintf(bridge_file_path_.data(),bridge_file_path_.size(),"%s",path.c_str());
+        error_.clear();
+        page_=Page::DebugBridge;
+        return true;
+    } catch(const std::exception& e) {
+        error_=e.what();
+        return false;
+    }
+}
 bool Workspace::export_report(const std::string& path) {
     try {
         controller_.export_report(file_path(path));
@@ -308,6 +332,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Open saved session...")) pending_open_=OpenDialog::Session;
         if(ImGui::MenuItem("Open fault snapshot...")) page_=Page::Faults;
         if(ImGui::MenuItem("Open C/C++/Rust symbol index...")) page_=Page::SourceGraph;
+        if(ImGui::MenuItem("Inspect Eclipse DSF bridge status...")) page_=Page::DebugBridge;
         if(ImGui::BeginMenu("Recent files",!recents_.empty())) {
             for(std::size_t i=0;i<recents_.size();++i) {
                 ImGui::PushID(static_cast<int>(i));
@@ -341,8 +366,8 @@ void Workspace::draw_menus() {
             constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
                 "Causal graph","Time-travel replay","Scheduling diagnostics",
                 "Resources and waits","Causal diagnostics","Fault & memory","Source/symbol graph",
-                "Events","Findings","Evidence details"};
-            for(int i=0;i<13;++i)
+                "Debugger lifecycle","Events","Findings","Evidence details"};
+            for(int i=0;i<14;++i)
                 if(ImGui::MenuItem(names[i],nullptr,static_cast<int>(page_)==i))
                     page_=static_cast<Page>(i);
             ImGui::EndMenu();
@@ -376,6 +401,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Causal diagnostics",nullptr,false,loaded())) page_=Page::Causality;
         if(ImGui::MenuItem("Fault & memory snapshots")) page_=Page::Faults;
         if(ImGui::MenuItem("Source/symbol graph")) page_=Page::SourceGraph;
+        if(ImGui::MenuItem("Debugger lifecycle (passive)")) page_=Page::DebugBridge;
         if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
@@ -461,13 +487,14 @@ void Workspace::draw_sidebar() {
         (void)open_session(path_.data());
     if (ImGui::Button("Fault snapshot...", ImVec2(-1, 0))) page_=Page::Faults;
     if (ImGui::Button("Source/symbol map...", ImVec2(-1, 0))) page_=Page::SourceGraph;
+    if (ImGui::Button("Debugger lifecycle...", ImVec2(-1, 0))) page_=Page::DebugBridge;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
     header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
                                       "Causal graph", "Time-travel replay", "Scheduling diagnostics",
                                       "Resources and waits", "Causal diagnostics", "Fault & memory",
-                                      "Source/symbol graph", "Events", "Findings", "Evidence details"};
-    for (int i=0; i<13; ++i) {
+                                      "Source/symbol graph", "Debugger lifecycle", "Events", "Findings", "Evidence details"};
+    for (int i=0; i<14; ++i) {
         if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
                               ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
@@ -1614,6 +1641,56 @@ void Workspace::draw_source_graph() {
     }
 }
 
+void Workspace::draw_debug_bridge() {
+    header("Eclipse DSF debugger lifecycle (passive)");
+    ImGui::TextDisabled("No debugger connection. No live GDB/MI commands. No target memory/register/flash access.");
+    ImGui::TextDisabled("This panel reads a local Eclipse-reported metadata snapshot ONLY when you click Refresh.");
+    ImGui::SetNextItemWidth(540.f);
+    ImGui::InputText("Status file",bridge_file_path_.data(),bridge_file_path_.size());
+    if(ImGui::Button("Refresh local status"))
+        (void)open_bridge_status(bridge_file_path_.data());
+    ImGui::SameLine();
+    if(ImGui::Button("Forget previous session / epoch")) {
+        bridge_monitor_.clear();
+        bridge_observation_.reset();
+        notice_="Previous session forgotten locally. No debugger command was sent.";
+    }
+    if(!bridge_observation_) {
+        ImGui::TextDisabled("No passive session record imported. Select the active Eclipse DSF launch,");
+        ImGui::TextDisabled("then enable the opt-in W14 handler in the owning Eclipse plugin.");
+        return;
+    }
+    const auto& status=*bridge_observation_;
+    if(!status.accepted)
+        ImGui::TextColored(ImVec4(1.f,.75f,.43f,1.f),"REJECTED lifecycle publication");
+    const bool recent=status.accepted && status.fresh;
+    const ImVec4 colour=recent ? ImVec4(.52f,.85f,.66f,1.f) :
+                                  ImVec4(1.f,.75f,.43f,1.f);
+    ImGui::TextColored(colour,"Publisher: %s | Recorded state: %s",
+        status.status.c_str(),bridge_state_name(status.record.state));
+    ImGui::Text("Session: %s",status.record.session_nonce.c_str());
+    ImGui::Text("Launch label: %s",status.record.launch_label.c_str());
+    ImGui::Text("DSF session label: %s",status.record.dsf_session_label.c_str());
+    ImGui::Text("Epoch: %llu | Publication sequence: %llu",
+        static_cast<unsigned long long>(status.record.epoch),
+        static_cast<unsigned long long>(status.record.sequence));
+    ImGui::Text("Reporter timestamp: %llu ms since Unix epoch",
+        static_cast<unsigned long long>(status.record.writer_unix_ms));
+    ImGui::TextDisabled("Last refresh: %s | Transition continuity: %s",
+        status.fresh ? "recent at refresh" : "unknown / stale",
+        status.transition_known ? "observed" : "incomplete/unchanged");
+    ImGui::TextWrapped("A recent metadata heartbeat does NOT guarantee a running target, debugger health or coherent snapshot.");
+    for(const auto& warning:status.warnings)
+        ImGui::TextWrapped("%s",warning.c_str());
+    header("Access policy");
+    ImGui::BulletText("Debugger owner: Eclipse CDT / DSF-GDB (not Observatory)");
+    ImGui::BulletText("Bridge capability: %s",status.record.metadata_only ?
+                      "metadata-only, no commands" : "UNKNOWN (rejected)");
+    ImGui::BulletText("GDB/OpenOCD connections created by Observatory: 0");
+    ImGui::BulletText("Memory/register acquisition: W15, NOT available in this panel");
+    ImGui::TextDisabled("The source Eclipse extension is not installed/qualified by this repository.");
+}
+
 void Workspace::draw_findings() {
     if(!controller_.loaded()) return;
     header("Observed findings");
@@ -1702,6 +1779,7 @@ void Workspace::draw() {
       case Page::Causality: draw_causality();break;
       case Page::Faults: draw_faults();break;
       case Page::SourceGraph: draw_source_graph();break;
+      case Page::DebugBridge: draw_debug_bridge();break;
       case Page::Events: draw_events();break;
       case Page::Findings: draw_findings();break;
       case Page::Evidence: draw_evidence();break;
