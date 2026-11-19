@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #ifndef OBS_RECORDER_H
 #define OBS_RECORDER_H
-#include "obs_trace_ring.h"
+#include "obs_trace_types.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdatomic.h>
@@ -21,7 +21,6 @@ extern "C" {
 #define OBS_RECORDER_CAPACITY 64u
 #endif
 #define OBS_RECORDER_USABLE (OBS_RECORDER_CAPACITY - 1u)
-#define OBS_RECORDER_SCHEMA_VERSION 1u
 
 typedef enum {
     OBS_RECORDER_OK = 0,
@@ -29,13 +28,6 @@ typedef enum {
     OBS_RECORDER_BUSY = 2,
     OBS_RECORDER_INVALID = 3
 } obs_recorder_result_t;
-
-typedef struct {
-    obs_trace_record_t event;
-    uint32_t sequence;        // per-lane attempt sequence; gaps show FULL losses
-    uint16_t lane;            // stable lane index, never a task/core identity
-    uint16_t schema_version;
-} obs_recorder_record_t;
 
 typedef struct {
     // Only init before the recorder is published; never reset a live lane.
@@ -49,21 +41,13 @@ typedef struct {
     obs_recorder_record_t buffer[OBS_RECORDER_CAPACITY];
 } obs_recorder_lane_t;
 
-typedef struct {
+typedef struct obs_recorder_t {
     // Both ready and lane_count are immutable after successful init.
     bool ready;
     unsigned lane_count;
     unsigned consumer_cursor;        // one consumer owns this field
     obs_recorder_lane_t lanes[OBS_RECORDER_MAX_LANES];
 } obs_recorder_t;
-
-typedef struct {
-    unsigned attempted;             // modulo UINT_MAX+1; not a globally ordered clock
-    unsigned accepted;
-    unsigned full_drops;
-    unsigned busy_drops;
-    unsigned pending;               // approximate under concurrent traffic
-} obs_recorder_stats_t;
 
 // Runtime capability check: no lock-based fallback for head/tail/telemetry.
 // The caller MUST initialize before enabling any task/ISR instrumentation.
