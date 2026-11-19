@@ -229,6 +229,35 @@ def main():
         refuses(root, forged)
         raw_trace.write_bytes(good_trace)
 
+        # W19 byte-level replay/truncation and declared missing-frame gaps.
+        import w19_wire_audit as wire
+        assert wire.audit_trace(raw_trace)["frames"] == 2
+        raw_trace.write_bytes(good_trace[:-1])
+        try:
+            wire.audit_trace(raw_trace)
+        except wire.WireAuditError:
+            pass
+        else:
+            raise AssertionError("truncated physical wire capture accepted")
+        raw_trace.write_bytes(good_trace + good_trace[:48])
+        try:
+            wire.audit_trace(raw_trace)
+        except wire.WireAuditError:
+            pass
+        else:
+            raise AssertionError("replayed physical wire capture accepted")
+        raw_trace.write_bytes(good_trace)
+        # Modify the stats frame's transport index from 2 to 3, then
+        # recalculate its CRC so the gap is genuine, not a checksum error.
+        gapped=bytearray(good_trace)
+        gapped[48+12:48+16]=struct.pack("<I",3)
+        gapped[-4:]=struct.pack("<I",zlib.crc32(gapped[48:-4]))
+        raw_trace.write_bytes(gapped)
+        audit=wire.audit_trace(raw_trace)
+        assert audit["missing_wire_frames"]==1
+        assert audit["tail_loss_unknown"]
+        raw_trace.write_bytes(good_trace)
+
         # The manifest itself is bounded and cannot be a symlink.
         large = root / "oversized.json"
         large.write_bytes(b"x"*(w.MAX_JSON+1))
