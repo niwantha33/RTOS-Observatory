@@ -1,0 +1,66 @@
+name: Official release provenance
+on:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+jobs:
+  provenance:
+    name: Release / attested Linux CLI
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and test release artifact
+        run: |
+          cmake -S . -B release-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DOBSERVATORY_BUILD_TESTS=ON \
+            -DOBSERVATORY_BUILD_LIVE=OFF -DOBSERVATORY_BUILD_DESKTOP=OFF
+          cmake --build release-build --parallel 2
+          ctest --test-dir release-build --output-on-failure
+      - name: Package official CLI without private files
+        run: |
+          mkdir -p stage/bin dist
+          cmake --install release-build --prefix "$PWD/stage"
+          cp LICENSE stage/LICENSE
+          tar -C stage -czf "dist/rtos-observatory-${{ github.ref_name }}-linux-x64.tar.gz" .
+          cd dist
+          sha256sum ./*.tar.gz > SHA256SUMS
+      - name: Sign provenance with short-lived GitHub OIDC identity
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/*.tar.gz
+      - name: Verify digest, repository, workflow, tag and commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd dist
+            sha256sum --check SHA256SUMS
+          )
+          artifact="dist/rtos-observatory-${{ github.ref_name }}-linux-x64.tar.gz"
+          for attempt in 1 2 3; do
+            if gh attestation verify "$artifact" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-integrity.yml" \
+              --source-ref "$GITHUB_REF" \
+              --source-digest "$GITHUB_SHA"; then
+              exit 0
+            fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            sleep 10
+          done
+      - name: Retain verified official artifacts and checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-release-${{ github.ref_name }}-linux-x64
+          path: dist/
+          if-no-files-found: error

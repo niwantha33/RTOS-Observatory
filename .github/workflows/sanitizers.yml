@@ -1,0 +1,41 @@
+name: Host sanitizers
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sanitizers:
+    name: Sanitizers / ASan + UBSan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build host diagnostics
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake -S . -B sanitizer-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DOBSERVATORY_BUILD_TESTS=ON \
+            -DOBSERVATORY_BUILD_DESKTOP=OFF -DOBSERVATORY_BUILD_LIVE=OFF
+          cmake --build sanitizer-build --parallel 2
+          ctest --test-dir sanitizer-build --output-on-failure --parallel 2 \
+            2>&1 | tee sanitizer-ctest.log
+      - name: Upload sanitizer results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-sanitizer-evidence
+          path: sanitizer-ctest.log
+          retention-days: 14
+          if-no-files-found: warn

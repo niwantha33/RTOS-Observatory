@@ -1,0 +1,34 @@
+# Public quality policy. Private research/NDA files are deliberately excluded.
+policy_version: 1
+status: pr-validation
+language:
+  name: C++
+  current_standard: c++20
+  proposed_standard: c++23
+  upgrade_requires_separate_review: true
+scope:
+  include: [src/**, include/**, desktop/**, firmware/**, tests/**]
+  exclude: [build/**, third_party/**, generated/**]
+format:
+  tool: clang-format
+  config: .clang-format
+  gate: check-only
+static_analysis:
+  clang_tidy:
+    config: .clang-tidy
+    checks: [clang-analyzer-*, bugprone-*, performance-*, modernize-*]
+  cppcheck:
+    language_standard: c++20
+    enable: [warning, performance, portability]
+gating:
+  baseline: approved_pr_base_commit
+  fail_on_new_errors: true
+  fail_on_new_warnings: false
+  require_pull_request_checks: true
+runtime_diagnostics:
+  host_only: [address, undefined]
+supply_chain:
+  scan_secrets: true
+  review_dependency_changes: true
+  verify_release_provenance: true
+hardware_qualification: deferred
