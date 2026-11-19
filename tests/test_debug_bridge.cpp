@@ -84,6 +84,12 @@ int main(int argc,char** argv) {
 
     assert(rejects(""));
     assert(rejects(encode().substr(0,encode().size()-1)));
+    // LF and Git-for-Windows CRLF are both accepted; interior/bare CR is not.
+    std::string crlf=encode();
+    crlf.insert(crlf.size()-1,1,'\r');
+    assert(parse(crlf).sequence==1);
+    assert(rejects(encode().substr(0,5)+"\r"+encode().substr(5)));
+    assert(rejects(encode().substr(0,encode().size()-1)+"\r"));
     assert(rejects(encode()+"MORE\n"));
     assert(rejects("RTOS-OBSERVATORY-DSF\t2\tA1\tlaunch-1\tdsf-1\t123\t1\t1700000000000\tATTACHED\tmetadata-only\n"));
     assert(rejects(encode("RUNNING",1,1700000000000ull,"gdb-commands")));
