@@ -106,6 +106,7 @@ private:
     std::optional<LiveSession> live_session_;
     std::array<char,2048> live_file_path_{};
     std::uint64_t live_file_offset_{};
+    std::string live_active_file_;
     std::uint32_t live_ticks_per_second_{1000000u}; // UI suggestion only, not automatically applied
     std::string live_error_;
     bool live_follow_{false};
