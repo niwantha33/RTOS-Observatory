@@ -400,7 +400,13 @@ inline FaultView analyze_fault_snapshot(const FaultSnapshot& s, FaultLimits limi
                 "no allocator corruption is proven",
                 {heap.line},heap.address);
     }
-    const bool cortex_m=s.architecture.starts_with("cortex-m") && s.address_bits==32;
+    // Configurable fault status registers are not universal on Cortex-M,
+    // especially M0/M0+ (or architecture labels with unknown profiles).
+    const bool cortex_m=s.address_bits==32 &&
+        (s.architecture=="cortex-m3" || s.architecture=="cortex-m4" ||
+         s.architecture=="cortex-m7" || s.architecture=="cortex-m33" ||
+         s.architecture=="cortex-m35p" || s.architecture=="cortex-m55" ||
+         s.architecture=="cortex-m85");
     const bool cortex_m_v8=s.architecture=="cortex-m23" ||
                            s.architecture=="cortex-m33" ||
                            s.architecture=="cortex-m35p" ||
