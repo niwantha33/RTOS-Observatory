@@ -1,0 +1,19 @@
+{
+  "tasks": [
+    {
+      "id": "AUT-01",
+      "kind": "bootstrap",
+      "issue": 18,
+      "dependencies": [],
+      "description": "Install and accept the persistent Autopilot controller"
+    },
+    {
+      "id": "W07",
+      "kind": "agent",
+      "issue": 3,
+      "dependencies": ["AUT-01"],
+      "branch": "autopilot/w07-causal-graph",
+      "description": "Offline Dear ImGui Causal Graph Studio: task/resource/evidence nodes and edges, filters, zoom, selection and bounded performance; preserve loss/unknown provenance"
+    }
+  ]
+}
