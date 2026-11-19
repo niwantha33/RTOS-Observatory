@@ -290,6 +290,7 @@ bool Workspace::open_snapshot_receipt(const std::string& path) {
         error_.clear();
         return true;
     } catch(const std::exception& e) {
+        snapshot_receipt_.reset(); // never show a previously accepted receipt for a failed import
         error_=e.what();
         return false;
     }
