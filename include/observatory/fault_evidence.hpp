@@ -48,6 +48,14 @@ struct FaultThread {
     std::optional<std::uint64_t> reported_stack_used_bytes;
     std::size_t line{};
 };
+struct FaultHeap {
+    std::string name;
+    std::uint64_t address{};
+    std::uint64_t size{};
+    std::optional<std::uint64_t> reported_used_bytes;
+    std::optional<std::uint64_t> reported_peak_bytes;
+    std::size_t line{};
+};
 struct FaultRegister {
     std::string context;
     std::string name;
@@ -75,6 +83,7 @@ struct FaultSnapshot {
     bool claims_coherent{false}; // self-declared, NOT independently verified
     std::vector<FaultRegion> regions;
     std::vector<FaultThread> threads;
+    std::vector<FaultHeap> heaps;
     std::vector<FaultRegister> registers;
     std::vector<FaultMarker> markers;
     std::vector<FaultMemory> memory;
@@ -183,7 +192,7 @@ inline FaultSnapshot parse_fault_snapshot(std::istream& input, FaultLimits limit
     FaultSnapshot s;
     std::size_t raw_bytes=0,line_no=0,memory_bytes=0;
     bool header=false;
-    std::set<std::string> thread_ids,region_ids;
+    std::set<std::string> thread_ids,region_ids,heap_ids;
     std::set<std::pair<std::string,std::string>> register_ids;
     auto parse_line=[&](std::string line) {
         ++line_no;
@@ -247,6 +256,19 @@ inline FaultSnapshot parse_fault_snapshot(std::istream& input, FaultLimits limit
                 throw Error("W12 invalid TCB or stack allocation range");
             if(thread.observed_sp)fault_detail::width(*thread.observed_sp,s.address_bits,line_no);
             s.threads.push_back(std::move(thread));
+        } else if (f[0]=="HEAP") {
+            expect(6);
+            if(s.heaps.size()>=limits.max_threads)
+                throw Error("W12 heap metadata limit reached");
+            fault_detail::token(f[1],line_no);
+            if(!heap_ids.insert(f[1]).second)throw Error("W12 duplicate heap");
+            FaultHeap heap{f[1],fault_detail::hex(f[2],line_no),
+                fault_detail::hex(f[3],line_no),
+                fault_detail::optional_hex(f[4],line_no),
+                fault_detail::optional_hex(f[5],line_no),line_no};
+            if(!fault_detail::range_ok(heap.address,heap.size,s.address_bits))
+                throw Error("W12 invalid heap range");
+            s.heaps.push_back(std::move(heap));
         } else if (f[0]=="REG") {
             expect(5);
             if(s.registers.size()>=limits.max_registers)throw Error("W12 register limit reached");
@@ -312,7 +334,7 @@ inline FaultView analyze_fault_snapshot(const FaultSnapshot& s, FaultLimits limi
     if(!limits.max_findings)throw Error("W12 finding limit must be positive");
     FaultView out;
     out.claimed_coherent=s.claims_coherent;
-    out.examined_records=s.regions.size()+s.threads.size()+s.registers.size()+
+    out.examined_records=s.regions.size()+s.threads.size()+s.heaps.size()+s.registers.size()+
                          s.markers.size()+s.memory.size();
     auto add=[&](std::string code,std::string subject,std::string message,
                  std::vector<std::size_t> lines,
@@ -342,10 +364,12 @@ inline FaultView analyze_fault_snapshot(const FaultSnapshot& s, FaultLimits limi
             add("STACK_OUTSIDE_DECLARED_RAM",thread.name,
                 "Recorded stack allocation not fully covered by a declared RAM region",
                 {thread.line},thread.stack_address);
-        if(thread.observed_sp && !fault_detail::range_ok(thread.stack_address,thread.stack_size,
-                                                        s.address_bits))
-            continue;
-        if(thread.observed_sp && *thread.observed_sp!=thread.stack_address+thread.stack_size &&
+        const bool sp_at_empty_top =
+            thread.observed_sp &&
+            thread.stack_size <= std::numeric_limits<std::uint64_t>::max()-
+                                  thread.stack_address &&
+            *thread.observed_sp==thread.stack_address+thread.stack_size;
+        if(thread.observed_sp && !sp_at_empty_top &&
            (*thread.observed_sp<thread.stack_address ||
             *thread.observed_sp-thread.stack_address>=thread.stack_size))
             add("SP_OUTSIDE_RECORDED_STACK",thread.name,
@@ -358,7 +382,30 @@ inline FaultView analyze_fault_snapshot(const FaultSnapshot& s, FaultLimits limi
                 "Reported used bytes exceed recorded allocation; this is metadata disagreement",
                 {thread.line},thread.stack_address);
     }
+    for(const auto& heap:s.heaps) {
+        if(has_ram && !region_for(heap.address,heap.size,"ram"))
+            add("HEAP_OUTSIDE_DECLARED_RAM",heap.name,
+                "Recorded heap range is not contained in declared RAM; map may be incomplete",
+                {heap.line},heap.address);
+        if(heap.reported_used_bytes && *heap.reported_used_bytes>heap.size)
+            add("HEAP_USAGE_INCONSISTENT",heap.name,
+                "Reported heap used bytes exceed declared capacity; metadata disagreement",
+                {heap.line},heap.address);
+        if(heap.reported_peak_bytes &&
+           (*heap.reported_peak_bytes>heap.size ||
+            (heap.reported_used_bytes &&
+             *heap.reported_peak_bytes<*heap.reported_used_bytes)))
+            add("HEAP_PEAK_INCONSISTENT",heap.name,
+                "Reported heap peak exceeds capacity or is below current used bytes; "
+                "no allocator corruption is proven",
+                {heap.line},heap.address);
+    }
     const bool cortex_m=s.architecture.starts_with("cortex-m") && s.address_bits==32;
+    const bool cortex_m_v8=s.architecture=="cortex-m23" ||
+                           s.architecture=="cortex-m33" ||
+                           s.architecture=="cortex-m35p" ||
+                           s.architecture=="cortex-m55" ||
+                           s.architecture=="cortex-m85";
     // The source supplies values; the analyzer does not invent a fault register
     // when its read failed, nor infer a register from a generic memory dump.
     for(const auto& reg:s.registers) {
@@ -389,13 +436,17 @@ inline FaultView analyze_fault_snapshot(const FaultSnapshot& s, FaultLimits limi
                 {5,"MLSPERR"},{7,"MMARVALID"},{8,"IBUSERR"},{9,"PRECISERR"},
                 {10,"IMPRECISERR"},{11,"UNSTKERR"},{12,"STKERR"},{13,"LSPERR"},
                 {15,"BFARVALID"},{16,"UNDEFINSTR"},{17,"INVSTATE"},
-                {18,"INVPC"},{19,"NOCP"},{20,"STKOF"},{24,"UNALIGNED"},
+                {18,"INVPC"},{19,"NOCP"},{24,"UNALIGNED"},
                 {25,"DIVBYZERO"}
             };
             static constexpr struct { unsigned bit; const char* meaning; } hfsr_bits[]={
                 {1,"VECTTBL"},{30,"FORCED"},{31,"DEBUGEVT"}
             };
             if(reg.name=="CFSR") {
+                if(cortex_m_v8 && (*reg.value & (UINT64_C(1)<<20))!=0)
+                    add("CORTEX_M_CFSR_BIT",reg.context,
+                        "Recorded Armv8-M CFSR flag: STKOF; verify exception and stack limit context",
+                        {reg.line},reg.value);
                 for(const auto& item:cfsr_bits)
                     if((*reg.value & (UINT64_C(1)<<item.bit))!=0)
                         add("CORTEX_M_CFSR_BIT",reg.context,
