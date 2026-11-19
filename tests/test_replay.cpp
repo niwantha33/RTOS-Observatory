@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "observatory/replay.hpp"
+#include "observatory/graph.hpp"
 #include <cassert>
 #include <iostream>
 using namespace observatory;
@@ -26,6 +27,12 @@ int main() {
     assert(acquired.resources[0].kind==ReplayResourceKind::Acquired);
     assert(acquired.resources[0].last_owner=="Low");
     assert(acquired.waits.size()==1 && acquired.waits[0].active);
+    // Graph must not show later same-timestamp events beyond a replay cursor.
+    auto concurrent = d;
+    concurrent.capture.events[3] = {2,"WAIT_BEGIN","Mid","queue:Q",0,4};
+    const auto precise = build_causal_graph(concurrent,0,2,{},GraphLimits{},2);
+    const auto all_at_time = build_causal_graph(concurrent,0,2);
+    assert(precise.edges.size()==6 && all_at_time.edges.size()==9);
     const auto equal_time = replay_at(d,3);
     assert(equal_time.timestamp_us==2 && equal_time.waits[0].active);
     const auto released = replay_at(d,4);
