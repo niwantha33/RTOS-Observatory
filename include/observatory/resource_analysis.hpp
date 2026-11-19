@@ -125,6 +125,7 @@ inline ResourceView analyze_resource_observations(const DecodedTrace& trace,
     const auto& events = trace.capture.events;
     const auto scan_count = std::min(events.size(), limits.max_events_scanned);
     for (std::size_t i = 0; i < scan_count; ++i) {
+        ++out.examined_events;
         const auto& e = events[i];
         if (e.type == "DROP" || (e.type == "SESSION" && i != 0)) {
             loss_seen = true;
@@ -252,7 +253,6 @@ inline ResourceView analyze_resource_observations(const DecodedTrace& trace,
             out.observations.push_back(std::move(obs));
         else out.limited = true;
     }
-    out.examined_events = scan_count;
     if (events.size() > scan_count) out.limited = true;
     for (const auto& [key, wait] : pending) {
         (void)wait;
