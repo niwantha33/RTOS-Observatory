@@ -117,6 +117,8 @@ int main(int argc, char** argv) {
     bool smoke_symbols=false;
     bool smoke_bridge=false;
     bool smoke_snapshot=false;
+    bool smoke_live=false;
+    std::string live_binary_path;
     std::string snapshot_path;
     std::string bridge_status_path;
     std::string symbol_manifest, symbol_elf, symbol_root;
@@ -156,7 +158,20 @@ int main(int argc, char** argv) {
                   "  --snapshot-receipt FILE  Open unverified W15 saved reads\n"
                   "  --smoke-snapshot FILE  Headless W15 receipt model smoke\n"
                   "  --smoke-ui-snapshot FILE  Hidden W15 snapshot receipts panel smoke\n"
+                  "  --live FILE  Follow a local W18 binary .rtob spool\n"
+                  "  --smoke-live FILE  Headless live session/epoch model smoke\n"
+                  "  --smoke-ui-live FILE  Hidden W18 live arrival lanes UI smoke\n"
                   "Drag a trace file onto the window or enter a filename in the sidebar.");
+        return 0;
+    }
+    if(argc>=3 && std::string_view(argv[1])=="--smoke-live") {
+        if(!workspace.open_live_file(argv[2]) || !workspace.live_session() ||
+           workspace.live_session()->status().total_events!=3u ||
+           workspace.live_session()->epochs().size()!=2u) {
+            std::fprintf(stderr,"W18 live model smoke failed\n");
+            return 3;
+        }
+        std::puts("W18 synthetic live epoch model smoke passed");
         return 0;
     }
     if(argc>=3 && std::string_view(argv[1])=="--smoke") {
@@ -260,7 +275,12 @@ int main(int argc, char** argv) {
         std::puts("W12 offline stack, TCB, fault and memory evidence smoke passed");
         return 0;
     }
-    if(argc>=3 && (std::string_view(argv[1])=="--snapshot-receipt" ||
+    if(argc>=3 && (std::string_view(argv[1])=="--live" ||
+                   std::string_view(argv[1])=="--smoke-ui-live")) {
+        live_binary_path=argv[2];
+        smoke_live=std::string_view(argv[1])=="--smoke-ui-live";
+        smoke_ui=smoke_live;
+    } else if(argc>=3 && (std::string_view(argv[1])=="--snapshot-receipt" ||
                    std::string_view(argv[1])=="--smoke-ui-snapshot")) {
         snapshot_path=argv[2];
         smoke_snapshot=std::string_view(argv[1])=="--smoke-ui-snapshot";
@@ -327,6 +347,10 @@ int main(int argc, char** argv) {
             workspace.error().c_str());
         return 2;
     }
+    if(!live_binary_path.empty() && !workspace.open_live_file(live_binary_path)) {
+        std::fprintf(stderr,"Cannot open W18 binary spool\n");
+        return 2;
+    }
     if(!snapshot_path.empty() && !workspace.open_snapshot_receipt(snapshot_path)) {
         std::fprintf(stderr,"Cannot load W15 snapshot receipt: %s\n",
             workspace.error().c_str());
@@ -334,6 +358,7 @@ int main(int argc, char** argv) {
     }
     if (smoke_causal) workspace.show_causality();
     if (smoke_snapshot) workspace.show_snapshot_receipt();
+    if (smoke_live) workspace.show_live_trace();
     if (smoke_bridge) workspace.show_debug_bridge();
     if (smoke_symbols) workspace.show_source_graph();
     if (smoke_fault) workspace.show_faults();
@@ -394,7 +419,8 @@ int main(int argc, char** argv) {
     glfwTerminate();
     if(smoke_ui) {
         std::printf("Desktop font: %s\n",font_name.c_str());
-        std::puts(smoke_snapshot ? "W15 unverified snapshot receipt UI smoke passed" :
+        std::puts(smoke_live ? "W18 live trace epoch UI smoke passed" :
+                  smoke_snapshot ? "W15 unverified snapshot receipt UI smoke passed" :
                   smoke_bridge ? "W14 passive DSF bridge UI smoke passed" :
                   smoke_symbols ? "W13 verified source graph UI smoke passed" :
                   smoke_causal ? "W11 causal panel UI smoke passed" :
