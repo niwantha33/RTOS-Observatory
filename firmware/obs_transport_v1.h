@@ -2,6 +2,8 @@
 #ifndef OBS_TRANSPORT_V1_H
 #define OBS_TRANSPORT_V1_H
 #include "obs_wire_v1.h"
+// The atomic recorder is opaque to host-side C++ transport consumers.
+typedef struct obs_recorder_t obs_recorder_t;
 
 #ifdef __cplusplus
 extern "C" {
