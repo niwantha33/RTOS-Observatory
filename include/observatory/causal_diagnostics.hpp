@@ -75,7 +75,7 @@ inline CausalView analyze_causal_patterns(const DecodedTrace& trace, const Repor
         const auto& e = events[i];
         if (e.type == "SWITCH_IN" || e.type == "SWITCH_OUT" ||
             e.type == "TASK_RELEASE" || e.type == "TASK_BEGIN")
-            source.try_emplace({e.type,e.task,e.object,e.timestamp_us},i);
+            source.try_emplace(EventKey{e.type,e.task,e.object,e.timestamp_us},i);
     }
     auto at = [&](const std::string& kind, const std::string& task,
                   const std::string& object, std::uint64_t time)
