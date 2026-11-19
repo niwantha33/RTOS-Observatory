@@ -144,7 +144,14 @@ inline SnapshotCapture parse_snapshot_receipt(std::istream& input,
             throw Error("W15 receipt: 16 KiB file cap");
         if(c=='\n'){parse(pending);pending.clear();}
         else {
-            if(c=='\r' || c=='\0' || pending.size()>=1024)
+            // Permit CRLF fixture checkouts on Windows but not bare or
+            // embedded CR; do not let conversion bypass the LF terminator.
+            if(c=='\r') {
+                if(input.peek()!='\n')
+                    throw Error("W15 receipt: embedded or unterminated CR");
+                continue;
+            }
+            if(c=='\0' || pending.size()>=1024)
                 throw Error("W15 receipt: invalid control/line too long");
             pending.push_back(c);
         }
