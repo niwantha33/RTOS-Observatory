@@ -12,6 +12,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -352,12 +353,23 @@ inline SourceExcerpt read_verified_source_excerpt(const SourceIndex& index,
     const auto it=verified.verified_sources.find(f.path);
     if(it==verified.verified_sources.end())
         throw Error("Source checksum unknown/mismatch: refusing source navigation");
-    // Rehash on click to reject source-file changes since the import.
-    if(symbol_detail::file_sha256(it->second,limits.max_source_bytes)!=
-       index.source_sha256.at(f.path))
+    // Read once into a bounded buffer, hash THESE SAME bytes and only then
+    // expose lines. A separate pre-read hash would create a TOCTOU window.
+    std::ifstream file(it->second,std::ios::binary);
+    if(!file)throw Error("Source file no longer readable");
+    std::string contents;
+    std::array<char,8192> buffer{};
+    while(file.read(buffer.data(),static_cast<std::streamsize>(buffer.size())) ||
+          file.gcount()>0) {
+        const auto n=static_cast<std::size_t>(file.gcount());
+        if(n>limits.max_source_bytes-contents.size())
+            throw Error("Source file exceeded the preview byte budget");
+        contents.append(buffer.data(),n);
+    }
+    if(!file.eof())throw Error("Verified source file read failed");
+    if(hash_detail::sha256(contents)!=index.source_sha256.at(f.path))
         throw Error("Source file changed since import: refusing source navigation");
-    std::ifstream in(it->second,std::ios::binary);
-    if(!in)throw Error("Source file no longer readable");
+    std::istringstream in(contents);
     SourceExcerpt out;
     out.path=f.path;
     out.target_line=f.line;
