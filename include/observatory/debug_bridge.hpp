@@ -169,13 +169,14 @@ public:
         if(!out.fresh)
             out.warnings.emplace_back("Stale/future publisher timestamp: current target state unknown");
         if(!last_) {
-            if(input.sequence!=1 || input.state!=BridgeState::Attached) {
-                out.status="no-initial-attach";
-                out.warnings.emplace_back("Initial W14 record must be ATTACHED, sequence 1");
-                return out;
-            }
+            // A newly opened Observatory can attach after Eclipse has already
+            // published multiple status snapshots. Accept the latest sample,
+            // but do not invent the missed lifecycle transitions.
             out.accepted=true;
-            out.transition_known=true;
+            out.transition_known=(input.sequence==1 &&
+                                  input.state==BridgeState::Attached);
+            if(!out.transition_known)
+                out.warnings.emplace_back("Initial attach transition was not observed; prior state unknown");
         } else {
             const auto& previous=*last_;
             if(input.session_nonce!=previous.session_nonce ||
@@ -186,6 +187,14 @@ public:
                 out.status="session-changed";
                 out.warnings.emplace_back(
                     "Session/epoch identity changed: clear old bridge before accepting new ownership");
+                return out;
+            }
+            if(input.sequence==previous.sequence &&
+               input.writer_unix_ms==previous.writer_unix_ms &&
+               input.state==previous.state) {
+                out.accepted=true;
+                out.transition_known=false; // unchanged; no new transition witnessed
+                out.status=out.fresh ? "unchanged-recent" : "unchanged-stale";
                 return out;
             }
             if(input.sequence<=previous.sequence ||
