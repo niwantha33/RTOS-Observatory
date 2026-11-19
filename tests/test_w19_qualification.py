@@ -9,17 +9,30 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import struct
+import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import w19_qualification as w  # noqa: E402
 
 
+def demo_wire():
+    event = struct.pack("<QIIHHIHH", 1000, 42, 7, 1, 0, 1, 0, 1)
+    stats = struct.pack("<HHIIIII", 0, 0, 50, 1, 3, 2, 0)
+    def frame(kind, index, payload):
+        header = struct.pack("<4sBBHII", b"RTOB", 1, kind,
+                             len(payload), 1, index)
+        return header + payload + struct.pack("<I", zlib.crc32(header+payload))
+    return frame(1,1,event)+frame(2,2,stats)
+
+
 def demo(root):
     evidence = []
     for kind in sorted(w.REQUIRED_ATTACHMENTS):
         path = root / (kind + ".txt")
-        raw = (kind + ": synthetic-only\n").encode()
+        raw = demo_wire() if kind == "raw_trace" else (
+            kind + ": synthetic-only\n").encode()
         path.write_bytes(raw)
         evidence.append({
             "kind": kind, "path": path.name,
@@ -45,9 +58,9 @@ def demo(root):
             "cpu_hz": 32000000,
             "baseline_cycles": [100, 110, 120],
             "instrumented_cycles": [130, 150, 165],
-            "observed_events": 50,
+            "observed_events": 1,
             "elapsed_ms": 1000,
-            "wire_bytes": 2400,
+            "wire_bytes": len(demo_wire()),
             "full_drops": 3,
             "busy_drops": 2,
             "ram_bytes": 512,
@@ -77,8 +90,11 @@ def main():
         assert n["samples"] == 3
         assert n["paired_overhead_cycles_median"] == 40
         assert abs(n["paired_overhead_us_median"]-1.25) < 1e-9
-        assert n["observed_event_rate_per_s"] == 50
-        assert n["observed_wire_bytes_per_s"] == 2400
+        assert n["observed_event_rate_per_s"] == 1
+        assert n["observed_wire_bytes_per_s"] == 92
+        assert report["validated_wire_observations"]["frames"] == 2
+        assert report["validated_wire_observations"]["events"] == 1
+        assert report["validated_wire_observations"]["tail_loss_unknown"]
         assert n["declared_full_drops"] == 3
         assert n["declared_busy_drops"] == 2
 
@@ -104,6 +120,21 @@ def main():
         invalid = copy.deepcopy(source)
         invalid["measurement"]["instrumented_cycles"] = [1, 2, 3, 4]
         refuses(root, invalid)
+
+        invalid = copy.deepcopy(source)
+        invalid["measurement"]["observed_events"] = 99
+        refuses(root, invalid)
+
+        invalid = copy.deepcopy(source)
+        invalid["measurement"]["wire_bytes"] = 0
+        refuses(root, invalid)
+
+        # A discrepancy in noncoherent firmware-drop reports downgrades
+        # readiness rather than inventing complete loss accounting.
+        invalid = copy.deepcopy(source)
+        invalid["measurement"]["full_drops"] = 99
+        assert "unreconciled_drop_counter_claims" in (
+            w.summarize(invalid,root)["missing_evidence"])
 
         invalid = copy.deepcopy(source)
         invalid["measurement"]["cpu_hz"] = True
@@ -179,6 +210,20 @@ def main():
         )
         assert checksum.returncode == 2
         assert "SHA256 mismatch" in checksum.stderr
+
+        # Even if a corrupted raw trace is rehashed into the manifest,
+        # the independent binary CRC check must still reject it.
+        raw_trace = root / "raw_trace.txt"
+        good_trace = raw_trace.read_bytes()
+        tampered = bytearray(good_trace)
+        tampered[25] ^= 0x20
+        raw_trace.write_bytes(tampered)
+        forged = copy.deepcopy(source)
+        next(item for item in forged["attachments"]
+             if item["kind"] == "raw_trace")["sha256"] = (
+                 hashlib.sha256(tampered).hexdigest())
+        refuses(root, forged)
+        raw_trace.write_bytes(good_trace)
 
         # The manifest itself is bounded and cannot be a symlink.
         large = root / "oversized.json"
