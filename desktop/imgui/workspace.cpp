@@ -71,6 +71,7 @@ Workspace::Workspace() {
     std::snprintf(symbol_source_root_.data(), symbol_source_root_.size(), "%s", ".");
     std::snprintf(bridge_file_path_.data(),bridge_file_path_.size(),"%s","rtos-observatory-dsf-status.tsv");
     std::snprintf(snapshot_receipt_path_.data(),snapshot_receipt_path_.size(),"%s","examples/approved-snapshot.tsv");
+    std::snprintf(live_file_path_.data(),live_file_path_.size(),"%s","capture.rtob");
 }
 void Workspace::recent(const std::string& path, const std::string& decoder, bool session) {
     recents_.erase(std::remove_if(recents_.begin(), recents_.end(),
@@ -295,6 +296,64 @@ bool Workspace::open_snapshot_receipt(const std::string& path) {
         return false;
     }
 }
+bool Workspace::open_live_file(const std::string& path) {
+    try {
+        const auto file=file_path(path);
+        if(path.empty() || std::filesystem::is_symlink(file) ||
+           !std::filesystem::is_regular_file(file))
+            throw Error("W18 requires an existing local, non-symlink binary spool");
+        if(std::filesystem::file_size(file)>64u*1024u*1024u)
+            throw Error("W18 spool exceeds 64 MiB bounded session");
+        std::optional<LiveSession> fresh(std::in_place);
+        live_session_=std::move(fresh);
+        live_file_offset_=0;
+        live_follow_=true;
+        live_error_.clear();
+        std::snprintf(live_file_path_.data(),live_file_path_.size(),"%s",path.c_str());
+        page_=Page::LiveTrace;
+        return poll_live_file();
+    } catch(const std::exception& e) {
+        live_error_=e.what();
+        live_follow_=false;
+        live_session_.reset();
+        return false;
+    }
+}
+bool Workspace::poll_live_file() {
+    if(!live_session_)return false;
+    try {
+        const auto file=file_path(live_file_path_.data());
+        if(std::filesystem::is_symlink(file) ||
+           !std::filesystem::is_regular_file(file))
+            throw Error("W18 spool disappeared or became a symlink");
+        const auto total=std::filesystem::file_size(file);
+        if(total<live_file_offset_)
+            throw Error("W18 spool truncated/replaced: stop and open a new epoch capture");
+        if(total==live_file_offset_)return true;
+        constexpr std::uint64_t max_spool=64u*1024u*1024u;
+        if(total>max_spool)
+            throw Error("W18 spool exceeded 64 MiB");
+        std::ifstream input(file,std::ios::binary);
+        if(!input)throw Error("W18 spool unavailable");
+        input.seekg(static_cast<std::streamoff>(live_file_offset_));
+        if(!input)throw Error("W18 spool seek failed");
+        std::array<std::uint8_t,16384> buffer{};
+        const auto desired=std::min<std::uint64_t>(total-live_file_offset_,
+                                                    buffer.size());
+        input.read(reinterpret_cast<char*>(buffer.data()),
+                   static_cast<std::streamsize>(desired));
+        const auto received=input.gcount();
+        if(received!=static_cast<std::streamsize>(desired))
+            throw Error("W18 spool changed during bounded read");
+        live_session_->feed(buffer.data(),static_cast<std::size_t>(received));
+        live_file_offset_+=static_cast<std::uint64_t>(received);
+        return true;
+    } catch(const std::exception& e) {
+        live_error_=e.what();
+        live_follow_=false;
+        return false;
+    }
+}
 bool Workspace::export_report(const std::string& path) {
     try {
         controller_.export_report(file_path(path));
@@ -304,7 +363,8 @@ bool Workspace::export_report(const std::string& path) {
     } catch (const std::exception& e) { error_ = e.what(); return false; }
 }
 void Workspace::accept_drop(const std::string& path) {
-    if (path.ends_with(".fault.tsv") || path.ends_with("fault-snapshot.tsv"))
+    if (path.ends_with(".rtob")) (void)open_live_file(path);
+    else if (path.ends_with(".fault.tsv") || path.ends_with("fault-snapshot.tsv"))
         (void)open_fault_snapshot(path);
     else if (std::filesystem::is_directory(file_path(path))) (void)open_session(path);
     else (void)open_trace(path, legacy_decoder_ ? "legacy-tsv" : "universal-v1");
@@ -349,6 +409,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Open C/C++/Rust symbol index...")) page_=Page::SourceGraph;
         if(ImGui::MenuItem("Inspect Eclipse DSF bridge status...")) page_=Page::DebugBridge;
         if(ImGui::MenuItem("Open approved snapshot receipt...")) page_=Page::Snapshot;
+        if(ImGui::MenuItem("Follow W18 binary trace spool...")) page_=Page::LiveTrace;
         if(ImGui::BeginMenu("Recent files",!recents_.empty())) {
             for(std::size_t i=0;i<recents_.size();++i) {
                 ImGui::PushID(static_cast<int>(i));
@@ -382,8 +443,8 @@ void Workspace::draw_menus() {
             constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
                 "Causal graph","Time-travel replay","Scheduling diagnostics",
                 "Resources and waits","Causal diagnostics","Fault & memory","Source/symbol graph",
-                "Debugger lifecycle","Approved snapshot receipts","Events","Findings","Evidence details"};
-            for(int i=0;i<15;++i)
+                "Debugger lifecycle","Approved snapshot receipts","Live trace epochs","Events","Findings","Evidence details"};
+            for(int i=0;i<16;++i)
                 if(ImGui::MenuItem(names[i],nullptr,static_cast<int>(page_)==i))
                     page_=static_cast<Page>(i);
             ImGui::EndMenu();
@@ -419,6 +480,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Source/symbol graph")) page_=Page::SourceGraph;
         if(ImGui::MenuItem("Debugger lifecycle (passive)")) page_=Page::DebugBridge;
         if(ImGui::MenuItem("Snapshot receipts (read-only)")) page_=Page::Snapshot;
+        if(ImGui::MenuItem("Live trace epochs (binary spool)")) page_=Page::LiveTrace;
         if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
@@ -506,14 +568,15 @@ void Workspace::draw_sidebar() {
     if (ImGui::Button("Source/symbol map...", ImVec2(-1, 0))) page_=Page::SourceGraph;
     if (ImGui::Button("Debugger lifecycle...", ImVec2(-1, 0))) page_=Page::DebugBridge;
     if (ImGui::Button("Snapshot receipts...", ImVec2(-1, 0))) page_=Page::Snapshot;
+    if (ImGui::Button("Live trace epochs...", ImVec2(-1, 0))) page_=Page::LiveTrace;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
     header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
                                       "Causal graph", "Time-travel replay", "Scheduling diagnostics",
                                       "Resources and waits", "Causal diagnostics", "Fault & memory",
                                       "Source/symbol graph", "Debugger lifecycle", "Approved snapshot receipts",
-                                      "Events", "Findings", "Evidence details"};
-    for (int i=0; i<15; ++i) {
+                                      "Live trace epochs", "Events", "Findings", "Evidence details"};
+    for (int i=0; i<16; ++i) {
         if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
                               ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
@@ -1782,6 +1845,126 @@ void Workspace::draw_snapshot_receipt() {
     ImGui::TextDisabled("Memory permissions, probe health and target/firmware identities require ZEW qualification.");
 }
 
+void Workspace::draw_live_trace() {
+    header("W18 Live trace epochs / observed arrivals");
+    ImGui::TextColored(ImVec4(1.f,.75f,.43f,1.f),
+        "Source is an unverified local binary spool — not a live debugger or CPU trace.");
+    ImGui::TextDisabled("Launch an owned TCP receiver with --spool NEW_FILE, then open that file here.");
+    ImGui::TextDisabled("No target halt/probe connection. Unknown task/ISR meanings are NOT interpreted.");
+    ImGui::SetNextItemWidth(550.f);
+    ImGui::InputText("Binary .rtob file",live_file_path_.data(),live_file_path_.size());
+    if(ImGui::Button("Open / restart"))
+        (void)open_live_file(live_file_path_.data());
+    ImGui::SameLine();
+    if(ImGui::Button("Poll now"))
+        (void)poll_live_file();
+    ImGui::SameLine();
+    ImGui::Checkbox("Follow file", &live_follow_);
+    if(!live_error_.empty())
+        ImGui::TextColored(ImVec4(1.f,.48f,.38f,1.f),"%s",live_error_.c_str());
+    if(!live_session_) {
+        ImGui::TextDisabled("No file opened. This panel has no automatic network, RTT or GDB access.");
+        return;
+    }
+    const auto& live=*live_session_;
+    const auto& state=live.status();
+    const auto& decoder=live.wire();
+    ImGui::Text("Read: %llu bytes | %llu frames | %llu observed events | %zu epochs",
+        static_cast<unsigned long long>(state.consumed_bytes),
+        static_cast<unsigned long long>(state.accepted_frames),
+        static_cast<unsigned long long>(state.total_events),live.epochs().size());
+    if(state.waiting_for_frame)
+        ImGui::TextDisabled("Waiting for remaining bytes of partial frame (not yet accepted)");
+    if(state.incomplete)
+        ImGui::TextColored(ImVec4(1.f,.74f,.43f,1.f),
+            "INCOMPLETE / UNKNOWN: losses, corruption or bounded history");
+    else
+        ImGui::TextDisabled("No detected error yet. Unseen trailing events may still be missing.");
+    ImGui::Text("CRC %u | Invalid %u | Replay %u | Frame gaps %u | Attempt gaps %u | Pruned %llu",
+        decoder.crc_errors,decoder.invalid_frames,decoder.replayed_frames,
+        decoder.missing_frames,decoder.missing_attempts,
+        static_cast<unsigned long long>(state.history_pruned));
+    if(decoder.loss_saturated)
+        ImGui::TextDisabled("Loss counter saturated; precise total is unknown");
+    if(!live.epochs().empty()) {
+        const auto& epoch=live.epochs().back();
+        ImGui::SeparatorText("User-supplied clock calibration (current epoch ONLY)");
+        ImGui::Text("Epoch %u — raw timestamp ticks, clock rate unknown until you apply it",
+            epoch.id);
+        ImGui::SetNextItemWidth(200.f);
+        ImGui::InputScalar("Ticks/second",ImGuiDataType_U32,&live_ticks_per_second_);
+        ImGui::SameLine();
+        if(ImGui::Button("Apply to current epoch")) {
+            if(!epoch.first_tick ||
+               !live_session_->set_clock({epoch.id,*epoch.first_tick,0u,
+                                         live_ticks_per_second_}))
+                live_error_="Invalid clock rate; requires actual board timing evidence";
+            else live_error_.clear();
+        }
+        ImGui::TextDisabled("Times then mean elapsed microseconds since first OBSERVED event, not wall time.");
+    }
+    if(ImGui::BeginTable("W18 epochs",5,table_flags,ImVec2(0,115.f))) {
+        for(const char* title:{"Epoch","Frames","Events","Stats","Integrity"})
+            ImGui::TableSetupColumn(title);
+        ImGui::TableHeadersRow();
+        for(const auto& epoch:live.epochs()) {
+            ImGui::TableNextRow();
+            cell(std::to_string(epoch.id));
+            cell(std::to_string(epoch.frames));
+            cell(std::to_string(epoch.events));
+            cell(std::to_string(epoch.stats));
+            cell(epoch.gap_seen || epoch.bad_evidence ? "INCOMPLETE" : "UNVERIFIED");
+        }
+        ImGui::EndTable();
+    }
+    header("Observed arrival order — NOT CPU execution/occupancy");
+    const auto& recent=live.recent();
+    const auto count=std::min<std::size_t>(recent.size(),120u);
+    const float width=std::max(200.f,ImGui::GetContentRegionAvail().x);
+    const ImVec2 origin=ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton("W18 arrival order",ImVec2(width,130.f));
+    auto* canvas=ImGui::GetWindowDrawList();
+    const float left=origin.x+48.f,right=origin.x+width-15.f;
+    for(unsigned lane=0;lane<4;++lane) {
+        const float y=origin.y+18.f+lane*28.f;
+        canvas->AddLine(ImVec2(left,y),ImVec2(right,y),
+                        IM_COL32(84,95,114,140));
+        const char* name=lane==0?"L0":lane==1?"L1":lane==2?"L2":"L3";
+        canvas->AddText(ImVec2(origin.x+4.f,y-8.f),IM_COL32(194,204,218,255),name);
+    }
+    for(std::size_t i=0;i<count;++i) {
+        const auto& p=recent[recent.size()-count+i];
+        if(p.event.lane>=4u)continue; // table below covers all 32 lanes
+        const float x=left+(right-left)*(count<=1u ? 0.5f :
+                            static_cast<float>(i)/static_cast<float>(count-1u));
+        const float y=origin.y+18.f+p.event.lane*28.f;
+        canvas->AddCircleFilled(ImVec2(x,y),3.5f,
+            p.gap_before?IM_COL32(255,162,88,255):IM_COL32(93,194,241,255));
+    }
+    ImGui::TextDisabled("Dots are arrival order. Lanes 4–31 appear in the table only.");
+    if(ImGui::BeginTable("W18 recent events",7,table_flags,ImVec2(0,300.f))) {
+        for(const char* title:{"Epoch","Wire #","Lane","Core ID","Event ID","Task ID","Ticks / elapsed us"})
+            ImGui::TableSetupColumn(title);
+        ImGui::TableHeadersRow();
+        const auto visible=std::min<std::size_t>(recent.size(),150u);
+        for(std::size_t i=0;i<visible;++i) {
+            const auto& item=recent[recent.size()-1u-i];
+            ImGui::TableNextRow();
+            cell(std::to_string(item.epoch));
+            cell(std::to_string(item.frame_sequence));
+            cell(std::to_string(item.event.lane));
+            cell(std::to_string(item.event.event.core_id));
+            cell(std::to_string(item.event.event.event_type));
+            cell(std::to_string(item.event.event.task_id));
+            const auto converted=live.tick_us(item.epoch,item.event.event.timestamp);
+            cell(std::to_string(item.event.event.timestamp)+
+                 (converted ? " / "+std::to_string(*converted) : " / unknown"));
+        }
+        ImGui::EndTable();
+    }
+    ImGui::TextDisabled("W16 numeric event IDs need board/RTOS adapter metadata before CPU load or scheduler inference.");
+}
+
 void Workspace::draw_findings() {
     if(!controller_.loaded()) return;
     header("Observed findings");
@@ -1829,6 +2012,7 @@ void Workspace::draw_evidence() {
     ImGui::TextDisabled("Offline normalized evidence only. No live target connection or raw CTF adapter.");
 }
 void Workspace::draw() {
+    if(live_follow_ && live_session_) (void)poll_live_file();
     const auto* viewport=ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -1872,6 +2056,7 @@ void Workspace::draw() {
       case Page::SourceGraph: draw_source_graph();break;
       case Page::DebugBridge: draw_debug_bridge();break;
       case Page::Snapshot: draw_snapshot_receipt();break;
+      case Page::LiveTrace: draw_live_trace();break;
       case Page::Events: draw_events();break;
       case Page::Findings: draw_findings();break;
       case Page::Evidence: draw_evidence();break;
