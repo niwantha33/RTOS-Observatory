@@ -86,6 +86,7 @@ inline DiagnosticsView analyze_scheduling(
     std::map<std::string, TaskDiagnostic> summaries;
     std::map<std::string, std::uint64_t> periods;
     std::map<std::string, std::uint64_t> last_release;
+    std::map<std::string, std::optional<std::size_t>> last_release_event;
     for (const auto& thread : report.threads) {
         summaries[thread.id].task = thread.id;
         if (thread.period_us && *thread.period_us) periods[thread.id] = *thread.period_us;
@@ -131,11 +132,14 @@ inline DiagnosticsView analyze_scheduling(
                         summary.max_abs_release_jitter_us = absolute;
                     emit({"RELEASE_JITTER",cycle.task,
                           "Signed difference between consecutive observed releases and declared period",
-                          prev->second,cycle.release_us,signed_delta,{},release,verified(release.has_value())});
+                          prev->second,cycle.release_us,signed_delta,
+                          last_release_event[cycle.task],release,
+                          verified(release.has_value() && last_release_event[cycle.task].has_value())});
                 }
             }
         }
         last_release[cycle.task] = cycle.release_us;
+        last_release_event[cycle.task] = release;
         if (cycle.phase_error_us) {
             summary.last_phase_drift_us = *cycle.phase_error_us;
             emit({"RELEASE_PHASE_DRIFT",cycle.task,
