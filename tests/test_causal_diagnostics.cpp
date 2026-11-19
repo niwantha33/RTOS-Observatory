@@ -60,6 +60,16 @@ int main() {
     assert(!find(analyze_causal_patterns(d,no_medium),"PRIORITY_INVERSION_EXECUTION_PATTERN"));
     auto short_wait=analyze_causal_patterns(d,report,60);
     assert(!find(short_wait,"LONG_COMPLETED_MUTEX_WAIT"));
+    auto priority_changed=d;
+    priority_changed.capture.events.insert(
+        priority_changed.capture.events.begin()+8,
+        {130,"PRIORITY","High","-",1,99});
+    const auto revised=analyze_causal_patterns(priority_changed,report);
+    assert(!find(revised,"PRIORITY_INVERSION_EXECUTION_PATTERN"));
+    auto late_medium=report;
+    late_medium.intervals = {{"Medium","core0","running",160,180}};
+    assert(!find(analyze_causal_patterns(d,late_medium),
+                 "PRIORITY_INVERSION_EXECUTION_PATTERN"));
     d.evidence.missing_events=2;
     const auto loss=analyze_causal_patterns(d,report);
     assert(!loss.evidence_complete);
