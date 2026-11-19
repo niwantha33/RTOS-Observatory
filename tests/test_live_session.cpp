@@ -80,8 +80,6 @@ int main(int argc,char** argv) {
     assert(session.recent().front().epoch==1);
     assert(session.recent().back().gap_before);
     assert(!session.status().waiting_for_frame);
-    session.finish();
-
     // Stats are retained without synthesizing scheduler/CPU measurements.
     obs_wire_stats_t stats{};
     stats.lane=3u;
@@ -93,6 +91,8 @@ int main(int argc,char** argv) {
     assert(session.status().total_stats==1);
     assert(session.lane_stats()[3].has_value());
     assert(session.lane_stats()[3]->counters.full_drops==4u);
+    session.finish();
+    assert(refuses([&] {session.feed(a.data(),1); }));
 
     // A fragmented final record is not claimed complete.
     LiveSession partial;
@@ -123,7 +123,8 @@ int main(int argc,char** argv) {
     assert(refuses([] {LiveSession bad(LiveLimits{1,0,1,1});}));
     assert(refuses([] {LiveSession bad(LiveLimits{1,1,0,1});}));
     assert(refuses([] {LiveSession bad(LiveLimits{1,1,1,0});}));
-    assert(refuses([&] {session.feed(nullptr,1);}));
+    LiveSession invalid_ptr;
+    assert(refuses([&] {invalid_ptr.feed(nullptr,1);}));
     // Reproducible, synthetic binary GUI/file-follow fixture. No hardware.
     if(argc>1) {
         const std::filesystem::path file(argv[1]);
