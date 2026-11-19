@@ -86,8 +86,8 @@ and Xvfb for headless UI tests:
 - Linux --smoke-ui runs one actual hidden GLFW/OpenGL+Dear ImGui frame under
   xvfb-run in CI; Windows/Linux Debug+Release CI must also pass.
 - Synthetic data cannot validate hardware timing or production live capture.
-- The historic Qt W05/W06 merged PRs remain recorded for audit; this branch
-  is the new intended implementation until reviewed and merged.
+- The historic Qt W05/W06 PRs remain recorded for audit. The Dear ImGui migration
+  (PR #14) and application shell/metadata (PR #16) are merged on main with CI.
 
 ## Desktop application shell and build metadata
 
