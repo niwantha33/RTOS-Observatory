@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+namespace observatory::build_info {
+inline constexpr const char* version = "@PROJECT_VERSION@";
+inline constexpr const char* commit = "@OBSERVATORY_GIT_COMMIT@";
+inline constexpr const char* configured_utc = "@OBSERVATORY_BUILD_UTC@";
+} // namespace observatory::build_info

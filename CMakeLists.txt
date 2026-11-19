@@ -133,10 +133,33 @@ if(OBSERVATORY_BUILD_DESKTOP)
   target_link_libraries(observatory_imgui PUBLIC glfw OpenGL::GL)
   target_compile_features(observatory_imgui PUBLIC cxx_std_20)
 
+  # Embed the actual source checkout and UTC configure timestamp in each binary.
+  # SOURCE_DATE_EPOCH is respected by CMake's string(TIMESTAMP) for reproducible builds.
+  find_package(Git QUIET)
+  set(OBSERVATORY_GIT_COMMIT "unknown")
+  if(GIT_FOUND)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --short=12 HEAD
+      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+      RESULT_VARIABLE OBSERVATORY_GIT_RESULT
+      OUTPUT_VARIABLE OBSERVATORY_GIT_OUTPUT
+      OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(OBSERVATORY_GIT_RESULT EQUAL 0 AND
+       OBSERVATORY_GIT_OUTPUT MATCHES "^[0-9a-fA-F]+$")
+      set(OBSERVATORY_GIT_COMMIT "${OBSERVATORY_GIT_OUTPUT}")
+    endif()
+  endif()
+  string(TIMESTAMP OBSERVATORY_BUILD_UTC "%Y-%m-%d %H:%M:%S UTC" UTC)
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/desktop/imgui/build_info.hpp.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/observatory_build_info.hpp" @ONLY)
+
   add_executable(rtos-observatory-desktop
     desktop/imgui/main.cpp
     desktop/imgui/workspace.cpp
     desktop/imgui/workspace.hpp)
+  target_include_directories(rtos-observatory-desktop PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_link_libraries(rtos-observatory-desktop PRIVATE
     observatory_desktop_model observatory_imgui)
   target_compile_features(rtos-observatory-desktop PRIVATE cxx_std_20)
@@ -164,6 +187,11 @@ if(OBSERVATORY_BUILD_DESKTOP)
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/foundation.trace)
     add_test(NAME observatory_desktop_timeline_smoke COMMAND rtos-observatory-desktop --smoke
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
+    if(Python3_Interpreter_FOUND)
+      add_test(NAME observatory_desktop_build_info COMMAND
+        ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_desktop_build_info.py
+        $<TARGET_FILE:rtos-observatory-desktop> ${PROJECT_VERSION})
+    endif()
     set_tests_properties(observatory_desktop_smoke observatory_desktop_timeline_smoke
       PROPERTIES TIMEOUT 30)
     # Linux CI xvfb-run provides a genuine hidden GLFW/OpenGL render smoke.

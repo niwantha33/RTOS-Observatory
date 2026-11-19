@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "workspace.hpp"
+#include "observatory_build_info.hpp"
 #include "imgui.h"
 #include <algorithm>
 #include <cctype>
@@ -147,12 +148,140 @@ void Workspace::zoom(bool in) {
     begin_us_=start; end_us_=start+next;
     update_timeline();
 }
+void Workspace::draw_menus() {
+    if(!ImGui::BeginMenuBar()) return;
+    if(ImGui::BeginMenu("File")) {
+        if(ImGui::MenuItem("Open trace...")) pending_open_=OpenDialog::Trace;
+        if(ImGui::MenuItem("Open indexed session...")) pending_open_=OpenDialog::Session;
+        if(ImGui::BeginMenu("Recent evidence",!recents_.empty())) {
+            for(std::size_t i=0;i<recents_.size();++i) {
+                ImGui::PushID(static_cast<int>(i));
+                const auto entry=recents_[i];
+                const auto filename=std::filesystem::path(entry.path).filename().string();
+                if(ImGui::MenuItem((filename.empty() ? entry.path : filename).c_str())) {
+                    if(entry.session) (void)open_session(entry.path);
+                    else (void)open_trace(entry.path,entry.decoder);
+                }
+                if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s",entry.path.c_str());
+                ImGui::PopID();
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::Separator();
+        if(ImGui::MenuItem("Export investigation report...",nullptr,false,loaded()))
+            export_dialog_requested_=true;
+        ImGui::Separator();
+        if(ImGui::MenuItem("Exit")) exit_requested_=true;
+        ImGui::EndMenu();
+    }
+    if(ImGui::BeginMenu("Settings")) {
+        ImGui::MenuItem("Legacy TSV decoder",nullptr,&legacy_decoder_);
+        ImGui::MenuItem("Compact spacing",nullptr,&compact_spacing_);
+        ImGui::TextDisabled("Changes apply to this run only");
+        ImGui::EndMenu();
+    }
+    if(ImGui::BeginMenu("Window")) {
+        ImGui::MenuItem("Show navigation",nullptr,&show_sidebar_);
+        if(ImGui::BeginMenu("Go to view")) {
+            constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
+                "Events","Findings","Evidence details"};
+            for(int i=0;i<6;++i)
+                if(ImGui::MenuItem(names[i],nullptr,static_cast<int>(page_)==i))
+                    page_=static_cast<Page>(i);
+            ImGui::EndMenu();
+        }
+        if(ImGui::MenuItem("Reset workspace view")) {
+            show_sidebar_=true;
+            page_=Page::Overview;
+            if(loaded()) fit();
+        }
+        ImGui::EndMenu();
+    }
+    if(ImGui::BeginMenu("Tools")) {
+        if(ImGui::MenuItem("Fit full timeline",nullptr,false,loaded())) {
+            fit();
+            page_=Page::Timeline;
+        }
+        if(ImGui::MenuItem("Zoom in",nullptr,false,loaded())) {
+            zoom(true);
+            page_=Page::Timeline;
+        }
+        if(ImGui::MenuItem("Zoom out",nullptr,false,loaded())) {
+            zoom(false);
+            page_=Page::Timeline;
+        }
+        ImGui::Separator();
+        if(ImGui::MenuItem("CPU and resource waits",nullptr,false,loaded())) page_=Page::CpuWaits;
+        if(ImGui::MenuItem("Evidence quality",nullptr,false,loaded())) page_=Page::Evidence;
+        ImGui::EndMenu();
+    }
+    if(ImGui::BeginMenu("Help")) {
+        if(ImGui::MenuItem("About RTOS Observatory...")) show_about_=true;
+        ImGui::EndMenu();
+    }
+    ImGui::EndMenuBar();
+}
+void Workspace::draw_dialogs() {
+    if(pending_open_!=OpenDialog::None) {
+        active_open_=pending_open_;
+        pending_open_=OpenDialog::None;
+        ImGui::OpenPopup("Open evidence");
+    }
+    if(ImGui::BeginPopupModal("Open evidence",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted(active_open_==OpenDialog::Trace ?
+            "Open a local trace file" : "Open a verified indexed-session directory");
+        ImGui::SetNextItemWidth(520.f);
+        ImGui::InputText("Path",path_.data(),path_.size());
+        if(active_open_==OpenDialog::Trace) ImGui::Checkbox("Legacy TSV decoder",&legacy_decoder_);
+        if(ImGui::Button("Open")) {
+            const bool ok=active_open_==OpenDialog::Session ?
+                open_session(path_.data()) :
+                open_trace(path_.data(),legacy_decoder_ ? "legacy-tsv" : "universal-v1");
+            if(ok) ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if(ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        if(!error_.empty()) ImGui::TextWrapped("%s",error_.c_str());
+        ImGui::EndPopup();
+    }
+    if(export_dialog_requested_) {
+        export_dialog_requested_=false;
+        ImGui::OpenPopup("Export report");
+    }
+    if(ImGui::BeginPopupModal("Export report",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("Save a JSON investigation report (existing files are protected).");
+        ImGui::SetNextItemWidth(520.f);
+        ImGui::InputText("Output file",export_path_.data(),export_path_.size());
+        if(ImGui::Button("Export") && export_report(export_path_.data()))
+            ImGui::CloseCurrentPopup();
+        ImGui::SameLine();
+        if(ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        if(!error_.empty()) ImGui::TextWrapped("%s",error_.c_str());
+        ImGui::EndPopup();
+    }
+    if(show_about_) {
+        show_about_=false;
+        ImGui::OpenPopup("About RTOS Observatory");
+    }
+    if(ImGui::BeginPopupModal("About RTOS Observatory",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("RTOS Observatory - offline RTOS evidence investigation");
+        ImGui::Separator();
+        ImGui::Text("Version: %s",observatory::build_info::version);
+        ImGui::Text("Source commit: %s",observatory::build_info::commit);
+        ImGui::Text("Build configured (UTC): %s",observatory::build_info::configured_utc);
+        ImGui::Separator();
+        ImGui::TextWrapped("C++20 / Dear ImGui / GLFW. Trace and session analysis only.");
+        ImGui::TextWrapped("No live hardware probe, GDB connection, or native CTF decoder.");
+        if(ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+}
 void Workspace::draw_sidebar() {
-    ImGui::BeginChild("Navigation", ImVec2(242, 0), ImGuiChildFlags_Borders);
+    ImGui::BeginChild("Navigation", ImVec2(242, -28.f), ImGuiChildFlags_Borders);
     ImGui::TextColored(ImVec4(0.33f, 0.77f, 1.0f, 1), "RTOS OBSERVATORY");
-    ImGui::TextDisabled("C++20 / Dear ImGui / offline");
+    ImGui::TextDisabled("Offline trace investigation");
     ImGui::Spacing();
-    header("OPEN EVIDENCE");
+    header("LOAD EVIDENCE");
     ImGui::SetNextItemWidth(-1);
     ImGui::InputText("##input_path", path_.data(), path_.size());
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Enter a trace file or indexed-session directory, or drop one on the window.");
@@ -163,7 +292,7 @@ void Workspace::draw_sidebar() {
         (void)open_session(path_.data());
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
     header("WORKSPACE");
-    constexpr const char* names[] = {"Overview", "Execution timeline", "CPU / waits",
+    constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
                                       "Events", "Findings", "Evidence details"};
     for (int i=0; i<6; ++i) {
         if (ImGui::Selectable(names[i], static_cast<int>(page_)==i))
@@ -434,14 +563,18 @@ void Workspace::draw() {
     const auto* viewport=ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
+    if(compact_spacing_) ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(6.f,4.f));
     ImGui::Begin("RTOS Observatory",nullptr,
         ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|
         ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoCollapse|
-        ImGuiWindowFlags_NoSavedSettings);
-    draw_sidebar();
-    ImGui::SameLine();
-    ImGui::BeginChild("Investigation",ImVec2(0,0),ImGuiChildFlags_None);
-    ImGui::TextColored(ImVec4(.92f,.96f,1.f,1.f),"RTOS OBSERVATORY  /  EVIDENCE WORKSPACE");
+        ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_MenuBar);
+    draw_menus();
+    if(show_sidebar_) {
+        draw_sidebar();
+        ImGui::SameLine();
+    }
+    ImGui::BeginChild("Investigation",ImVec2(0,-28.f),ImGuiChildFlags_None);
+    ImGui::TextColored(ImVec4(.92f,.96f,1.f,1.f),"RTOS OBSERVATORY  /  TRACE INVESTIGATION");
     if(controller_.loaded()) {
         ImGui::SameLine();
         ImGui::TextDisabled("Session: %s",controller_.report().session.c_str());
@@ -463,6 +596,12 @@ void Workspace::draw() {
       case Page::Evidence: draw_evidence();break;
     }
     ImGui::EndChild();
+    ImGui::Separator();
+    ImGui::TextDisabled("v%s  |  Commit %s  |  Configured %s",
+        observatory::build_info::version,observatory::build_info::commit,
+        observatory::build_info::configured_utc);
+    draw_dialogs();
     ImGui::End();
+    if(compact_spacing_) ImGui::PopStyleVar();
 }
 } // namespace observatory::desktop

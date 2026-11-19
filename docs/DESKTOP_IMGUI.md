@@ -88,3 +88,27 @@ and Xvfb for headless UI tests:
 - Synthetic data cannot validate hardware timing or production live capture.
 - The historic Qt W05/W06 merged PRs remain recorded for audit; this branch
   is the new intended implementation until reviewed and merged.
+
+## Desktop application shell and build metadata
+
+The **File, Settings, Window, Tools, Help** menu bar is available on Windows and
+Linux. File provides local path-based trace/session opening, process-local recent
+files, non-overwriting JSON export and Exit. Settings controls decoder selection
+and compact spacing; Window switches views, shows or hides the navigation panel
+and restores its default view; Tools provides timeline fit/zoom and CPU/evidence
+shortcuts. Help → About displays version, source commit and UTC configuration time.
+
+The title bar and footer show the configured project version. To inspect the exact
+embedded metadata without launching graphics:
+
+    .\\build-windows-clang\\rtos-observatory-desktop.exe --version
+
+The commit is taken from the checked-out Git HEAD when Git is available, otherwise
+shown as `unknown`. The time is the **UTC CMake configure time**, not a claim
+about when compilation or signing finished. Reconfigure CMake after changing the
+checkout to refresh metadata. No user settings or recent evidence paths are saved
+between process runs. Dialogs accept typed local paths or the window accepts drops;
+there is not yet a native operating-system file picker.
+
+The dedicated `observatory_desktop_build_info` CTest validates `--version` output,
+while existing controller, model, timeline and graphical smoke tests remain in CI.
