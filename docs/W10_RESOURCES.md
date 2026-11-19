@@ -29,9 +29,9 @@ Other identifiers remain **generic/unknown**; naming is only a display classific
 
 ## GUI workflow
 
-Open a validated trace or indexed session, select **Resources and waits** from navigation or Tools, filter/select a resource, inspect its recorded wait totals/unknowns, and use **Inspect event** or **Show source** to navigate to the exact original Events row. Relevant CI smoke targets:
+Open a validated trace or indexed session, select **Resources and waits** from navigation or Tools, filter/select a resource, inspect its recorded wait totals/unknowns, and use **Inspect event** or **Show source** to navigate to the exact original Events row. The included **synthetic** `examples/resources.trace` demonstrates all seven resource categories in the UI (`rtos-observatory-desktop --trace examples/resources.trace`). It is not hardware evidence. Relevant CI smoke targets:
 - `observatory_resource_semantics`: deterministic mutex, semaphore, queue, gate, mailbox, event and notification examples; confirmed waits, invalid source IDs, loss, conflicting ownership, duplicates, unknowns, limits.
-- `observatory_desktop_resource_smoke`: headless controller integration with synthetic `examples/timeline.trace`.
+- `observatory_desktop_resource_smoke`: headless controller integration with synthetic `examples/resources.trace`.
 - `observatory_imgui_resource_ui_smoke`: Linux Xvfb hidden Dear ImGui render.
 - Existing Windows and Ubuntu native/desktop Debug/Release and Windows clang-cl Debug/Release must be green on the PR head.
 
