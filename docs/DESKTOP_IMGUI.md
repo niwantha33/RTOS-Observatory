@@ -126,8 +126,8 @@ build dependency are introduced. To use a custom accessible TTF/OTF font, set
 `OBSERVATORY_UI_FONT` to its file path before launching the desktop.
 Install Inter locally if the Inter appearance is desired across machines.
 The font is selected at launch; dynamic font rebuilding after moving between
-monitors of different DPI is not yet supported. Linux UI smoke prints the
-selected font name to its GitHub Actions log.
+monitors of different DPI is not yet supported. Running the desktop directly with `--smoke-ui examples/timeline.trace` prints
+the selected font name. CTest hides successful test stdout in normal CI logs.
 
 Navigation, menu actions, decoder selection, evidence warnings and report
 integrity remain intact. CPU metrics and unknown periods retain their original
