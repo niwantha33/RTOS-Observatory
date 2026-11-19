@@ -181,21 +181,24 @@ public final class DsfLifecycleBridgeHandler extends AbstractHandler {
             }
         }
         private void writeAtomic(String snapshot) {
-            // Atomic file replacement: readers accept only a whole, LF-ended
-            // record. No sockets, no command channel, no source/trace data.
-            final Path temporary=output.resolveSibling(output.getFileName()+".tmp");
+            // Unique private temp file avoids cross-Eclipse writer collisions;
+            // publication is all-or-nothing on the selected filesystem.
+            Path temporary=null;
             try {
-                if(Files.isSymbolicLink(output) || Files.isSymbolicLink(temporary))
-                    return;
+                if(Files.isSymbolicLink(output))return;
+                temporary=Files.createTempFile(output.getParent(),"rtos-dsf-", ".tmp");
                 Files.writeString(temporary,snapshot,StandardCharsets.UTF_8);
                 Files.move(temporary,output,StandardCopyOption.ATOMIC_MOVE,
                         StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException unsupported) {
-                // Fail CLOSED rather than publish a partial lifecycle record.
-                try { Files.deleteIfExists(temporary); }
-                catch (IOException ignored) {}
+                // Fail CLOSED rather than fall back to partial replacement.
             } catch (IOException ignored) {
                 // Metadata bridge failures must not break the active debugger.
+            } finally {
+                if(temporary!=null) {
+                    try {Files.deleteIfExists(temporary);}
+                    catch(IOException ignored) {}
+                }
             }
         }
 
