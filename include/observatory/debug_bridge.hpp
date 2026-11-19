@@ -106,7 +106,14 @@ inline BridgeRecord parse_bridge_record(std::istream& input) {
     while(input.get(ch)) {
         if(++bytes>4096)throw Error("W14 metadata file exceeds 4096-byte cap");
         if(ch=='\n')break;
-        if(ch=='\r' || ch=='\0')throw Error("W14 metadata contains invalid control");
+        // Git for Windows may check out synthetic TSV fixtures as CRLF.
+        // Accept exactly one CR immediately before LF, not embedded CR.
+        if(ch=='\r') {
+            if(input.peek()!='\n')
+                throw Error("W14 metadata contains an embedded or unterminated CR");
+            continue;
+        }
+        if(ch=='\0')throw Error("W14 metadata contains invalid control");
         line+=ch;
     }
     if(!input && !input.eof())throw Error("W14 metadata input read error");
