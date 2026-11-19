@@ -11,18 +11,18 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout candidate
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
       - name: Checkout approved base
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.base.sha || 'main' }}
           path: _baseline
           submodules: recursive
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install analyzers and desktop dependencies
@@ -79,7 +79,7 @@ jobs:
             --candidate diagnostics/candidate.json
       - name: Save evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: quality-gate-evidence
           path: |
