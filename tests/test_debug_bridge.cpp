@@ -66,6 +66,7 @@ int main(int argc,char** argv) {
     assert(gaps.last()->sequence==4);
     const auto stale=gaps.observe(parse(encode("SUSPENDED",5,1700000006000ull)),1700000013001ull);
     assert(stale.accepted && !stale.fresh && stale.status=="reported-stale");
+    assert(!stale.transition_known); // earlier gap remains unknown, even after new samples
     const auto future=gaps.observe(parse(encode("SUSPENDED",6,1700000020000ull)),1700000015000ull);
     assert(future.accepted && !future.fresh);
     const auto rollback=gaps.observe(parse(encode("RUNNING",7,1700000000001ull)),1700000025000ull);
@@ -74,7 +75,9 @@ int main(int argc,char** argv) {
     BridgeMonitor initial;
     const auto late=initial.observe(parse(encode("RUNNING",5)),1700000000500ull);
     assert(late.accepted && !late.transition_known);
-    assert(initial.last()->sequence==5);
+    const auto later=initial.observe(parse(encode("SUSPENDED",6,1700000002000ull)),1700000002100ull);
+    assert(later.accepted && !later.transition_known);
+    assert(initial.last()->sequence==6);
     BridgeMonitor skipped;
     const auto missed=skipped.observe(parse(encode("ATTACHED",3)),1700000000500ull);
     assert(missed.accepted && !missed.transition_known);
