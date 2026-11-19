@@ -145,7 +145,12 @@ public final class DsfApprovedSnapshotCapture {
             final String configured=System.getenv("RTOS_OBSERVATORY_BRIDGE_DIR");
             if(configured==null || configured.isBlank())
                 throw new IllegalArgumentException("W15 private output directory not configured");
-            final Path approvedParent=Path.of(configured).toRealPath();
+            final Path approvedParent;
+            try {
+                approvedParent=Path.of(configured).toRealPath();
+            } catch(IOException failure) {
+                throw new IllegalArgumentException("W15 private directory unavailable",failure);
+            }
             if(!Files.isDirectory(approvedParent) || Files.isSymbolicLink(approvedParent) ||
                !receiptFile.toAbsolutePath().normalize().getParent().equals(approvedParent) ||
                Files.isSymbolicLink(receiptFile))
