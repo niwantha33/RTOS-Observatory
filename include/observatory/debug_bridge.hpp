@@ -149,6 +149,7 @@ inline BridgeRecord read_bridge_file(const std::filesystem::path& path) {
 // target-state verification, coherent snapshot or permission to query GDB.
 class BridgeMonitor {
     std::optional<BridgeRecord> last_;
+    bool history_incomplete_{};
     std::uint64_t freshness_ms_{5000};
 public:
     explicit BridgeMonitor(std::uint64_t freshness_ms=5000):
@@ -157,7 +158,7 @@ public:
             throw Error("W14 freshness window must be 1..60000 milliseconds");
     }
     const std::optional<BridgeRecord>& last() const noexcept {return last_;}
-    void clear() noexcept {last_.reset();}
+    void clear() noexcept {last_.reset();history_incomplete_=false;}
     BridgeObservation observe(const BridgeRecord& input,
                               std::uint64_t now_unix_ms) {
         BridgeObservation out;
@@ -175,8 +176,10 @@ public:
             out.accepted=true;
             out.transition_known=(input.sequence==1 &&
                                   input.state==BridgeState::Attached);
-            if(!out.transition_known)
+            if(!out.transition_known) {
+                history_incomplete_=true;
                 out.warnings.emplace_back("Initial attach transition was not observed; prior state unknown");
+            }
         } else {
             const auto& previous=*last_;
             if(input.session_nonce!=previous.session_nonce ||
@@ -210,6 +213,7 @@ public:
                 // Gap is accepted as a reported sample but never verified.
                 out.accepted=true;
                 out.transition_known=false;
+                history_incomplete_=true;
             } else if(!bridge_detail::transition(previous.state,input.state)) {
                 out.status="invalid-transition";
                 out.warnings.emplace_back(
@@ -217,8 +221,13 @@ public:
                 return out;
             } else {
                 out.accepted=true;
-                out.transition_known=true;
+                out.transition_known=!history_incomplete_;
             }
+        }
+        if(history_incomplete_) {
+            out.transition_known=false;
+            out.warnings.emplace_back(
+                "Earlier lifecycle transitions were missed; session history remains incomplete");
         }
         last_=input;
         if(out.status.empty())out.status=out.fresh ? "reported-recent" : "reported-stale";
