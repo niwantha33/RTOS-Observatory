@@ -210,6 +210,10 @@ def main():
         )
         assert checksum.returncode == 2
         assert "SHA256 mismatch" in checksum.stderr
+        # Restore the original attachment so the next rejection truly tests
+        # the W17 frame CRC, not a stale unrelated SHA256 failure.
+        (root / "independent_timing.txt").write_bytes(
+            b"independent_timing: synthetic-only\n")
 
         # Even if a corrupted raw trace is rehashed into the manifest,
         # the independent binary CRC check must still reject it.
