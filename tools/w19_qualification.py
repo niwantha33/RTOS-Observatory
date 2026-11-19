@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import statistics
 import sys
+from w19_wire_audit import audit_trace, WireAuditError
 
 SCHEMA = "rtos-observatory-w19-v1"
 MAX_JSON = 128 * 1024
@@ -150,6 +151,25 @@ def summarize(profile: dict, root: Path):
         missing.append("no_unapproved_debug_actions")
     if origin != "physical":
         missing.append("physical_target_measurement")
+
+    trace_audit = None
+    if "raw_trace" in kinds:
+        trace_item = next(item for item in raw if item["kind"] == "raw_trace")
+        try:
+            trace_audit = audit_trace(root / trace_item["path"])
+        except (OSError, WireAuditError) as exc:
+            raise EvidenceError(f"raw W17 wire audit rejected: {exc}") from exc
+        if trace_audit["events"] != events or trace_audit["bytes"] != byte_count:
+            raise EvidenceError("manifest event/byte claims differ from validated raw W17 frames")
+        if not trace_audit["stats_lanes"]:
+            missing.append("raw_trace_lacks_loss_counter_frames")
+        else:
+            if trace_audit["latest_declared_full_drops"] != full or (
+                trace_audit["latest_declared_busy_drops"] != busy
+            ):
+                missing.append("unreconciled_drop_counter_claims")
+        if trace_audit["missing_wire_frames"] or trace_audit["missing_source_attempts"]:
+            missing.append("observed_trace_gaps_require_review")
     # Negative measurements are legitimate: do not clip them or call them
     # evidence of target improvement. These are input-reported counts.
     differences = [after - before for before, after in zip(baseline, instrumented)]
@@ -174,6 +194,7 @@ def summarize(profile: dict, root: Path):
         "structural_readiness": "EVIDENCE_PRESENT_REVIEW_REQUIRED" if not missing
                                 else "INCOMPLETE",
         "missing_evidence": sorted(missing),
+        "validated_wire_observations": trace_audit,
         "measurements_unverified": {
             "cpu_hz": cpu_hz,
             "samples": len(baseline),
