@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # RTOS Observatory — project status
 
-**Verified baseline:** 2026-11-19 — W05/W06 offline implementation and Dear ImGui renderer are merged on `main`. [PR #16](https://github.com/niwantha33/RTOS-Observatory/pull/16) added the application menus, dialogues, title/footer version, source commit and UTC configure-time metadata at [merge commit `2f7be50b8`](https://github.com/niwantha33/RTOS-Observatory/commit/2f7be50b8b4b875142277105bcd974720cbcc706). All **20 PR-head Windows/Linux CI checks passed** before merging. This is a dated snapshot, not a live CI dashboard; post-merge CI is separate.
+**Verified baseline:** 2026-11-19 — W05/W06 offline analysis and Dear ImGui desktop merged. [PR #17](https://github.com/niwantha33/RTOS-Observatory/pull/17) improved type, contrast, spacing and language, bumped the app to v0.2.1, and merged at [commit `3f1e6c50a`](https://github.com/niwantha33/RTOS-Observatory/commit/3f1e6c50a00b8e72a97f344a98df9f71e5faba92). All **10 PR-triggered** native/desktop Windows+Linux and clang-cl CI jobs passed. This is a dated snapshot, not a live CI dashboard; post-merge UI appearance on a physical monitor is not certified.
 
 [Master issue #8](https://github.com/niwantha33/RTOS-Observatory/issues/8) · [Master plan](MASTER_PLAN.md) · [Bug guide](BUG_TRACKING.md)
 
@@ -10,7 +10,7 @@
 | Phase | Work packages | Verified scope/state | Phase issue | Evidence |
 | --- | --- | --- | --- | --- |
 | **P0 Foundation and architecture** | **W01–W04** | **Done for bounded offline foundation** | [#2](https://github.com/niwantha33/RTOS-Observatory/issues/2) | [Merged PR #1](https://github.com/niwantha33/RTOS-Observatory/pull/1), [main CI passed](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44326850607) |
-| P1 Modern graphical interface | W05–W08 | **W05 and W06 merged** (offline); ImGui renderer PR #14 and desktop menus/metadata PR #16 merged with CI. W07–W08 planned | [#3](https://github.com/niwantha33/RTOS-Observatory/issues/3) | [W05 PR #12](https://github.com/niwantha33/RTOS-Observatory/pull/12) · [W06 PR #13](https://github.com/niwantha33/RTOS-Observatory/pull/13) |
+| P1 Modern graphical interface | W05–W08 | **W05 and W06 merged** (offline); ImGui renderer PR #14, menus PR #16 and visual polish PR #17 merged with CI. W07–W08 planned | [#3](https://github.com/niwantha33/RTOS-Observatory/issues/3) | [W05 PR #12](https://github.com/niwantha33/RTOS-Observatory/pull/12) · [W06 PR #13](https://github.com/niwantha33/RTOS-Observatory/pull/13) |
 | P2 Intelligent RTOS diagnostics | W09–W13 | Planned | [#4](https://github.com/niwantha33/RTOS-Observatory/issues/4) | — |
 | P3 Debugger and live hardware | W14–W19 | Planned | [#5](https://github.com/niwantha33/RTOS-Observatory/issues/5) | — |
 | P4 Multi-RTOS ecosystem | W20–W24 | Planned | [#6](https://github.com/niwantha33/RTOS-Observatory/issues/6) | — |
@@ -25,7 +25,7 @@
 | **W03** | **Done — bounded offline only** | Explicit decoder registry, limits and gap/loss reporting; no running-target decoder |
 | **W04** | **Done — local offline v1 only** | Indexed immutable sessions, raw evidence, CRC32 integrity and deterministic replay; no secure attestation or range API |
 | **W05** | **Done (offline UI)** | Merged PR #12; Windows and Ubuntu Debug/Release CI passed; no hardware or installer qualification |
-| **W06** | **Merged offline** | PR #13 merged; task/ISR/unknown timeline and per-core accounting; Dear ImGui renderer PR #14 merged; shell menus/metadata PR #16 merged ([guide](DESKTOP_IMGUI.md)) |
+| **W06** | **Merged offline** | PR #13 merged; task/ISR/unknown timeline and per-core accounting; Dear ImGui renderer PR #14 merged; shell menus/metadata PR #16 and readability update PR #17 merged ([guide](DESKTOP_IMGUI.md)) |
 | W07–W08 | Not started (P1) | Causal graph and time-travel replay remain future scope |
 | W09–W13 | Not started (P2) | Evidence-backed RTOS diagnosis and source graph are future scope |
 | W14–W19 | Not started (P3) | Debug-probe integration and live transports require physical hardware validation |
@@ -44,6 +44,7 @@
 - [Merged PR #14](https://github.com/niwantha33/RTOS-Observatory/pull/14): replaces Qt with Dear ImGui, pins ImGui/GLFW/Asio submodules.
 - [Merged PR #15](https://github.com/niwantha33/RTOS-Observatory/pull/15): reproducible Windows clang-cl/MSVC SDK build and CI gates.
 - [Merged PR #16](https://github.com/niwantha33/RTOS-Observatory/pull/16): File/Settings/Window/Tools/Help menus, safe dialogs, per-run settings, version/source commit/UTC configure metadata; [PR desktop CI](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44483212387) and [PR native CI](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44483212315) passed. The duplicate push runs passed too (20/20 check runs).
+- [Merged PR #17](https://github.com/niwantha33/RTOS-Observatory/pull/17): v0.2.1 UI typography (system Inter where installed, OS fallbacks, readable 17 px), plain-English labels, contrast and spacing. [PR desktop CI](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44501894808) and [PR native CI](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44501894750) all succeeded. The Linux hidden OpenGL/GLFW UI smoke passed. Physical display and multi-DPI validation remain open.
 
 ## Open constraints / risks
 
