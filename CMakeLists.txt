@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(rtos_observatory VERSION 0.2.0 LANGUAGES C CXX)
+project(rtos_observatory VERSION 0.2.1 LANGUAGES C CXX)
 option(OBSERVATORY_BUILD_TESTS "Build deterministic C++ tests" ON)
 add_library(observatory_target_ring firmware/obs_trace_ring.c)
 target_include_directories(observatory_target_ring PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/firmware)
