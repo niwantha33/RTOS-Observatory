@@ -6,6 +6,7 @@
 #include "observatory/replay.hpp"
 #include "observatory/diagnostics.hpp"
 #include "observatory/resource_analysis.hpp"
+#include "observatory/causal_diagnostics.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -33,12 +34,14 @@ public:
     const DiagnosticsView* diagnostics() const noexcept { return diagnostics_ ? &*diagnostics_ : nullptr; }
     const ResourceView* resources() const noexcept { return resources_ ? &*resources_ : nullptr; }
     void show_resources() noexcept { page_ = Page::Resources; }
+    const CausalView* causality() const noexcept { return causality_ ? &*causality_ : nullptr; }
+    void show_causality() noexcept { page_ = Page::Causality; }
     const ReplaySnapshot* replay() const noexcept { return replay_ ? &*replay_ : nullptr; }
     const std::string& error() const noexcept { return error_; }
     const SessionController& controller() const noexcept { return controller_; }
     const TimelineView* timeline() const noexcept { return timeline_ ? &*timeline_ : nullptr; }
 private:
-    enum class Page { Overview, Timeline, CpuWaits, Graph, Replay, Diagnostics, Resources, Events, Findings, Evidence };
+    enum class Page { Overview, Timeline, CpuWaits, Graph, Replay, Diagnostics, Resources, Causality, Events, Findings, Evidence };
     enum class OpenDialog { None, Trace, Session };
     void draw_menus();
     void draw_dialogs();
@@ -47,6 +50,7 @@ private:
     void update_replay();
     void update_diagnostics();
     void update_resources();
+    void update_causality();
     void rebuild_event_filter();
     void draw_sidebar();
     void draw_overview();
@@ -56,6 +60,7 @@ private:
     void draw_replay();
     void draw_diagnostics();
     void draw_resources();
+    void draw_causality();
     void draw_events();
     void draw_findings();
     void draw_evidence();
@@ -68,6 +73,9 @@ private:
     std::optional<ReplaySnapshot> replay_;
     std::optional<DiagnosticsView> diagnostics_;
     std::optional<ResourceView> resources_;
+    std::optional<CausalView> causality_;
+    std::uint64_t long_mutex_wait_threshold_us_{0};
+    std::size_t selected_causal_finding_{};
     std::string resource_selected_;
     std::array<char,96> resource_filter_{};
     std::map<std::string,std::uint64_t> relative_deadlines_;

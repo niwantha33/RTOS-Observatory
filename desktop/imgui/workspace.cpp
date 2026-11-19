@@ -119,6 +119,17 @@ void Workspace::update_resources() {
         notice_ = e.what();
     }
 }
+void Workspace::update_causality() {
+    causality_.reset();
+    selected_causal_finding_ = 0;
+    if (!controller_.loaded()) return;
+    try {
+        causality_ = analyze_causal_patterns(controller_.trace(),controller_.report(),
+                                              long_mutex_wait_threshold_us_);
+    } catch (const std::exception& e) {
+        notice_ = e.what();
+    }
+}
 void Workspace::update_replay() {
     replay_.reset();
     if (!controller_.loaded()) return;
@@ -160,6 +171,8 @@ bool Workspace::open_trace(const std::string& path, const std::string& decoder) 
         update_diagnostics();
         resource_selected_.clear();
         update_resources();
+        long_mutex_wait_threshold_us_ = 0;
+        update_causality();
         error_.clear();
         std::snprintf(path_.data(), path_.size(), "%s", path.c_str());
         recent(path, decoder, false);
@@ -184,6 +197,8 @@ bool Workspace::open_session(const std::string& path) {
         update_diagnostics();
         resource_selected_.clear();
         update_resources();
+        long_mutex_wait_threshold_us_ = 0;
+        update_causality();
         error_.clear();
         std::snprintf(path_.data(), path_.size(), "%s", path.c_str());
         recent(path, "", true);
@@ -273,8 +288,8 @@ void Workspace::draw_menus() {
         if(ImGui::BeginMenu("Go to panel")) {
             constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
                 "Causal graph","Time-travel replay","Scheduling diagnostics",
-                "Resources and waits","Events","Findings","Evidence details"};
-            for(int i=0;i<10;++i)
+                "Resources and waits","Causal diagnostics","Events","Findings","Evidence details"};
+            for(int i=0;i<11;++i)
                 if(ImGui::MenuItem(names[i],nullptr,static_cast<int>(page_)==i))
                     page_=static_cast<Page>(i);
             ImGui::EndMenu();
@@ -305,6 +320,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Time-travel replay",nullptr,false,loaded())) page_=Page::Replay;
         if(ImGui::MenuItem("Scheduling diagnostics",nullptr,false,loaded())) page_=Page::Diagnostics;
         if(ImGui::MenuItem("Resources and waits",nullptr,false,loaded())) page_=Page::Resources;
+        if(ImGui::MenuItem("Causal diagnostics",nullptr,false,loaded())) page_=Page::Causality;
         if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
@@ -392,8 +408,8 @@ void Workspace::draw_sidebar() {
     header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
                                       "Causal graph", "Time-travel replay", "Scheduling diagnostics",
-                                      "Resources and waits", "Events", "Findings", "Evidence details"};
-    for (int i=0; i<10; ++i) {
+                                      "Resources and waits", "Causal diagnostics", "Events", "Findings", "Evidence details"};
+    for (int i=0; i<11; ++i) {
         if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
                               ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
@@ -1079,6 +1095,83 @@ void Workspace::draw_events() {
         ImGui::EndTable();
     }
 }
+void Workspace::draw_causality() {
+    if (!controller_.loaded() || !causality_) {
+        ImGui::TextDisabled("Open a normalized offline trace to inspect recorded mutex relationships.");
+        return;
+    }
+    header("Causal diagnostics");
+    ImGui::TextDisabled("Observed patterns only: no proven scheduling cause, starvation or kernel deadlock.");
+    ImGui::SetNextItemWidth(220.f);
+    if (ImGui::InputScalar("Long mutex wait threshold (us; 0 = off)",
+                           ImGuiDataType_U64,&long_mutex_wait_threshold_us_))
+        update_causality();
+    if (!causality_) return;
+    const auto& view = *causality_;
+    if (!view.evidence_complete || view.limited)
+        ImGui::TextColored(ImVec4(1.f,.76f,.42f,1.f),
+            "Incomplete/limited evidence: confidence downgraded; unobserved state unknown.");
+    ImGui::Text("Scanned %zu events | %zu patterns | Clock: %s",
+                view.scanned_events,view.findings.size(),view.clock_domain.c_str());
+    for (const auto& warn : view.warnings) ImGui::TextWrapped("%s",warn.c_str());
+    if (view.findings.empty()) {
+        ImGui::TextDisabled("No supported causal pattern found in the bounded evidence.");
+        return;
+    }
+    if (ImGui::BeginTable("causal-patterns",6,table_flags,ImVec2(0,270.f))) {
+        for(const char* column:{"Pattern","Confidence","Task","Resource","Related task","Measured (us)"})
+            ImGui::TableSetupColumn(column);
+        ImGui::TableHeadersRow();
+        for(std::size_t i=0;i<view.findings.size();++i) {
+            const auto& f=view.findings[i];
+            ImGui::PushID(static_cast<int>(i));
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            if (ImGui::Selectable(f.code.c_str(), selected_causal_finding_==i,
+                                  ImGuiSelectableFlags_SpanAllColumns))
+                selected_causal_finding_=i;
+            cell(f.confidence);
+            cell(f.task);
+            cell(f.resource);
+            cell(f.related_task.empty()?"Unknown":f.related_task);
+            cell(as_text(f.observed_us));
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    const auto& f=view.findings[std::min(selected_causal_finding_,view.findings.size()-1)];
+    header("Why this candidate was reported");
+    ImGui::TextWrapped("%s",f.explanation.c_str());
+    ImGui::Text("Observed time window: [%llu, %llu] us",
+        static_cast<unsigned long long>(f.start_us),
+        static_cast<unsigned long long>(f.end_us));
+    ImGui::TextDisabled("Source order is retained. Click any event to inspect the original decoded row.");
+    if (ImGui::BeginTable("causal-proof",5,table_flags,ImVec2(0,0))) {
+        for(const char* column:{"Event #","Timestamp (us)","Type","Task / resource","Source"})
+            ImGui::TableSetupColumn(column);
+        ImGui::TableHeadersRow();
+        const auto& events=controller_.trace().capture.events;
+        for (const std::size_t i : f.evidence_events) {
+            if (i>=events.size()) continue;
+            const auto& e=events[i];
+            ImGui::PushID(static_cast<int>(i));
+            ImGui::TableNextRow();
+            cell(as_text(i)); cell(as_text(e.timestamp_us)); cell(e.type);
+            cell(e.task+" / "+e.object);
+            ImGui::TableNextColumn();
+            if (ImGui::SmallButton("Inspect event")) {
+                focused_event_=i;
+                rebuild_event_filter();
+                page_=Page::Events;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Source line %zu / Event %zu",e.line,i);
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+}
+
 void Workspace::draw_findings() {
     if(!controller_.loaded()) return;
     header("Observed findings");
@@ -1164,6 +1257,7 @@ void Workspace::draw() {
       case Page::Replay: draw_replay();break;
       case Page::Diagnostics: draw_diagnostics();break;
       case Page::Resources: draw_resources();break;
+      case Page::Causality: draw_causality();break;
       case Page::Events: draw_events();break;
       case Page::Findings: draw_findings();break;
       case Page::Evidence: draw_evidence();break;
