@@ -70,11 +70,32 @@ inline ReplaySnapshot replay_at(const DecodedTrace& trace, std::size_t event_ind
             out.integrity_verified = false;
         }
         previous = e.timestamp_us;
-        if (e.type == "SESSION" || e.type == "DROP") {
-            if (e.type == "DROP") out.integrity_verified = false;
+        if (e.type == "SESSION") {
             resources.clear();
-            waits.clear();
-            continue; // continuity across an epoch/loss boundary is not presumed
+            waits.clear(); // a new epoch has no inherited resource identity
+            continue;
+        }
+        if (e.type == "DROP") {
+            out.integrity_verified = false;
+            // Preserve that the resource existed, but its state is UNKNOWN.
+            // Erasing it here would hide the gap from the investigation UI.
+            for (auto& [id, r] : resources) {
+                (void)id;
+                r.kind = ReplayResourceKind::Unknown;
+                r.last_owner.clear();
+                r.event_index = i;
+                r.source_line = e.line;
+                r.timestamp_us = e.timestamp_us;
+            }
+            for (auto& [key, w] : waits) {
+                (void)key;
+                w.active = false;
+                w.known = false;
+                w.event_index = i;
+                w.source_line = e.line;
+                w.timestamp_us = e.timestamp_us;
+            }
+            continue;
         }
         if (e.task.empty() || e.task == "-" ||
             e.object.empty() || e.object == "-") continue;
