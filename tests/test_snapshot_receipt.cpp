@@ -57,7 +57,7 @@ int main(int argc,char** argv) {
                    SnapshotLimits{32,256,4096,0,30000}));
     assert(rejects(header+"MEM\tStack\t0x20000000\t4\tfailed\t-\n",
                    SnapshotLimits{32,256,2,16,30000}));
-    assert(rejects(sample+"\0junk"));
+    assert(rejects(sample+std::string("\0junk",5)));
     if(argc>1) {
         const auto path=std::filesystem::path(argv[1]);
         std::ofstream out(path,std::ios::binary|std::ios::trunc);
