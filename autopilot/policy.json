@@ -1,0 +1,17 @@
+{
+  "repository": "niwantha33/RTOS-Observatory",
+  "operating_mode": "continuous",
+  "hardware_qualification": "deferred",
+  "max_automatic_repair_attempts": 3,
+  "merge_policy": "gated",
+  "concurrent_feature_branches": 1,
+  "coding_agent": "external_persistent_runner",
+  "on_blocked_task": "record_blocker_and_stop_dependent_work",
+  "poll_seconds": 900,
+  "required_check_groups": {
+    "native (": 4,
+    "desktop (": 4,
+    "Windows clang-cl / ": 2,
+    "autopilot (": 2
+  }
+}
