@@ -81,7 +81,7 @@ inline CausalView analyze_causal_patterns(const DecodedTrace& trace, const Repor
                   const std::string& object, std::uint64_t time)
         -> std::optional<std::size_t> {
         auto it = source.find({kind,task,object,time});
-        return it == source.end() ? std::nullopt{} : std::optional<std::size_t>(it->second);
+        return it == source.end() ? std::nullopt : std::optional<std::size_t>(it->second);
     };
     auto urgency = [&](const std::string& task, std::uint64_t time)
         -> std::optional<Priority> {
