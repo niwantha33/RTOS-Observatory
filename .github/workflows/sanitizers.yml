@@ -13,7 +13,7 @@ jobs:
       ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Build host diagnostics
@@ -33,7 +33,7 @@ jobs:
             2>&1 | tee sanitizer-ctest.log
       - name: Upload sanitizer results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: host-sanitizer-evidence
           path: sanitizer-ctest.log
