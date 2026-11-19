@@ -40,6 +40,9 @@ if(OBSERVATORY_BUILD_TESTS)
   add_executable(observatory_resource_tests tests/test_resources.cpp)
   target_link_libraries(observatory_resource_tests PRIVATE observatory_core)
   add_test(NAME observatory_resource_semantics COMMAND observatory_resource_tests)
+  add_test(NAME observatory_resource_fixture_parse COMMAND rtos-observatory
+    --input ${CMAKE_CURRENT_SOURCE_DIR}/examples/resources.trace
+    --output ${CMAKE_CURRENT_BINARY_DIR}/resource-fixture-report.json)
   add_test(NAME observatory_timeline_accounting COMMAND observatory_timeline_tests)
   add_test(NAME observatory_core_tests COMMAND observatory_tests)
   find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -206,7 +209,7 @@ if(OBSERVATORY_BUILD_DESKTOP)
     add_test(NAME observatory_desktop_diagnostics_smoke COMMAND rtos-observatory-desktop --smoke-diagnostics
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
     add_test(NAME observatory_desktop_resource_smoke COMMAND rtos-observatory-desktop --smoke-resources
-      ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/resources.trace)
     if(Python3_Interpreter_FOUND)
       add_test(NAME observatory_desktop_build_info COMMAND
         ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_desktop_build_info.py
@@ -234,7 +237,7 @@ if(OBSERVATORY_BUILD_DESKTOP)
           ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
         add_test(NAME observatory_imgui_resource_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
           $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-resources
-          ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
+          ${CMAKE_CURRENT_SOURCE_DIR}/examples/resources.trace)
         set_tests_properties(observatory_imgui_ui_smoke observatory_imgui_graph_ui_smoke
           observatory_imgui_replay_ui_smoke observatory_imgui_diagnostics_ui_smoke
           observatory_imgui_resource_ui_smoke PROPERTIES TIMEOUT 30)
