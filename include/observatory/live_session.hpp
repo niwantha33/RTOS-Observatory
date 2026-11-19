@@ -95,9 +95,15 @@ public:
             if(status_.accepted_frames>=limits_.max_frames)
                 poison("W18 frame budget exhausted; capture incomplete");
             if(frame.new_epoch) {
+                // Reusing an old publisher epoch would make clock calibration
+                // and provenance ambiguous even when the wire decoder accepts it.
+                for(const auto& prior:epochs_)
+                    if(prior.id==frame.epoch)
+                        poison("W18 publisher reused a prior epoch identity");
                 if(epochs_.size()>=limits_.max_epochs)
                     poison("W18 epoch budget exhausted; previous epochs retained");
                 epochs_.push_back({frame.epoch});
+                stats_.fill(std::nullopt); // counters belong to current epoch only
             }
             if(epochs_.empty() || epochs_.back().id!=frame.epoch)
                 poison("W18 untracked session epoch");
