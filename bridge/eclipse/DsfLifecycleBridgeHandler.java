@@ -26,7 +26,9 @@ import org.eclipse.cdt.dsf.service.DsfSession;
 import org.eclipse.core.commands.AbstractHandler;
 import org.eclipse.core.commands.ExecutionEvent;
 import org.eclipse.core.commands.ExecutionException;
+import org.eclipse.debug.core.DebugPlugin;
 import org.eclipse.debug.core.ILaunch;
+import org.eclipse.debug.core.ILaunchesListener2;
 import org.eclipse.debug.core.model.IDebugElement;
 import org.eclipse.debug.ui.DebugUITools;
 import org.eclipse.jface.dialogs.MessageDialog;
@@ -114,7 +116,7 @@ public final class DsfLifecycleBridgeHandler extends AbstractHandler {
         return null;
     }
 
-    private static final class Subscription implements AutoCloseable {
+    public static final class Subscription implements AutoCloseable, ILaunchesListener2 {
         private final GdbLaunch launch;
         private final DsfSession session;
         private final Path output;
@@ -143,6 +145,7 @@ public final class DsfLifecycleBridgeHandler extends AbstractHandler {
             // Never block the DSF executor waiting for I/O; publisher has one
             // dedicated thread and reads no debugger service state.
             publish("ATTACHED");
+            DebugPlugin.getDefault().getLaunchManager().addLaunchListener(this);
             session.getExecutor().execute(() ->
                 session.addServiceEventListener(this,null));
             // A metadata-only heartbeat says nothing about actual target readiness.
@@ -196,6 +199,25 @@ public final class DsfLifecycleBridgeHandler extends AbstractHandler {
             }
         }
 
+        private boolean contains(ILaunch[] launches) {
+            for (final ILaunch item:launches)
+                if (item==launch)return true;
+            return false;
+        }
+        @Override
+        public void launchesAdded(ILaunch[] launches) {}
+        @Override
+        public void launchesChanged(ILaunch[] launches) {
+            if(contains(launches) && launch.isTerminated())close();
+        }
+        @Override
+        public void launchesRemoved(ILaunch[] launches) {
+            if(contains(launches))close();
+        }
+        @Override
+        public void launchesTerminated(ILaunch[] launches) {
+            if(contains(launches))close();
+        }
         @Override
         public void close() {
             synchronized(this) {
@@ -210,6 +232,8 @@ public final class DsfLifecycleBridgeHandler extends AbstractHandler {
                 // DSF session already disposed; no second connection attempted.
             }
             writer.shutdown();
+            DebugPlugin.getDefault().getLaunchManager().removeLaunchListener(this);
+            ACTIVE.compareAndSet(this,null);
         }
     }
 }
