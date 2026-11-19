@@ -70,6 +70,7 @@ Workspace::Workspace() {
     std::snprintf(symbol_elf_path_.data(), symbol_elf_path_.size(), "%s", "firmware.elf");
     std::snprintf(symbol_source_root_.data(), symbol_source_root_.size(), "%s", ".");
     std::snprintf(bridge_file_path_.data(),bridge_file_path_.size(),"%s","rtos-observatory-dsf-status.tsv");
+    std::snprintf(snapshot_receipt_path_.data(),snapshot_receipt_path_.size(),"%s","examples/approved-snapshot.tsv");
 }
 void Workspace::recent(const std::string& path, const std::string& decoder, bool session) {
     recents_.erase(std::remove_if(recents_.begin(), recents_.end(),
@@ -280,6 +281,20 @@ bool Workspace::open_bridge_status(const std::string& path) {
         return false;
     }
 }
+bool Workspace::open_snapshot_receipt(const std::string& path) {
+    try {
+        auto receipt=read_snapshot_receipt(file_path(path));
+        snapshot_receipt_=std::move(receipt);
+        std::snprintf(snapshot_receipt_path_.data(),snapshot_receipt_path_.size(),"%s",path.c_str());
+        page_=Page::Snapshot;
+        error_.clear();
+        return true;
+    } catch(const std::exception& e) {
+        snapshot_receipt_.reset(); // never show a previously accepted receipt for a failed import
+        error_=e.what();
+        return false;
+    }
+}
 bool Workspace::export_report(const std::string& path) {
     try {
         controller_.export_report(file_path(path));
@@ -333,6 +348,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Open fault snapshot...")) page_=Page::Faults;
         if(ImGui::MenuItem("Open C/C++/Rust symbol index...")) page_=Page::SourceGraph;
         if(ImGui::MenuItem("Inspect Eclipse DSF bridge status...")) page_=Page::DebugBridge;
+        if(ImGui::MenuItem("Open approved snapshot receipt...")) page_=Page::Snapshot;
         if(ImGui::BeginMenu("Recent files",!recents_.empty())) {
             for(std::size_t i=0;i<recents_.size();++i) {
                 ImGui::PushID(static_cast<int>(i));
@@ -366,8 +382,8 @@ void Workspace::draw_menus() {
             constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
                 "Causal graph","Time-travel replay","Scheduling diagnostics",
                 "Resources and waits","Causal diagnostics","Fault & memory","Source/symbol graph",
-                "Debugger lifecycle","Events","Findings","Evidence details"};
-            for(int i=0;i<14;++i)
+                "Debugger lifecycle","Approved snapshot receipts","Events","Findings","Evidence details"};
+            for(int i=0;i<15;++i)
                 if(ImGui::MenuItem(names[i],nullptr,static_cast<int>(page_)==i))
                     page_=static_cast<Page>(i);
             ImGui::EndMenu();
@@ -402,6 +418,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Fault & memory snapshots")) page_=Page::Faults;
         if(ImGui::MenuItem("Source/symbol graph")) page_=Page::SourceGraph;
         if(ImGui::MenuItem("Debugger lifecycle (passive)")) page_=Page::DebugBridge;
+        if(ImGui::MenuItem("Snapshot receipts (read-only)")) page_=Page::Snapshot;
         if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
@@ -488,13 +505,15 @@ void Workspace::draw_sidebar() {
     if (ImGui::Button("Fault snapshot...", ImVec2(-1, 0))) page_=Page::Faults;
     if (ImGui::Button("Source/symbol map...", ImVec2(-1, 0))) page_=Page::SourceGraph;
     if (ImGui::Button("Debugger lifecycle...", ImVec2(-1, 0))) page_=Page::DebugBridge;
+    if (ImGui::Button("Snapshot receipts...", ImVec2(-1, 0))) page_=Page::Snapshot;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
     header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
                                       "Causal graph", "Time-travel replay", "Scheduling diagnostics",
                                       "Resources and waits", "Causal diagnostics", "Fault & memory",
-                                      "Source/symbol graph", "Debugger lifecycle", "Events", "Findings", "Evidence details"};
-    for (int i=0; i<14; ++i) {
+                                      "Source/symbol graph", "Debugger lifecycle", "Approved snapshot receipts",
+                                      "Events", "Findings", "Evidence details"};
+    for (int i=0; i<15; ++i) {
         if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
                               ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
@@ -1691,6 +1710,78 @@ void Workspace::draw_debug_bridge() {
     ImGui::TextDisabled("The source Eclipse extension is not installed/qualified by this repository.");
 }
 
+void Workspace::draw_snapshot_receipt() {
+    header("Approved snapshot receipt — read only");
+    ImGui::TextColored(ImVec4(1.f,.74f,.43f,1.f),
+        "UNVERIFIED: imported local file. No GDB target reads or acquisition approval from this panel.");
+    ImGui::TextDisabled("Only the owning Eclipse DSF integration may request approved RAM/CPU-register reads.");
+    ImGui::SetNextItemWidth(550.f);
+    ImGui::InputText("Local W15 receipt",snapshot_receipt_path_.data(),snapshot_receipt_path_.size());
+    ImGui::SameLine();
+    if(ImGui::Button("Open receipt"))
+        (void)open_snapshot_receipt(snapshot_receipt_path_.data());
+    if(!snapshot_receipt_) {
+        ImGui::TextDisabled("Try examples/approved-snapshot.tsv (synthetic, not hardware evidence).");
+        return;
+    }
+    const auto& capture=*snapshot_receipt_;
+    ImGui::Text("Reporter: %s | Session: %s | Epoch: %llu",
+        capture.source_label.c_str(),capture.request.session_nonce.c_str(),
+        static_cast<unsigned long long>(capture.owner_epoch));
+    ImGui::Text("Approval (self-reported): %s | Address width: %u",
+        capture.request.user_approval_id.c_str(),capture.request.address_bits);
+    ImGui::TextDisabled("A receipt does NOT prove a stopped target, safe MMIO, source authenticity or multi-core coherence.");
+    std::size_t ok=0,fail=0,bytes=0;
+    for(const auto& read:capture.samples) {
+        if(read.success) {
+            ++ok;bytes+=read.data.size();
+        } else ++fail;
+    }
+    ImGui::Text("Recorded results: %zu success, %zu failed/unknown | %zu saved RAM bytes",
+        ok,fail,bytes);
+    if(ImGui::BeginTable("approved_snapshot_items",6,table_flags,ImVec2(0,330.f))) {
+        for(const char* name:{"Kind","Label","Address","Requested bytes","Result","Recorded value"})
+            ImGui::TableSetupColumn(name);
+        ImGui::TableHeadersRow();
+        for(std::size_t i=0;i<capture.samples.size();++i) {
+            const auto& r=capture.samples[i];
+            ImGui::PushID(static_cast<int>(i));
+            ImGui::TableNextRow();
+            cell(r.requested.kind==SnapshotKind::Register ? "CPU register" :
+                 r.requested.kind==SnapshotKind::Tcb ? "TCB bytes" : "RAM bytes");
+            cell(r.requested.label);
+            char addr[32];
+            std::snprintf(addr,sizeof(addr),"0x%llx",
+                static_cast<unsigned long long>(r.requested.address));
+            cell(r.requested.kind==SnapshotKind::Register ? "N/A" : addr);
+            cell(r.requested.kind==SnapshotKind::Register ? "N/A" :
+                 as_text(r.requested.bytes));
+            cell(r.success ? "RECORDED" : "UNKNOWN (read failed)");
+            if(!r.success)cell("No value");
+            else if(r.register_value) {
+                std::snprintf(addr,sizeof(addr),"0x%llx",
+                    static_cast<unsigned long long>(*r.register_value));
+                cell(addr);
+            } else {
+                static constexpr char digits[]="0123456789abcdef";
+                std::string hex;
+                for(std::size_t j=0;j<std::min<std::size_t>(16,r.data.size());++j) {
+                    if(j)hex+=' ';
+                    hex+=digits[r.data[j]>>4];hex+=digits[r.data[j]&15];
+                }
+                cell(hex);
+                if(ImGui::IsItemHovered() && r.data.size()>16)
+                    ImGui::SetTooltip("Showing first 16 bytes of %zu recorded; no automatic raw export",
+                                      r.data.size());
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    ImGui::TextDisabled("Every successful or failed value is a claim from the receipt producer.");
+    ImGui::TextDisabled("Memory permissions, probe health and target/firmware identities require ZEW qualification.");
+}
+
 void Workspace::draw_findings() {
     if(!controller_.loaded()) return;
     header("Observed findings");
@@ -1780,6 +1871,7 @@ void Workspace::draw() {
       case Page::Faults: draw_faults();break;
       case Page::SourceGraph: draw_source_graph();break;
       case Page::DebugBridge: draw_debug_bridge();break;
+      case Page::Snapshot: draw_snapshot_receipt();break;
       case Page::Events: draw_events();break;
       case Page::Findings: draw_findings();break;
       case Page::Evidence: draw_evidence();break;

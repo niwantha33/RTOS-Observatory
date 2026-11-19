@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # RTOS Observatory — project status
 
-**Verified baseline:** 2026-11-19 — W01–W07 offline features merged with reported CI qualification; W08–W11 also manually merged, but their latest-head automated qualifications were queued/unverified at merger. W12 has also been manually merged; W13 PR #27 is manually merged; W14 source-only Eclipse bridge is in PR #28 with native/ZEW CI and integration acceptance pending. [PR #17](https://github.com/niwantha33/RTOS-Observatory/pull/17) improved type, contrast, spacing and language, bumped the app to v0.2.1, and merged at [commit `3f1e6c50a`](https://github.com/niwantha33/RTOS-Observatory/commit/3f1e6c50a00b8e72a97f344a98df9f71e5faba92). All **10 PR-triggered** native/desktop Windows+Linux and clang-cl CI jobs passed. This is a dated snapshot, not a live CI dashboard; post-merge UI appearance on a physical monitor is not certified.
+**Verified baseline:** 2026-11-19 — W01–W07 offline features merged with reported CI qualification; W08–W11 also manually merged, but their latest-head automated qualifications were queued/unverified at merger. W12 has also been manually merged; W13 PR #27 is manually merged; W14 PR #28 is manually merged, but Eclipse installed-plugin qualification is outstanding; W15 source-safe snapshot package is open for CI/review. [PR #17](https://github.com/niwantha33/RTOS-Observatory/pull/17) improved type, contrast, spacing and language, bumped the app to v0.2.1, and merged at [commit `3f1e6c50a`](https://github.com/niwantha33/RTOS-Observatory/commit/3f1e6c50a00b8e72a97f344a98df9f71e5faba92). All **10 PR-triggered** native/desktop Windows+Linux and clang-cl CI jobs passed. This is a dated snapshot, not a live CI dashboard; post-merge UI appearance on a physical monitor is not certified.
 
 [Master issue #8](https://github.com/niwantha33/RTOS-Observatory/issues/8) · [Master plan](MASTER_PLAN.md) · [Bug guide](BUG_TRACKING.md)
 
@@ -12,7 +12,7 @@
 | **P0 Foundation and architecture** | **W01–W04** | **Done for bounded offline foundation** | [#2](https://github.com/niwantha33/RTOS-Observatory/issues/2) | [Merged PR #1](https://github.com/niwantha33/RTOS-Observatory/pull/1), [main CI passed](https://github.com/niwantha33/RTOS-Observatory/actions/runs/44326850607) |
 | P1 Modern graphical interface | W05–W08 | W05–W08 merged (offline); W07 CI verified, W08 latest-head CI acceptance outstanding | [#3](https://github.com/niwantha33/RTOS-Observatory/issues/3) | [W07 PR #20](https://github.com/niwantha33/RTOS-Observatory/pull/20) · [W08 PR #21](https://github.com/niwantha33/RTOS-Observatory/pull/21) |
 | P2 Intelligent RTOS diagnostics | W09–W13 | W09–W13 merged (offline scope); latest-head CI/review qualification pending for manual merges | [#4](https://github.com/niwantha33/RTOS-Observatory/issues/4) | [W09 PR #22](https://github.com/niwantha33/RTOS-Observatory/pull/22) · [W10 PR #23](https://github.com/niwantha33/RTOS-Observatory/pull/23) · [W11 PR #25](https://github.com/niwantha33/RTOS-Observatory/pull/25) · [W12 PR #26](https://github.com/niwantha33/RTOS-Observatory/pull/26) · [W13 PR #27](https://github.com/niwantha33/RTOS-Observatory/pull/27) |
-| P3 Debugger and live hardware | W14–W19 | W14 passive DSF metadata bridge PR #28 open; ZEW installed plugin and hardware qualification not done | [#5](https://github.com/niwantha33/RTOS-Observatory/issues/5) | [W14 PR #28](https://github.com/niwantha33/RTOS-Observatory/pull/28) |
+| P3 Debugger and live hardware | W14–W19 | W14 passive DSF metadata bridge merged; W15 safe RAM/register/TCB source adapter PR in review, ZEW installed plugin/hardware unqualified | [#5](https://github.com/niwantha33/RTOS-Observatory/issues/5) | [W14 PR #28](https://github.com/niwantha33/RTOS-Observatory/pull/28) · [W15 source branch](https://github.com/niwantha33/RTOS-Observatory/tree/feature/w15-safe-snapshot-acquisition-contract) |
 | P4 Multi-RTOS ecosystem | W20–W24 | Planned | [#6](https://github.com/niwantha33/RTOS-Observatory/issues/6) | — |
 | P5 AI reports and innovation | W25–W27 | Planned | [#7](https://github.com/niwantha33/RTOS-Observatory/issues/7) | — |
 
@@ -32,12 +32,13 @@
 | W11 | Merged; qualification pending | PR #25, merge `96fe9861a5df`; source-linked inversion/circular wait/drift patterns; latest-head CI not confirmed |
 | W12 | Merged; qualification pending | PR #26 / commit `d7bdb8654a6e`; offline versioned TCB/stack/heap/register fault snapshot; no live acquisition |
 | W13 | Merged; qualification pending | PR #27 / commit `492335e5ff5d`; C/C++/Rust source sidecar, SHA-256 ELF/source checks, read-only source jump; **not DWARF extraction** |
-| **W14** | **PR #28 open — tests/ZEW integration pending** | Source-only passive Eclipse DSF owner lifecycle observer + atomic metadata publisher; native bounded reader, GUI, CTest. **Not installed as a ZEW plugin** |
-| W15–W19 | Not started (P3) | Debug-probe acquisition, firmware, transports and physical hardware qualification planned |
+| W14 | Merged; acceptance pending | PR #28 / merge `7cfcffca61fe`; passive Eclipse DSF owner lifecycle observer; **not installed/qualified as ZEW plugin** |
+| **W15** | **PR in preparation — CI/ZEW pending** | Consent/allowlist/stop-only snapshot contract, source-only owning-DSF IMemory/IRegisters adapter, local unverified receipt viewer and tests; **not integrated into installed ZEW** |
+| W16–W19 | Not started (P3) | Firmware, transports and physical hardware qualification planned |
 | W20–W24 | Not started (P4) | Native vendor/version-aware RTOS adapters not yet qualified |
 | W25–W27 | Not started (P5) | Rich reports, optional AI/MCP and what-if simulator future work |
 
-**Totals:** 27 packages planned · **13 merged** (W01–W13), of which **7 have stated CI acceptance** (W01–W07); **W08–W13 remain software-qualification pending**, W14 PR #28 open, W15–W27 not started. **No production live trace or physical-board qualification is claimed**.
+**Totals:** 27 packages planned · **14 merged** (W01–W14), of which **7 have stated CI acceptance** (W01–W07); **W08–W14 software/integration qualification pending**, W15 PR in preparation, W16–W27 not started. **No production live trace or physical-board qualification is claimed**.
 
 ## Recent CI / PR activity
 
@@ -62,6 +63,11 @@
 - **W13** [PR #27](https://github.com/niwantha33/RTOS-Observatory/pull/27) manually merged at `492335e5ff5d34f5995bed656669da7986fa519d`; CI/review acceptance not independently established; source-sidecar mappings are not DWARF verified.
 - **W14** [PR #28](https://github.com/niwantha33/RTOS-Observatory/pull/28) open against main; passive owning-Eclipse DSF lifecycle publisher + native metadata viewer/tests. **Source-only ZEW extension, no installed-plugin test and no hardware proof**, latest-head CI/review pending.
 - Hardware qualification **DEFERRED**, never marked passed.
+
+## Latest P3 status — 2026-11-19
+
+- **W14** [PR #28](https://github.com/niwantha33/RTOS-Observatory/pull/28) manually merged at `7cfcffca61fe08653b581eb2758895c112ff4e9c`. The Eclipse source observer is still not installed or PDE/Tycho qualified.
+- **W15** branch `feature/w15-safe-snapshot-acquisition-contract`: bounded, one-shot, suspended-only RAM/CPU register/TCB permission model; source-only existing-DSF read adapter, local read receipt and GUI. Hardware tests intentionally deferred. Actual ZEW user consent UI/all-core verifier and installed-plugin tests remain blockers.
 
 ## Open constraints / risks
 

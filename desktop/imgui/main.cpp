@@ -116,6 +116,8 @@ int main(int argc, char** argv) {
     bool smoke_fault=false;
     bool smoke_symbols=false;
     bool smoke_bridge=false;
+    bool smoke_snapshot=false;
+    std::string snapshot_path;
     std::string bridge_status_path;
     std::string symbol_manifest, symbol_elf, symbol_root;
     std::string fault_load_path;
@@ -151,6 +153,9 @@ int main(int argc, char** argv) {
                   "  --bridge-status FILE  Read a passive Eclipse DSF status publication\n"
                   "  --smoke-bridge FILE  Headless W14 lifecycle status smoke\n"
                   "  --smoke-ui-bridge FILE  Hidden W14 bridge status panel smoke\n"
+                  "  --snapshot-receipt FILE  Open unverified W15 saved reads\n"
+                  "  --smoke-snapshot FILE  Headless W15 receipt model smoke\n"
+                  "  --smoke-ui-snapshot FILE  Hidden W15 snapshot receipts panel smoke\n"
                   "Drag a trace file onto the window or enter a filename in the sidebar.");
         return 0;
     }
@@ -235,6 +240,17 @@ int main(int argc, char** argv) {
         std::puts("W14 metadata-only DSF owner bridge model smoke passed");
         return 0;
     }
+    if(argc>=3 && std::string_view(argv[1])=="--smoke-snapshot") {
+        if(!workspace.open_snapshot_receipt(argv[2]) || !workspace.snapshot_receipt() ||
+           workspace.snapshot_receipt()->samples.size()<5 ||
+           workspace.snapshot_receipt()->all_cores_coherent) {
+            std::fprintf(stderr,"W15 receipt model smoke failed: %s\n",
+                workspace.error().c_str());
+            return 3;
+        }
+        std::puts("W15 unverified saved RAM/TCB/register receipt smoke passed");
+        return 0;
+    }
     if(argc>=3 && std::string_view(argv[1])=="--smoke-fault") {
         if(!workspace.open_fault_snapshot(argv[2]) || !workspace.fault_view() ||
            workspace.fault_view()->findings.empty()) {
@@ -244,7 +260,12 @@ int main(int argc, char** argv) {
         std::puts("W12 offline stack, TCB, fault and memory evidence smoke passed");
         return 0;
     }
-    if(argc>=3 && (std::string_view(argv[1])=="--bridge-status" ||
+    if(argc>=3 && (std::string_view(argv[1])=="--snapshot-receipt" ||
+                   std::string_view(argv[1])=="--smoke-ui-snapshot")) {
+        snapshot_path=argv[2];
+        smoke_snapshot=std::string_view(argv[1])=="--smoke-ui-snapshot";
+        smoke_ui=smoke_snapshot;
+    } else if(argc>=3 && (std::string_view(argv[1])=="--bridge-status" ||
                    std::string_view(argv[1])=="--smoke-ui-bridge")) {
         smoke_bridge=std::string_view(argv[1])=="--smoke-ui-bridge";
         smoke_ui=smoke_bridge;
@@ -306,7 +327,13 @@ int main(int argc, char** argv) {
             workspace.error().c_str());
         return 2;
     }
+    if(!snapshot_path.empty() && !workspace.open_snapshot_receipt(snapshot_path)) {
+        std::fprintf(stderr,"Cannot load W15 snapshot receipt: %s\n",
+            workspace.error().c_str());
+        return 2;
+    }
     if (smoke_causal) workspace.show_causality();
+    if (smoke_snapshot) workspace.show_snapshot_receipt();
     if (smoke_bridge) workspace.show_debug_bridge();
     if (smoke_symbols) workspace.show_source_graph();
     if (smoke_fault) workspace.show_faults();
@@ -367,7 +394,8 @@ int main(int argc, char** argv) {
     glfwTerminate();
     if(smoke_ui) {
         std::printf("Desktop font: %s\n",font_name.c_str());
-        std::puts(smoke_bridge ? "W14 passive DSF bridge UI smoke passed" :
+        std::puts(smoke_snapshot ? "W15 unverified snapshot receipt UI smoke passed" :
+                  smoke_bridge ? "W14 passive DSF bridge UI smoke passed" :
                   smoke_symbols ? "W13 verified source graph UI smoke passed" :
                   smoke_causal ? "W11 causal panel UI smoke passed" :
                   smoke_resources ? "W10 resource panel UI smoke passed" :

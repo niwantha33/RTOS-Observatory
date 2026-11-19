@@ -32,6 +32,31 @@ status in Observatory's **Debugger lifecycle** panel and manually refresh it.
 Full protocol, replay/stale/epoch rules and testing boundaries:
 [W14 DSF bridge](../../docs/W14_DSF_BRIDGE.md).
 
+## W15 — selective approved RAM/CPU register snapshots (source patch)
+
+`DsfApprovedSnapshotCapture.java` adds a bounded **read-only** service adapter
+for a caller in the same owning Eclipse CDT/DSF-GDB session. It uses the existing
+DSF `IMemory` and `IRegisters` services, with no competing GDB/OpenOCD
+connection, and publishes a versioned, explicitly **unverified** local receipt.
+
+**Not installed. No Eclipse command/user consent dialog is registered yet.**
+ZEW must create a UI consent action and pass a short-lived `Consent`,
+board-qualified `QualifiedRamRegion` list, the selected suspended DSF
+execution/memory context, and a callable **all-core suspension verifier**.
+An arbitrary user-entered address cannot be marked safe RAM. The Java source
+compiles only after adding the required CDT/DSF bundle dependencies and running
+ZEW PDE/Tycho integration checks.
+
+Limit: one-shot approval, <=30 seconds, <=32 reads, <=256 bytes per memory
+read, <=4096 bytes total, <=16 allowlisted CPU registers. All reads must be
+rechecked on the DSF executor and stop if the target resumes. Receipt output
+is limited to the private `RTOS_OBSERVATORY_BRIDGE_DIR`; no automatic network
+transfer. Actual debugger service calls, board RAM identity and concurrent
+core coherence are **unqualified**, not silently marked supported.
+
+See [W15 safe snapshots](../../docs/W15_SAFE_SNAPSHOTS.md) for the exact
+schema, qualification blockers and native read-only receipt viewer.
+
 ## Future live-debug bridge
 
 A live bridge requires a versioned IPC protocol and an implementation using DSF-GDB's owning session to accept *explicitly approved* suspended-state snapshot requests. Add a local authentication token, exact launch/project/ELF identities, target-state checks, read limits and timeout/cancellation. Never connect another GDB client to a single-client OpenOCD endpoint. No live bridge is implemented here.
