@@ -28,6 +28,8 @@ python .\tools\w19_qualification.py --manifest .\examples\w19-synthetic.json
 python .\tools\w19_qualification.py --manifest .\examples\w19-synthetic.json --report .\w19-readiness.json
 \`\`\`
 
+**Cross-check against raw W17 evidence:** When a `raw_trace` file is attached, `tools/w19_wire_audit.py` independently parses the bounded binary stream, validates every frame's version/kind/length/CRC32, rejects truncation/replay/reused epochs, checks W16 lane attempts, and compares decoded event/byte counts with the manifest. An arbitrarily rehashed text file is NOT an acceptable W17 trace. Latest source full/busy counter fields from W17 stats frames are compared without claiming coherent sampling; missing stats, inconsistent counters and observed loss downgrade readiness. Even a clean final record cannot prove absence of unseen trailing loss.
+
 The example's cycle counts, clock, firmware SHA256 and identities are **invented test values**, not measurements. Output values such as \`paired_overhead_us_median\` and \`observed_event_rate_per_s\` are calculated from those inputs only. They are NOT measured MCU throughput, validated clocks, ISR WCET or guarantees about any board.
 
 ### V1 manifest shape
@@ -78,7 +80,7 @@ This is a *schema illustration*, not a valid runnable manifest: real SHA256 dige
 - At least 3 and at most 1024 paired **baseline vs instrumented cycle samples**, with the same sampling method and workload. Pairwise median difference is computed, and converted to microseconds using **reported** CPU frequency (not independently proved). Negative differences are retained, not hidden.
 - An observed event rate is \`observed_events × 1000 / elapsed_ms\`; this is **not maximal throughput** or lossless capacity. Reported full/busy drops are not silently summed with wire missing-frame/attempt gaps, which may overlap.
 - Manifest ≤128 KiB; up to 20 local attachments, each ≤8 MiB; bounded file reading and SHA256 hashing. No network fetches, no target I/O or debugger commands, and output file creation uses exclusive create.
-- Standalone Python stdlib; \`observatory_w19_evidence_safety\` CTest covers synthetic no-pass, a physically-labelled but still human-review-only case, malformed fields, forged hash, path traversal, report overwrite protection and oversized input.
+- Standalone Python stdlib; \`observatory_w19_evidence_safety\` CTest covers synthetic no-pass, a physically-labelled but still human-review-only case, malformed fields, forged hash, path traversal, W17 CRC/truncation/replay and sequence gaps, report overwrite protection and oversized input.
 
 ## W19 acceptance and blockers
 
