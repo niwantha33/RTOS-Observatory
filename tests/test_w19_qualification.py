@@ -28,9 +28,13 @@ def demo(root):
     return {
         "schema": w.SCHEMA,
         "sample_origin": "synthetic",
+        "run_id": "W19-SYNTHETIC-001",
         "board": "lp_mspm0g3507",
+        "board_revision": "revA",
         "silicon": "MSPM0G3507",
         "probe": "XDS110",
+        "probe_firmware": "3.0.0.41",
+        "debug_server": "TI_OpenOCD_0.12",
         "rtos": "Zephyr",
         "rtos_version": "4.4.0",
         "firmware_sha256": "f"*64,
@@ -107,6 +111,10 @@ def main():
 
         invalid = copy.deepcopy(source)
         invalid["measurement"]["cpu_hz"] = 0
+        refuses(root, invalid)
+
+        invalid = copy.deepcopy(source)
+        invalid["transport"] = []
         refuses(root, invalid)
 
         invalid = copy.deepcopy(source)
