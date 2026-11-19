@@ -61,6 +61,15 @@ void FramedTcpCapture::read() {
             if(n>self->options_.max_bytes-self->result_.bytes) {
                 self->finish("framed TCP byte budget exceeded");return;
             }
+            // Spool callback executes only on this Asio strand; any failure
+            // invalidates the capture. It cannot make a partial disk write safe.
+            try {
+                if(n && self->options_.on_bytes)
+                    self->options_.on_bytes(self->buffer_.data(),n);
+            } catch(const std::exception& err) {
+                self->finish(std::string("framed TCP spool failed: ")+err.what());
+                return;
+            }
             self->result_.bytes+=n;
             for(std::size_t i=0;i<n;++i) {
                 obs_wire_frame_t frame{};

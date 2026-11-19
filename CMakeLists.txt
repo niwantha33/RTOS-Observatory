@@ -20,9 +20,14 @@ target_compile_features(observatory_target_wire PUBLIC c_std_11)
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
   # Only Microsoft's C compiler needs this option; clang-cl supports C11 atomics
   # without it, and warns when passed /experimental:c11atomics.
-  target_compile_options(observatory_target_ring PUBLIC /experimental:c11atomics)
-  target_compile_options(observatory_target_recorder PUBLIC /experimental:c11atomics)
-  target_compile_options(observatory_target_wire PUBLIC /experimental:c11atomics)
+  # MSVC's C11 atomic option must not propagate into C++20 GUI compilation.
+  # PUBLIC is retained for C clients of the ring/recorder.
+  target_compile_options(observatory_target_ring PUBLIC
+    "$<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>")
+  target_compile_options(observatory_target_recorder PUBLIC
+    "$<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>")
+  target_compile_options(observatory_target_wire PUBLIC
+    "$<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>")
 endif()
 add_library(observatory_core src/engine.cpp src/session.cpp src/timeline.cpp)
 target_include_directories(observatory_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -48,6 +53,14 @@ if(OBSERVATORY_BUILD_TESTS)
   add_executable(observatory_transport_tests tests/test_transport_v1.c)
   target_link_libraries(observatory_transport_tests PRIVATE observatory_target_wire)
   add_test(NAME observatory_wire_nonblocking_sink COMMAND observatory_transport_tests)
+  add_executable(observatory_live_session_tests tests/test_live_session.cpp)
+  target_link_libraries(observatory_live_session_tests PRIVATE
+    observatory_core observatory_target_wire)
+  target_compile_features(observatory_live_session_tests PRIVATE cxx_std_20)
+  add_test(NAME observatory_live_epoch_model COMMAND observatory_live_session_tests
+    ${CMAKE_CURRENT_BINARY_DIR}/w18-synthetic.rtob)
+  set_tests_properties(observatory_live_epoch_model PROPERTIES
+    FIXTURES_SETUP w18_binary_fixture TIMEOUT 30)
   add_executable(observatory_recorder_concurrency_tests tests/test_recorder_concurrency.c)
   target_link_libraries(observatory_recorder_concurrency_tests PRIVATE observatory_target_recorder)
   if(NOT WIN32)
@@ -121,7 +134,7 @@ if(OBSERVATORY_BUILD_TESTS)
 endif()
 
 if(OBSERVATORY_BUILD_TESTS)
-  foreach(test_target observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_fault_tests observatory_source_tests observatory_bridge_tests observatory_snapshot_policy_tests observatory_snapshot_receipt_tests observatory_ring_tests observatory_recorder_tests observatory_recorder_concurrency_tests observatory_wire_tests observatory_transport_tests)
+  foreach(test_target observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_fault_tests observatory_source_tests observatory_bridge_tests observatory_snapshot_policy_tests observatory_snapshot_receipt_tests observatory_ring_tests observatory_recorder_tests observatory_recorder_concurrency_tests observatory_wire_tests observatory_transport_tests observatory_live_session_tests)
     if(MSVC)
       target_compile_options(${test_target} PRIVATE /UNDEBUG)
     else()
@@ -252,7 +265,7 @@ if(OBSERVATORY_BUILD_DESKTOP)
   target_include_directories(rtos-observatory-desktop PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_link_libraries(rtos-observatory-desktop PRIVATE
-    observatory_desktop_model observatory_imgui)
+    observatory_desktop_model observatory_imgui observatory_target_wire)
   target_compile_features(rtos-observatory-desktop PRIVATE cxx_std_20)
   install(TARGETS rtos-observatory-desktop RUNTIME DESTINATION bin)
   # Explicit redistributable third-party notices for source/binary packaging.
@@ -294,6 +307,10 @@ if(OBSERVATORY_BUILD_DESKTOP)
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/dsf-status.tsv)
     add_test(NAME observatory_desktop_snapshot_smoke COMMAND rtos-observatory-desktop --smoke-snapshot
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/approved-snapshot.tsv)
+    add_test(NAME observatory_desktop_live_smoke COMMAND rtos-observatory-desktop --smoke-live
+      ${CMAKE_CURRENT_BINARY_DIR}/w18-synthetic.rtob)
+    set_tests_properties(observatory_desktop_live_smoke PROPERTIES
+      FIXTURES_REQUIRED w18_binary_fixture TIMEOUT 30)
     add_test(NAME observatory_desktop_symbols_smoke COMMAND rtos-observatory-desktop
       --smoke-symbols ${CMAKE_CURRENT_BINARY_DIR}/w13-symbol-test-fixture/symbols.tsv
       ${CMAKE_CURRENT_BINARY_DIR}/w13-symbol-test-fixture/firmware.elf
@@ -310,7 +327,7 @@ if(OBSERVATORY_BUILD_DESKTOP)
       observatory_desktop_diagnostics_smoke observatory_desktop_resource_smoke
       observatory_desktop_causal_smoke observatory_desktop_fault_smoke
       observatory_desktop_symbols_smoke observatory_desktop_bridge_smoke
-      observatory_desktop_snapshot_smoke PROPERTIES TIMEOUT 30)
+      observatory_desktop_snapshot_smoke observatory_desktop_live_smoke PROPERTIES TIMEOUT 30)
     # Linux CI xvfb-run provides a genuine hidden GLFW/OpenGL render smoke.
     if(UNIX AND NOT APPLE)
       find_program(OBSERVATORY_XVFB_RUN xvfb-run)
@@ -349,11 +366,17 @@ if(OBSERVATORY_BUILD_DESKTOP)
         add_test(NAME observatory_imgui_snapshot_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
           $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-snapshot
           ${CMAKE_CURRENT_SOURCE_DIR}/examples/approved-snapshot.tsv)
+        add_test(NAME observatory_imgui_live_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
+          $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-live
+          ${CMAKE_CURRENT_BINARY_DIR}/w18-synthetic.rtob)
+        set_tests_properties(observatory_imgui_live_ui_smoke PROPERTIES
+          FIXTURES_REQUIRED w18_binary_fixture TIMEOUT 30)
         set_tests_properties(observatory_imgui_ui_smoke observatory_imgui_graph_ui_smoke
           observatory_imgui_replay_ui_smoke observatory_imgui_diagnostics_ui_smoke
           observatory_imgui_resource_ui_smoke observatory_imgui_causal_ui_smoke
           observatory_imgui_fault_ui_smoke observatory_imgui_symbols_ui_smoke
           observatory_imgui_bridge_ui_smoke observatory_imgui_snapshot_ui_smoke
+          observatory_imgui_live_ui_smoke
           PROPERTIES TIMEOUT 30)
       endif()
     endif()

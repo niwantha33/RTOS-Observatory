@@ -21,6 +21,9 @@ struct FramedTcpOptions {
     std::size_t max_frames{100000u};
     std::chrono::milliseconds idle_timeout{5000};
     std::chrono::milliseconds total_timeout{30000};
+    // Optional strand-serialized exact raw bytes, e.g. user-owned local spool.
+    // Throws on sink I/O failure; a capture can no longer claim clean success.
+    std::function<void(const std::uint8_t*,std::size_t)> on_bytes;
 };
 struct FramedTcpResult {
     std::size_t bytes{};

@@ -30,6 +30,19 @@ Run the desktop with `--trace examples/timeline.trace` after building; this samp
 
 The host can receive a bounded finite normalized trace using standalone Asio and one strand per session, validate rows and report progress during reception, then save it for offline replay. See [build and demo instructions](docs/ASIO_CAPTURE.md). This is an early W17/W18 transport foundation; device adapters and continuously updating diagnostic analysis remain planned.
 
+## W18 — opt-in live trace epochs (unverified software stage)
+
+The desktop now has a **Live trace epochs** panel, backed by a bounded
+incremental W17 decoder. The optional owned TCP receiver can create a new
+binary spool with `--spool capture.rtob`; open the same file with
+`rtos-observatory-desktop --live capture.rtob`. A short **observed arrival-order**
+lane visualization and live event/epoch/loss table update as that file grows.
+
+Clock calibration is explicitly user-entered per epoch. **No CPU load or
+RTOS task state is inferred from unqualified numeric event IDs**. There is
+no automatic GDB or RTT connection, and physical board qualification remains
+deferred. [W18 limitations and run instructions](docs/W18_LIVE_EPOCHS.md).
+
 ## W17 — bounded binary trace transport (source-stage)
 
 W17 adds an explicit little-endian, CRC32-checked binary frame for W16 records and
