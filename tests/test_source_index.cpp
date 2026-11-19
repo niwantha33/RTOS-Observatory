@@ -72,6 +72,9 @@ int main(int argc,char** argv) {
     auto v=verify_source_index(index,elf,sources);
     assert(v.elf_matches && v.all_sources_match && !v.manifest_authenticated);
     assert(v.verified_sources.size()==3);
+    const auto wrong_width=parse(std::string("RTOS-OBSERVATORY-SYMBOLS\t1\t")+
+        e_hash+"\tsynthetic-fw\t32\n"+files+funcs+edges);
+    assert(!verify_source_index(wrong_width,elf,sources).elf_matches);
     auto at_pc=resolve_source_pc(index,v,0x1101);
     assert(at_pc.function_index && *at_pc.function_index==1);
     assert(!at_pc.ambiguous && at_pc.verified_elf_identity);
