@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "obs_transport_v1.h"
+#include "obs_recorder.h"
 #include <limits.h>
 #include <stddef.h>
 #include <string.h>
