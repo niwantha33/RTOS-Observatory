@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Consumer;
+import java.util.function.BooleanSupplier;
 
 import org.eclipse.cdt.core.IAddress;
 import org.eclipse.cdt.dsf.concurrent.DataRequestMonitor;
@@ -121,8 +122,11 @@ public final class DsfApprovedSnapshotCapture {
      */
     public static void capture(GdbLaunch launch, IDMContext selected,
                                Consent consent, Path receiptFile,
+                               BooleanSupplier allCoresStillSuspended,
                                Consumer<String> finished) {
         Objects.requireNonNull(finished,"W15 completion callback required");
+        Objects.requireNonNull(allCoresStillSuspended,
+            "Qualified owning-DSF all-core stop verifier required");
         try {
             validate(consent);
             if(launch==null || selected==null || receiptFile==null ||
@@ -138,8 +142,14 @@ public final class DsfApprovedSnapshotCapture {
             if(session==null || !DsfSession.isSessionActive(session.getId()) ||
                !session.getId().equals(selected.getSessionId()))
                 throw new IllegalArgumentException("W15 DSF session mismatch");
-            if(Files.isSymbolicLink(receiptFile))
-                throw new IllegalArgumentException("Refusing symlinked receipt destination");
+            final String configured=System.getenv("RTOS_OBSERVATORY_BRIDGE_DIR");
+            if(configured==null || configured.isBlank())
+                throw new IllegalArgumentException("W15 private output directory not configured");
+            final Path approvedParent=Path.of(configured).toRealPath();
+            if(!Files.isDirectory(approvedParent) || Files.isSymbolicLink(approvedParent) ||
+               !receiptFile.toAbsolutePath().normalize().getParent().equals(approvedParent) ||
+               Files.isSymbolicLink(receiptFile))
+                throw new IllegalArgumentException("W15 receipt must remain in the approved private directory");
             session.getExecutor().execute(() -> {
                 final DsfServicesTracker services=new DsfServicesTracker(
                     FrameworkUtil.getBundle(DsfApprovedSnapshotCapture.class).getBundleContext(),
@@ -153,7 +163,8 @@ public final class DsfApprovedSnapshotCapture {
                     final var ramContext=DMContexts.getAncestorOfType(
                         selected,IMemory.IMemoryDMContext.class);
                     if(control==null || execution==null ||
-                       !control.isSuspended(execution))
+                       !control.isSuspended(execution) ||
+                       !allCoresStillSuspended.getAsBoolean())
                         throw new IllegalArgumentException("Selected execution context is not suspended");
                     if(memory==null && consent.items().stream().anyMatch(i->i.kind()!=Kind.REG))
                         throw new IllegalArgumentException("DSF memory capability unavailable");
@@ -162,7 +173,8 @@ public final class DsfApprovedSnapshotCapture {
                     if(ramContext==null && consent.items().stream().anyMatch(i->i.kind()!=Kind.REG))
                         throw new IllegalArgumentException("No owning DSF memory context");
                     step(session,launch,control,execution,memory,ramContext,registers,
-                         selected,consent,receiptFile,new ArrayList<>(),0,
+                         selected,consent,receiptFile,allCoresStillSuspended,
+                         new ArrayList<>(),0,
                          result -> {
                              services.dispose();
                              finished.accept(result);
@@ -181,10 +193,12 @@ public final class DsfApprovedSnapshotCapture {
                              IRunControl.IExecutionDMContext execution,
                              IMemory memory, IMemory.IMemoryDMContext ramContext,
                              IRegisters registers,IDMContext selected,Consent consent,
-                             Path output,List<Result> results,int index,
+                             Path output,BooleanSupplier allCoresStillSuspended,
+                             List<Result> results,int index,
                              Consumer<String> finished) {
         if(launch.isTerminated() || !DsfSession.isSessionActive(session.getId()) ||
            !control.isSuspended(execution) ||
+           !allCoresStillSuspended.getAsBoolean() ||
            Instant.now().toEpochMilli()>consent.expiresUnixMs()) {
             // Do not publish a partial "successful" capture as coherent.
             finished.accept("DENIED: target resumed/terminated or approval expired");
@@ -199,7 +213,8 @@ public final class DsfApprovedSnapshotCapture {
         final Consumer<Result> next=result -> {
             results.add(result);
             step(session,launch,control,execution,memory,ramContext,registers,
-                 selected,consent,output,results,index+1,finished);
+                 selected,consent,output,allCoresStillSuspended,
+                 results,index+1,finished);
         };
         if(item.kind()==Kind.REG) {
             registers.findRegister(selected,item.label().toLowerCase(Locale.ROOT),
