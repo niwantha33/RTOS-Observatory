@@ -40,6 +40,9 @@ if(OBSERVATORY_BUILD_TESTS)
   add_executable(observatory_resource_tests tests/test_resources.cpp)
   target_link_libraries(observatory_resource_tests PRIVATE observatory_core)
   add_test(NAME observatory_resource_semantics COMMAND observatory_resource_tests)
+  add_executable(observatory_causal_tests tests/test_causal_diagnostics.cpp)
+  target_link_libraries(observatory_causal_tests PRIVATE observatory_core)
+  add_test(NAME observatory_causal_patterns COMMAND observatory_causal_tests)
   add_test(NAME observatory_resource_fixture_parse COMMAND rtos-observatory
     --input ${CMAKE_CURRENT_SOURCE_DIR}/examples/resources.trace
     --output ${CMAKE_CURRENT_BINARY_DIR}/resource-fixture-report.json)
@@ -60,7 +63,7 @@ if(OBSERVATORY_BUILD_TESTS)
 endif()
 
 if(OBSERVATORY_BUILD_TESTS)
-  foreach(test_target observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_ring_tests)
+  foreach(test_target observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_ring_tests)
     if(MSVC)
       target_compile_options(${test_target} PRIVATE /UNDEBUG)
     else()
