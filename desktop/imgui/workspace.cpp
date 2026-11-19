@@ -76,8 +76,21 @@ void Workspace::fit() {
     end_us_ = controller_.report().end_us;
     update_timeline();
 }
+void Workspace::update_graph() {
+    graph_.reset();
+    if (!controller_.loaded()) return;
+    try {
+        graph_ = build_causal_graph(controller_.trace(), begin_us_, end_us_, graph_filter_.data());
+        if (std::none_of(graph_->nodes.begin(), graph_->nodes.end(),
+                         [&](const GraphNode& node) { return node.id == graph_selected_; }))
+            graph_selected_.clear();
+    } catch (const std::exception& e) {
+        notice_ = e.what();
+    }
+}
 void Workspace::update_timeline() {
     timeline_.reset();
+    update_graph();
     if (!controller_.loaded()) return;
     try {
         timeline_ = controller_.timeline(begin_us_, end_us_);
@@ -127,6 +140,10 @@ void Workspace::rebuild_event_filter() {
     filtered_.clear();
     if (!controller_.loaded()) return;
     const auto& events = controller_.trace().capture.events;
+    if (focused_event_ && *focused_event_ < events.size()) {
+        filtered_.push_back(*focused_event_);
+        return;
+    }
     const auto query = lower(filter_.data());
     constexpr std::size_t max_preview = 20000;
     for (std::size_t i=0; i < std::min(events.size(), max_preview); ++i) {
@@ -186,8 +203,8 @@ void Workspace::draw_menus() {
         ImGui::MenuItem("Show navigation",nullptr,&show_sidebar_);
         if(ImGui::BeginMenu("Go to panel")) {
             constexpr const char* names[]={"Overview","Execution timeline","CPU and waits",
-                "Events","Findings","Evidence details"};
-            for(int i=0;i<6;++i)
+                "Causal graph","Events","Findings","Evidence details"};
+            for(int i=0;i<7;++i)
                 if(ImGui::MenuItem(names[i],nullptr,static_cast<int>(page_)==i))
                     page_=static_cast<Page>(i);
             ImGui::EndMenu();
@@ -214,6 +231,7 @@ void Workspace::draw_menus() {
         }
         ImGui::Separator();
         if(ImGui::MenuItem("CPU and wait analysis",nullptr,false,loaded())) page_=Page::CpuWaits;
+        if(ImGui::MenuItem("Causal graph studio",nullptr,false,loaded())) page_=Page::Graph;
         if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
@@ -300,8 +318,8 @@ void Workspace::draw_sidebar() {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
     header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
-                                      "Events", "Findings", "Evidence details"};
-    for (int i=0; i<6; ++i) {
+                                      "Causal graph", "Events", "Findings", "Evidence details"};
+    for (int i=0; i<7; ++i) {
         if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
                               ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
@@ -469,6 +487,153 @@ void Workspace::draw_timeline() {
     if(view.rendering_limited || task_count>32 || wait_count>=32)
         ImGui::TextDisabled("Display capped; all decoded intervals are retained in accounting.");
 }
+void Workspace::draw_graph() {
+    if (!controller_.loaded()) {
+        ImGui::TextDisabled("Open an offline trace to explore recorded task/resource links.");
+        return;
+    }
+    header("Causal graph studio");
+    ImGui::TextDisabled("Solid arrows: observed events. Thin links: source evidence. Correlation does not prove cause.");
+    if (ImGui::InputText("Task filter", graph_filter_.data(), graph_filter_.size()))
+        update_graph();
+    ImGui::SameLine();
+    ImGui::Checkbox("Show evidence", &graph_show_evidence_);
+    ImGui::SameLine();
+    if (ImGui::Button("Reset graph view")) {
+        graph_scale_ = 1.0f;
+        graph_pan_x_ = 0.f;
+        graph_pan_y_ = 0.f;
+    }
+    if (!graph_) {
+        ImGui::TextDisabled("No graph is available for this time window.");
+        return;
+    }
+    const auto& view = *graph_;
+    ImGui::Text("Window [%llu, %llu] us | %zu nodes | %zu links | Clock: %s",
+        static_cast<unsigned long long>(view.begin_us),
+        static_cast<unsigned long long>(view.end_us),
+        view.nodes.size(), view.edges.size(), view.clock_domain.c_str());
+    if (!view.evidence_complete || view.truncated)
+        ImGui::TextColored(ImVec4(1.f,.75f,.42f,1.f),
+            "INCOMPLETE / CAPPED: unobserved states and relations remain unknown");
+    for (const auto& warning : view.warnings)
+        ImGui::TextWrapped("%s", warning.c_str());
+    ImGui::TextDisabled("Drag with middle mouse to pan; mouse wheel to zoom; click a node for linked events.");
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    const ImVec2 canvas_size(std::max(500.f, ImGui::GetContentRegionAvail().x), 450.f);
+    ImGui::InvisibleButton("##causal-graph-canvas", canvas_size);
+    const bool hovered = ImGui::IsItemHovered();
+    auto& io = ImGui::GetIO();
+    if (hovered && ImGui::IsMouseDragging(ImGuiMouseButton_Middle)) {
+        graph_pan_x_ += io.MouseDelta.x;
+        graph_pan_y_ += io.MouseDelta.y;
+    }
+    if (hovered && io.MouseWheel != 0.f)
+        graph_scale_ = std::clamp(graph_scale_ * (io.MouseWheel > 0 ? 1.12f : .89f),
+                                  .35f, 2.50f);
+    auto* draw = ImGui::GetWindowDrawList();
+    const ImVec2 canvas_end(origin.x + canvas_size.x, origin.y + canvas_size.y);
+    draw->AddRectFilled(origin, canvas_end, rgba(19,30,47), 5.f);
+    draw->AddRect(origin, canvas_end, rgba(69,91,121), 5.f);
+    draw->PushClipRect(origin, canvas_end, true);
+    const auto point = [&](float x, float y) {
+        return ImVec2(origin.x + graph_pan_x_ + x * graph_scale_,
+                      origin.y + graph_pan_y_ + y * graph_scale_);
+    };
+    std::vector<ImVec2> positions(view.nodes.size());
+    std::size_t tasks = 0, resources = 0, evidence = 0;
+    for (std::size_t i = 0; i < view.nodes.size(); ++i) {
+        const auto kind = view.nodes[i].kind;
+        if (kind == GraphNodeKind::Task)
+            positions[i] = point(30.f, 45.f + 57.f * static_cast<float>(tasks++));
+        else if (kind == GraphNodeKind::Resource)
+            positions[i] = point(310.f, 45.f + 57.f * static_cast<float>(resources++));
+        else
+            positions[i] = point(590.f, 45.f + 57.f * static_cast<float>(evidence++));
+    }
+    for (const auto& edge : view.edges) {
+        if (edge.from >= positions.size() || edge.to >= positions.size()) continue;
+        if (!graph_show_evidence_ && edge.relation == "supports") continue;
+        const auto& src = view.nodes[edge.from];
+        const auto& dst = view.nodes[edge.to];
+        if (!graph_show_evidence_ &&
+            (src.kind == GraphNodeKind::Evidence || dst.kind == GraphNodeKind::Evidence))
+            continue;
+        const bool highlighted = src.id == graph_selected_ || dst.id == graph_selected_;
+        const ImVec2 a = positions[edge.from], b = positions[edge.to];
+        const float w = 178.f * graph_scale_, h = 36.f * graph_scale_;
+        draw->AddLine(ImVec2(a.x + w/2.f, a.y + h/2.f),
+                      ImVec2(b.x + w/2.f, b.y + h/2.f),
+                      highlighted ? rgba(255,220,135) :
+                      edge.relation == "supports" ? rgba(109,123,156,85) :
+                      rgba(109,194,225,155), highlighted ? 2.5f : 1.0f);
+    }
+    for (std::size_t i = 0; i < view.nodes.size(); ++i) {
+        const auto& node = view.nodes[i];
+        if (!graph_show_evidence_ && node.kind == GraphNodeKind::Evidence) continue;
+        const ImVec2 a = positions[i];
+        const ImVec2 b(a.x + 178.f * graph_scale_, a.y + 36.f * graph_scale_);
+        if (b.x < origin.x || a.x > canvas_end.x ||
+            b.y < origin.y || a.y > canvas_end.y) continue;
+        const bool selected = node.id == graph_selected_;
+        const ImU32 colour = node.kind == GraphNodeKind::Task ? rgba(37,109,159) :
+                            node.kind == GraphNodeKind::Resource ? rgba(157,102,46) :
+                                                                   rgba(97,74,140);
+        draw->AddRectFilled(a, b, colour, 5.f);
+        draw->AddRect(a, b, selected ? rgba(255,239,158) : rgba(164,185,213),
+                      5.f, 0, selected ? 3.f : 1.f);
+        std::string text = node.label;
+        if (text.size() > 22) text = text.substr(0,19) + "...";
+        draw->AddText(ImVec2(a.x + 8.f, a.y + 9.f * graph_scale_),
+                      rgba(250,252,255), text.c_str());
+        const bool node_hovered = hovered && ImGui::IsMouseHoveringRect(a,b);
+        if (node_hovered) {
+            ImGui::SetTooltip("%s", node.id.c_str());
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                graph_selected_ = node.id;
+        }
+    }
+    draw->PopClipRect();
+    if (graph_selected_.empty()) {
+        ImGui::TextDisabled("Select a task, resource or event node to inspect its supporting records.");
+        return;
+    }
+    ImGui::SeparatorText("Selected evidence links");
+    ImGui::TextWrapped("%s", graph_selected_.c_str());
+    std::size_t selected_idx = view.nodes.size();
+    for (std::size_t i = 0; i < view.nodes.size(); ++i)
+        if (view.nodes[i].id == graph_selected_) { selected_idx = i; break; }
+    if (selected_idx == view.nodes.size()) return;
+    std::size_t shown = 0;
+    for (const auto& edge : view.edges) {
+        if (edge.relation == "supports" ||
+            (edge.from != selected_idx && edge.to != selected_idx)) continue;
+        if (++shown > 60) break;
+        ImGui::PushID(static_cast<int>(edge.event_index));
+        const std::string item = edge.relation + " at " +
+                                 as_text(edge.timestamp_us) + " us; line " +
+                                 as_text(edge.source_line) + "; event #" +
+                                 as_text(edge.event_index);
+        if (ImGui::SmallButton("Inspect event")) {
+            focused_event_ = edge.event_index;
+            rebuild_event_filter();
+            page_ = Page::Events;
+        }
+        ImGui::SameLine();
+        label(item);
+        ImGui::PopID();
+    }
+    if (shown > 60)
+        ImGui::TextDisabled("Evidence list capped at 60 visible relationships.");
+    if (const auto& node = view.nodes[selected_idx]; node.event_index) {
+        if (ImGui::Button("Open selected evidence event")) {
+            focused_event_ = *node.event_index;
+            rebuild_event_filter();
+            page_ = Page::Events;
+        }
+    }
+}
+
 void Workspace::draw_cpu() {
     if(!timeline_) { ImGui::TextDisabled("Select a valid observed time window in Execution timeline."); return; }
     header("CPU time by core");
@@ -507,8 +672,21 @@ void Workspace::draw_cpu() {
 void Workspace::draw_events() {
     if(!controller_.loaded()) return;
     header("Recorded events");
-    if(ImGui::InputText("Filter type, task, object or time",filter_.data(),filter_.size()))
+    if(ImGui::InputText("Filter type, task, object or time",filter_.data(),filter_.size())) {
+        focused_event_.reset();
         rebuild_event_filter();
+    }
+    if (focused_event_ && *focused_event_ < controller_.trace().capture.events.size()) {
+        const auto& e = controller_.trace().capture.events[*focused_event_];
+        ImGui::Text("Graph evidence #%zu: %s at %llu us (source line %zu)",
+            *focused_event_, e.type.c_str(),
+            static_cast<unsigned long long>(e.timestamp_us), e.line);
+        ImGui::SameLine();
+        if (ImGui::Button("Show all recorded events")) {
+            focused_event_.reset();
+            rebuild_event_filter();
+        }
+    }
     ImGui::TextDisabled("Displaying %zu rows; preview capped at first 20,000 events.",
                         filtered_.size());
     if(ImGui::BeginTable("events",6,table_flags,ImVec2(0,-1))) {
@@ -609,6 +787,7 @@ void Workspace::draw() {
       case Page::Overview: draw_overview();break;
       case Page::Timeline: draw_timeline();break;
       case Page::CpuWaits: draw_cpu();break;
+      case Page::Graph: draw_graph();break;
       case Page::Events: draw_events();break;
       case Page::Findings: draw_findings();break;
       case Page::Evidence: draw_evidence();break;
