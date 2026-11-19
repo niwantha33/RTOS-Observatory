@@ -60,6 +60,7 @@ struct SymbolVerification {
     bool all_sources_match{false};
     bool manifest_authenticated{false}; // source map claims NEVER independently attested here
     std::map<std::string,std::filesystem::path> verified_sources;
+    std::filesystem::path canonical_source_root;
     std::vector<std::string> warnings;
 };
 struct SymbolMatch {
@@ -302,6 +303,7 @@ inline SymbolVerification verify_source_index(
     }
     try {
         const auto canonical_root=std::filesystem::canonical(root);
+        out.canonical_source_root=canonical_root;
         if(!std::filesystem::is_directory(canonical_root))
             throw Error("Source root is not a directory");
         for(const auto& [name,expected]:index.source_sha256) {
@@ -353,9 +355,15 @@ inline SourceExcerpt read_verified_source_excerpt(const SourceIndex& index,
     const auto it=verified.verified_sources.find(f.path);
     if(it==verified.verified_sources.end())
         throw Error("Source checksum unknown/mismatch: refusing source navigation");
+    // Do not follow a path that moved outside the verified source root
+    // after the manifest was loaded.
+    const auto now=std::filesystem::canonical(it->second);
+    if(verified.canonical_source_root.empty() ||
+       !symbol_detail::inside(verified.canonical_source_root,now))
+        throw Error("Source path no longer confined to selected root");
     // Read once into a bounded buffer, hash THESE SAME bytes and only then
     // expose lines. A separate pre-read hash would create a TOCTOU window.
-    std::ifstream file(it->second,std::ios::binary);
+    std::ifstream file(now,std::ios::binary);
     if(!file)throw Error("Source file no longer readable");
     std::string contents;
     std::array<char,8192> buffer{};
