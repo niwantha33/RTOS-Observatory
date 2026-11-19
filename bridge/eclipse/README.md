@@ -10,6 +10,28 @@ This directory is a **source integration patch**, not a compiled Eclipse plugin.
 
 The handler writes a private temporary browser session containing the viewer and base64-encoded report. It never reads target memory or contacts OpenOCD/GDB. The active debug launch is only inspected for its launch mode in `handoff.txt` for future development.
 
+## W14 — passive DSF lifecycle integration (source patch)
+
+Also copy `DsfLifecycleBridgeHandler.java` into the same existing UI plug-in's
+`io.github.niwantha33.zew.ui` package, and merge the second handler/command/menu
+contribution from `plugin-extensions.xml`. The installed UI bundle must
+depend on Eclipse CDT DSF/GDB and Debug UI, in addition to its existing
+dependencies. **PDE/Tycho build and actual installed-Eclipse testing have not
+been performed by RTOS Observatory.**
+
+Create a private local folder and set `RTOS_OBSERVATORY_BRIDGE_DIR` before
+restarting Eclipse. Select an already-running **CDT DSF-GDB debug launch** in
+the Debug view, then choose **Toggle RTOS Observatory (Passive DSF Lifecycle)**.
+The Eclipse owner writes one atomic `rtos-observatory-dsf-status.tsv` file
+containing last-reported lifecycle metadata only; another invocation stops.
+It listens to DSF IRunControl and Eclipse launch termination events, **never
+issues a GDB/MI command, changes debugger state or opens a probe connection**.
+A 2-second heartbeat does not establish actual target status. Open the local
+status in Observatory's **Debugger lifecycle** panel and manually refresh it.
+
+Full protocol, replay/stale/epoch rules and testing boundaries:
+[W14 DSF bridge](../../docs/W14_DSF_BRIDGE.md).
+
 ## Future live-debug bridge
 
 A live bridge requires a versioned IPC protocol and an implementation using DSF-GDB's owning session to accept *explicitly approved* suspended-state snapshot requests. Add a local authentication token, exact launch/project/ELF identities, target-state checks, read limits and timeout/cancellation. Never connect another GDB client to a single-client OpenOCD endpoint. No live bridge is implemented here.
