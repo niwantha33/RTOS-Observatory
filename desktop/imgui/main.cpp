@@ -115,6 +115,8 @@ int main(int argc, char** argv) {
     bool smoke_causal=false;
     bool smoke_fault=false;
     bool smoke_symbols=false;
+    bool smoke_bridge=false;
+    std::string bridge_status_path;
     std::string symbol_manifest, symbol_elf, symbol_root;
     std::string fault_load_path;
     std::string load_path;
@@ -146,6 +148,9 @@ int main(int argc, char** argv) {
                   "  --symbols MANIFEST ELF SOURCE_ROOT  Open the offline source/symbol graph\n"
                   "  --smoke-symbols MANIFEST ELF SOURCE_ROOT  Headless W13 digest/navigation smoke\n"
                   "  --smoke-ui-symbols MANIFEST ELF SOURCE_ROOT  Hidden W13 verified graph UI\n"
+                  "  --bridge-status FILE  Read a passive Eclipse DSF status publication\n"
+                  "  --smoke-bridge FILE  Headless W14 lifecycle status smoke\n"
+                  "  --smoke-ui-bridge FILE  Hidden W14 bridge status panel smoke\n"
                   "Drag a trace file onto the window or enter a filename in the sidebar.");
         return 0;
     }
@@ -219,6 +224,17 @@ int main(int argc, char** argv) {
         std::puts("W13 verified C/C++/Rust symbol graph and source checks passed");
         return 0;
     }
+    if(argc>=3 && std::string_view(argv[1])=="--smoke-bridge") {
+        if(!workspace.open_bridge_status(argv[2]) || !workspace.bridge_observation() ||
+           !workspace.bridge_observation()->accepted ||
+           !workspace.bridge_observation()->record.metadata_only) {
+            std::fprintf(stderr,"W14 passive lifecycle smoke failed: %s\n",
+                workspace.error().c_str());
+            return 3;
+        }
+        std::puts("W14 metadata-only DSF owner bridge model smoke passed");
+        return 0;
+    }
     if(argc>=3 && std::string_view(argv[1])=="--smoke-fault") {
         if(!workspace.open_fault_snapshot(argv[2]) || !workspace.fault_view() ||
            workspace.fault_view()->findings.empty()) {
@@ -228,7 +244,12 @@ int main(int argc, char** argv) {
         std::puts("W12 offline stack, TCB, fault and memory evidence smoke passed");
         return 0;
     }
-    if(argc>=5 && (std::string_view(argv[1])=="--symbols" ||
+    if(argc>=3 && (std::string_view(argv[1])=="--bridge-status" ||
+                   std::string_view(argv[1])=="--smoke-ui-bridge")) {
+        smoke_bridge=std::string_view(argv[1])=="--smoke-ui-bridge";
+        smoke_ui=smoke_bridge;
+        bridge_status_path=argv[2];
+    } else if(argc>=5 && (std::string_view(argv[1])=="--symbols" ||
                     std::string_view(argv[1])=="--smoke-ui-symbols")) {
         symbol_manifest=argv[2];
         symbol_elf=argv[3];
@@ -279,7 +300,14 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,"Cannot load W13 symbol map: %s\n",workspace.error().c_str());
         return 2;
     }
+    if (!bridge_status_path.empty() &&
+        !workspace.open_bridge_status(bridge_status_path)) {
+        std::fprintf(stderr,"Cannot load W14 passive bridge status: %s\n",
+            workspace.error().c_str());
+        return 2;
+    }
     if (smoke_causal) workspace.show_causality();
+    if (smoke_bridge) workspace.show_debug_bridge();
     if (smoke_symbols) workspace.show_source_graph();
     if (smoke_fault) workspace.show_faults();
     glfwSetErrorCallback(glfw_error);
@@ -339,7 +367,8 @@ int main(int argc, char** argv) {
     glfwTerminate();
     if(smoke_ui) {
         std::printf("Desktop font: %s\n",font_name.c_str());
-        std::puts(smoke_symbols ? "W13 verified source graph UI smoke passed" :
+        std::puts(smoke_bridge ? "W14 passive DSF bridge UI smoke passed" :
+                  smoke_symbols ? "W13 verified source graph UI smoke passed" :
                   smoke_causal ? "W11 causal panel UI smoke passed" :
                   smoke_resources ? "W10 resource panel UI smoke passed" :
                   smoke_diagnostics ? "W09 scheduler UI smoke passed" :

@@ -3,14 +3,20 @@
   <command id="io.github.niwantha33.zew.ui.openRtosObservatory"
            name="Open RTOS Observatory (Offline Report)"
            />
+  <command id="io.github.niwantha33.zew.ui.toggleRtosObservatoryDsfLifecycle"
+           name="Toggle RTOS Observatory (Passive DSF Lifecycle)" />
 </extension>
 <extension point="org.eclipse.ui.handlers">
   <handler commandId="io.github.niwantha33.zew.ui.openRtosObservatory"
            class="io.github.niwantha33.zew.ui.OpenRtosObservatoryHandler" />
+  <handler commandId="io.github.niwantha33.zew.ui.toggleRtosObservatoryDsfLifecycle"
+           class="io.github.niwantha33.zew.ui.DsfLifecycleBridgeHandler" />
 </extension>
 <extension point="org.eclipse.ui.menus">
   <menuContribution locationURI="menu:org.eclipse.ui.main.menu?after=additions">
     <command commandId="io.github.niwantha33.zew.ui.openRtosObservatory"
              label="Open RTOS Observatory (Offline Report)" style="push" />
+    <command commandId="io.github.niwantha33.zew.ui.toggleRtosObservatoryDsfLifecycle"
+             label="Toggle RTOS Observatory (Passive DSF Lifecycle)" style="push" />
   </menuContribution>
 </extension>
