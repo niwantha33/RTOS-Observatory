@@ -30,6 +30,19 @@ Run the desktop with `--trace examples/timeline.trace` after building; this samp
 
 The host can receive a bounded finite normalized trace using standalone Asio and one strand per session, validate rows and report progress during reception, then save it for offline replay. See [build and demo instructions](docs/ASIO_CAPTURE.md). This is an early W17/W18 transport foundation; device adapters and continuously updating diagnostic analysis remain planned.
 
+## W17 — bounded binary trace transport (source-stage)
+
+W17 adds an explicit little-endian, CRC32-checked binary frame for W16 records and
+noncoherent per-lane loss counters. A static C11 decoder detects frame gaps,
+bad CRC, duplicated sequences and epoch changes. A one-frame nonblocking sink
+contract supports **platform-supplied** UART/USB CDC/owned TCP/qualified RTT
+writers; **no physical driver or RTT probe access is supplied**.
+
+With `OBSERVATORY_BUILD_LIVE=ON`, the optional
+`rtos-observatory-framed-capture` connects over an already owned numeric TCP
+endpoint and reports finite wire evidence and loss. This does **not** update a
+real-time UI or prove hardware support. See [W17 protocol and tests](docs/W17_TRANSPORT.md).
+
 ## Phase 0: offline sessions
 
 Versioned ingestion, decoder registration, bounded processing and indexed session storage are implemented. See [Foundation](docs/FOUNDATION.md) and [Universal v1](docs/UNIVERSAL_V1.md) for contracts and qualification limits.

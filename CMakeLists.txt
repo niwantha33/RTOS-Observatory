@@ -9,11 +9,20 @@ add_library(observatory_target_recorder firmware/obs_recorder.c)
 target_include_directories(observatory_target_recorder PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/firmware)
 target_compile_features(observatory_target_recorder PUBLIC c_std_11)
+# W17: platform-neutral little-endian framing, CRC32, loss-aware decoder,
+# and one-stage nonblocking UART/USB/owned-TCP/qualified-RTT sink adapter.
+add_library(observatory_target_wire
+  firmware/obs_wire_v1.c firmware/obs_transport_v1.c)
+target_include_directories(observatory_target_wire PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/firmware)
+target_link_libraries(observatory_target_wire PUBLIC observatory_target_recorder)
+target_compile_features(observatory_target_wire PUBLIC c_std_11)
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
   # Only Microsoft's C compiler needs this option; clang-cl supports C11 atomics
   # without it, and warns when passed /experimental:c11atomics.
   target_compile_options(observatory_target_ring PUBLIC /experimental:c11atomics)
   target_compile_options(observatory_target_recorder PUBLIC /experimental:c11atomics)
+  target_compile_options(observatory_target_wire PUBLIC /experimental:c11atomics)
 endif()
 add_library(observatory_core src/engine.cpp src/session.cpp src/timeline.cpp)
 target_include_directories(observatory_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -33,6 +42,12 @@ if(OBSERVATORY_BUILD_TESTS)
   add_executable(observatory_recorder_tests tests/test_recorder.c)
   target_link_libraries(observatory_recorder_tests PRIVATE observatory_target_recorder)
   add_test(NAME observatory_recorder_bounded COMMAND observatory_recorder_tests)
+  add_executable(observatory_wire_tests tests/test_wire_v1.c)
+  target_link_libraries(observatory_wire_tests PRIVATE observatory_target_wire)
+  add_test(NAME observatory_wire_crc_resync COMMAND observatory_wire_tests)
+  add_executable(observatory_transport_tests tests/test_transport_v1.c)
+  target_link_libraries(observatory_transport_tests PRIVATE observatory_target_wire)
+  add_test(NAME observatory_wire_nonblocking_sink COMMAND observatory_transport_tests)
   add_executable(observatory_recorder_concurrency_tests tests/test_recorder_concurrency.c)
   target_link_libraries(observatory_recorder_concurrency_tests PRIVATE observatory_target_recorder)
   if(NOT WIN32)
@@ -106,7 +121,7 @@ if(OBSERVATORY_BUILD_TESTS)
 endif()
 
 if(OBSERVATORY_BUILD_TESTS)
-  foreach(test_target observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_fault_tests observatory_source_tests observatory_bridge_tests observatory_snapshot_policy_tests observatory_snapshot_receipt_tests observatory_ring_tests observatory_recorder_tests observatory_recorder_concurrency_tests)
+  foreach(test_target observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_fault_tests observatory_source_tests observatory_bridge_tests observatory_snapshot_policy_tests observatory_snapshot_receipt_tests observatory_ring_tests observatory_recorder_tests observatory_recorder_concurrency_tests observatory_wire_tests observatory_transport_tests)
     if(MSVC)
       target_compile_options(${test_target} PRIVATE /UNDEBUG)
     else()
@@ -126,6 +141,17 @@ if(OBSERVATORY_BUILD_LIVE)
   include(cmake/Asio.cmake)
   add_library(observatory_live src/live.cpp)
   target_link_libraries(observatory_live PUBLIC observatory_core observatory_asio_headers)
+  # W17 uses the same owned Asio socket stack as legacy finite TSV capture,
+  # but validates bounded framed binary data via the shared C11 wire codec.
+  add_library(observatory_framed_live src/framed_tcp.cpp)
+  target_include_directories(observatory_framed_live PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(observatory_framed_live PUBLIC
+    observatory_target_wire observatory_core observatory_asio_headers)
+  target_compile_features(observatory_framed_live PUBLIC cxx_std_20)
+  add_executable(rtos-observatory-framed-capture src/framed_capture_main.cpp)
+  target_link_libraries(rtos-observatory-framed-capture PRIVATE observatory_framed_live)
+  install(TARGETS rtos-observatory-framed-capture RUNTIME DESTINATION bin)
   add_executable(rtos-observatory-capture src/capture_main.cpp)
   target_link_libraries(rtos-observatory-capture PRIVATE observatory_live)
   install(TARGETS rtos-observatory-capture RUNTIME DESTINATION bin)
@@ -137,6 +163,10 @@ if(OBSERVATORY_BUILD_LIVE)
     add_test(NAME observatory_live_lifecycle COMMAND observatory_live_tests)
   endif()
   if(OBSERVATORY_BUILD_TESTS AND Python3_Interpreter_FOUND)
+    add_test(NAME observatory_wire_tcp_loopback COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_framed_tcp.py
+      $<TARGET_FILE:rtos-observatory-framed-capture>)
+    set_tests_properties(observatory_wire_tcp_loopback PROPERTIES TIMEOUT 90)
     add_test(NAME observatory_tcp_capture COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_tcp_capture.py $<TARGET_FILE:rtos-observatory-capture>
       $<TARGET_FILE:rtos-observatory> ${CMAKE_CURRENT_SOURCE_DIR}/examples/foundation.trace)
