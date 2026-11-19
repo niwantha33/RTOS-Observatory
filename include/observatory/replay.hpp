@@ -105,7 +105,9 @@ inline ReplaySnapshot replay_at(const DecodedTrace& trace, std::size_t event_ind
             } else {
                 r = {e.object, ReplayResourceKind::Acquired, e.task, i, e.line, e.timestamp_us};
             }
-            update_wait(false, true); // explicit acquire ends that task's mutex wait
+            const auto pending = waits.find(key);
+            if (pending != waits.end() && pending->second.known && pending->second.active)
+                update_wait(false, true); // only a previously OBSERVED wait can end
         } else if (e.type == "MUTEX_UNLOCK") {
             auto& r = resources[e.object];
             if (r.kind == ReplayResourceKind::Acquired && r.last_owner == e.task)
