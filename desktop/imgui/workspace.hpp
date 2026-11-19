@@ -2,6 +2,7 @@
 #pragma once
 #include "observatory/desktop/session_controller.hpp"
 #include "observatory/timeline.hpp"
+#include "observatory/graph.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -21,20 +22,24 @@ public:
     void draw();
     bool exit_requested() const noexcept { return exit_requested_; }
     bool loaded() const noexcept { return controller_.loaded(); }
+    const GraphView* graph() const noexcept { return graph_ ? &*graph_ : nullptr; }
+    void show_graph() noexcept { page_ = Page::Graph; }
     const std::string& error() const noexcept { return error_; }
     const SessionController& controller() const noexcept { return controller_; }
     const TimelineView* timeline() const noexcept { return timeline_ ? &*timeline_ : nullptr; }
 private:
-    enum class Page { Overview, Timeline, CpuWaits, Events, Findings, Evidence };
+    enum class Page { Overview, Timeline, CpuWaits, Graph, Events, Findings, Evidence };
     enum class OpenDialog { None, Trace, Session };
     void draw_menus();
     void draw_dialogs();
     void update_timeline();
+    void update_graph();
     void rebuild_event_filter();
     void draw_sidebar();
     void draw_overview();
     void draw_timeline();
     void draw_cpu();
+    void draw_graph();
     void draw_events();
     void draw_findings();
     void draw_evidence();
@@ -43,6 +48,13 @@ private:
     void zoom(bool in);
     SessionController controller_;
     std::optional<TimelineView> timeline_;
+    std::optional<GraphView> graph_;
+    std::optional<std::size_t> focused_event_;
+    std::string graph_selected_;
+    bool graph_show_evidence_{true};
+    float graph_scale_{1.0f};
+    float graph_pan_x_{0.0f};
+    float graph_pan_y_{0.0f};
     std::string error_;
     std::string notice_;
     Page page_{Page::Overview};
@@ -57,6 +69,7 @@ private:
     std::array<char, 2048> path_{};
     std::array<char, 2048> export_path_{};
     std::array<char, 160> filter_{};
+    std::array<char, 96> graph_filter_{};
     std::vector<std::size_t> filtered_;
     struct Recent { std::string path; std::string decoder; bool session{}; };
     std::vector<Recent> recents_;

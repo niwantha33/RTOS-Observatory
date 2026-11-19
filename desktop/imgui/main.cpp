@@ -108,6 +108,7 @@ std::string setup_fonts(GLFWwindow* window) {
 int main(int argc, char** argv) {
     observatory::desktop::Workspace workspace;
     bool smoke_ui=false;
+    bool smoke_graph=false;
     std::string load_path;
     bool session=false;
     if(argc>=2 && std::string_view(argv[1])=="--version") {
@@ -121,6 +122,8 @@ int main(int argc, char** argv) {
                   "  --version        Version, source commit and UTC build configuration time\n"
                   "  --smoke PATH     Headless decoder/controller/timeline test (no graphics)\n"
                   "  --smoke-ui PATH  Hidden GLFW/OpenGL+ImGui one-frame integration test\n"
+                  "  --smoke-graph PATH  Headless W07 graph-model smoke test\n"
+                  "  --smoke-ui-graph PATH  Hidden W07 graph-canvas integration test\n"
                   "Drag a trace file onto the window or enter a filename in the sidebar.");
         return 0;
     }
@@ -137,8 +140,19 @@ int main(int argc, char** argv) {
         std::puts("W05/W06 Dear ImGui desktop model smoke passed");
         return 0;
     }
-    if(argc>=3 && std::string_view(argv[1])=="--smoke-ui") {
+    if(argc>=3 && std::string_view(argv[1])=="--smoke-graph") {
+        if(!workspace.open_trace(argv[2]) || !workspace.graph() ||
+           workspace.graph()->nodes.empty() || workspace.graph()->edges.empty()) {
+            std::fprintf(stderr,"W07 graph model smoke failed: %s\n",workspace.error().c_str());
+            return 3;
+        }
+        std::puts("W07 causal graph model smoke passed");
+        return 0;
+    }
+    if(argc>=3 && (std::string_view(argv[1])=="--smoke-ui" ||
+                   std::string_view(argv[1])=="--smoke-ui-graph")) {
         smoke_ui=true;
+        smoke_graph=std::string_view(argv[1])=="--smoke-ui-graph";
         load_path=argv[2];
     } else if(argc>=3 && std::string_view(argv[1])=="--trace")
         load_path=argv[2];
@@ -153,6 +167,7 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
+    if (smoke_graph) workspace.show_graph();
     glfwSetErrorCallback(glfw_error);
     if(!glfwInit()) { std::fputs("GLFW initialization failed\n",stderr); return 3; }
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);
@@ -210,7 +225,8 @@ int main(int argc, char** argv) {
     glfwTerminate();
     if(smoke_ui) {
         std::printf("Desktop font: %s\n",font_name.c_str());
-        std::puts("W05/W06 Dear ImGui GLFW+OpenGL UI smoke passed");
+        std::puts(smoke_graph ? "W07 graph GLFW+OpenGL UI smoke passed" :
+                                "W05/W06 Dear ImGui GLFW+OpenGL UI smoke passed");
     }
     return 0;
 }
