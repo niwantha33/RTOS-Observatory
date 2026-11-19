@@ -3,6 +3,9 @@
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <fstream>
+#include <filesystem>
+#include <algorithm>
 #include <string>
 #include <vector>
 using namespace observatory;
@@ -33,7 +36,7 @@ static bool refuses(auto&& call) {
     try{call();}catch(const Error&){return true;}
     return false;
 }
-int main() {
+int main(int argc,char** argv) {
     LiveSession session(LiveLimits{2048,100,3,3});
     auto a=event_frame(1,1,1,100);
     auto b=event_frame(1,2,2,200);
@@ -121,5 +124,19 @@ int main() {
     assert(refuses([] {LiveSession bad(LiveLimits{1,1,0,1});}));
     assert(refuses([] {LiveSession bad(LiveLimits{1,1,1,0});}));
     assert(refuses([&] {session.feed(nullptr,1);}));
+    // Reproducible, synthetic binary GUI/file-follow fixture. No hardware.
+    if(argc>1) {
+        const std::filesystem::path file(argv[1]);
+        std::ofstream out(file,std::ios::binary|std::ios::trunc);
+        assert(out.is_open());
+        const auto x=event_frame(1,1,1,100);
+        const auto y=event_frame(1,2,2,200);
+        const auto z=event_frame(2,1,1,15);
+        for(const auto& bytes:{x,y,z})
+            out.write(reinterpret_cast<const char*>(bytes.data()),
+                      static_cast<std::streamsize>(bytes.size()));
+        out.close();
+        assert(out.good());
+    }
     std::cout<<"W18 epoch isolation, bounded incremental history, loss and explicit clock mapping passed\n";
 }
