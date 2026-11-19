@@ -1,0 +1,8 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+# W07 agent brief — evidence-linked Causal Graph Studio
+
+**Task order:** this may start only after AUT-01 bootstrap is merged and accepted, with no other active Autopilot branch. Source: P1 issue #3 and `docs/MASTER_PLAN.md`. W05/W06 are implemented for offline evidence. Do **not** claim live target/RTOS support.
+
+Build **offline** interactive Causal Graph Studio in the current C++20 + Dear ImGui standalone application, not a new GUI toolkit. Draw task, mutex/resource and evidence nodes and observed relations from validated normalized event inputs. Add zoom, pan, node selection/filtering, timeline/evidence navigation, and bounded handling of large inputs. Preserve event provenance, loss markers and explicit unknowns. A correlation is not automatically a proved cause, and no queue depth/ownership/ready state should be inferred from missing events. Proposed causal edges must cite source event IDs, timestamp domains and limitations.
+
+Acceptance: deterministic graph model tests (normal, malformed, lost/incomplete, same-timestamp and empty evidence), evidence links in the UI, selectable/highlightable task-resource graph, filters/pan/zoom and performance bound with an explicit cap, desktop smoke, existing CTest suites green. Run Windows + Ubuntu Debug/Release and Windows clang-cl CI; do not mark hardware-qualified. Publish a PR for independent review and **do not close** the Phase 1 tracker #3; W08 remains outstanding.
