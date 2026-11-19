@@ -18,6 +18,14 @@ static SnapshotCapture parse(const std::string& data,SnapshotLimits l={}) {
 static bool rejects(const std::string& s,SnapshotLimits l={}) {
     try{(void)parse(s,l);}catch(const Error&){return true;}return false;
 }
+static std::string as_crlf(std::string s) {
+    std::string out;
+    for(const char c:s) {
+        if(c=='\n')out+='\r';
+        out+=c;
+    }
+    return out;
+}
 int main(int argc,char** argv) {
     const auto x=parse(sample);
     assert(x.request.session_nonce=="session-A");
@@ -33,7 +41,15 @@ int main(int argc,char** argv) {
     assert(rejects(""));
     assert(rejects(sample.substr(0,sample.size()-1)));
     assert(rejects(sample+"\n"));
-    assert(rejects(sample+"REG\tLR\t0x0\t0\tok\t0x4\n"));
+    // Extra valid samples are allowed by v1 (up to max_items).
+    const auto extra=sample+"REG\tLR\t0x0\t0\tok\t0x4\n";
+    assert(parse(extra).samples.size()==5);
+    assert(rejects(extra,SnapshotLimits{4,256,4096,16,30000}));
+    // Git for Windows can convert the sample fixture to CRLF.
+    assert(parse(as_crlf(sample)).samples.size()==4);
+    assert(rejects(as_crlf(sample).substr(0,as_crlf(sample).size()-1)));
+    assert(rejects(sample.substr(0,5)+"\r"+sample.substr(5)));
+    assert(rejects(sample.substr(0,sample.size()-1)+"\r"));
     assert(rejects("RTOS-OBSERVATORY-APPROVED-SNAPSHOT\t2\tsession-A\t7\tapproval-A\tfixture\t32\tunverified\n"
                   "REG\tPC\t0x0\t0\tok\t0x10\n"));
     assert(rejects("RTOS-OBSERVATORY-APPROVED-SNAPSHOT\t1\tsession-A\t7\tapproval-A\tfixture\t32\tcertified\n"
