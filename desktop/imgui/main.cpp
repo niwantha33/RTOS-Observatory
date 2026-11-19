@@ -178,7 +178,8 @@ int main(int argc, char** argv) {
     }
     if(argc>=3 && std::string_view(argv[1])=="--smoke-resources") {
         if(!workspace.open_trace(argv[2]) || !workspace.resources() ||
-           workspace.resources()->resources.empty()) {
+           workspace.resources()->resources.size() < 7 ||
+           workspace.resources()->limited) {
             std::fprintf(stderr,"W10 resource model smoke failed: %s\n",workspace.error().c_str());
             return 3;
         }
