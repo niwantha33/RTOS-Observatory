@@ -600,6 +600,8 @@ void Workspace::refresh_unified_view() {
     }
     shared_selected_event_.reset();
     shared_selected_case_.reset();
+    shared_cached_filter_ = "\x01"; // force refresh even if query is empty
+    shared_filtered_events_.clear();
 }
 
 void Workspace::draw_menus() {
