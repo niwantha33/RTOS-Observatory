@@ -279,6 +279,7 @@ if(OBSERVATORY_BUILD_DESKTOP)
   add_executable(rtos-observatory-desktop
     desktop/imgui/main.cpp
     desktop/imgui/workspace.cpp
+    desktop/imgui/workspace_shared.cpp
     desktop/imgui/workspace.hpp)
   target_include_directories(rtos-observatory-desktop PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
