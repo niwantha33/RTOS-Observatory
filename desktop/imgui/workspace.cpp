@@ -2182,22 +2182,56 @@ void Workspace::follow_ctf() {
     }
 }
 void Workspace::draw_ctf() {
-    header("W20 / Zephyr kernel resource investigation");
-    ImGui::TextDisabled("Native CTF 1.8 saved-file adapter. No debugger, probe or network access.");
-    ImGui::TextColored(ImVec4(1.f,.75f,.43f,1.f),
-        "Clock, trace loss, ISR identity and cross-core scheduling are NOT qualified.");
+    ImGui::TextColored(ImVec4(.55f,.77f,.96f,1.f),"ZEPHYR  /  NATIVE CTF");
+    ImGui::SetWindowFontScale(1.32f);
+    ImGui::TextUnformatted("Kernel resource investigations");
+    ImGui::SetWindowFontScale(1.f);
+    ImGui::TextDisabled("Inspect mutex contention, semaphore wakeups, message queues and source evidence.");
+    ImGui::Spacing();
+
+    ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(.085f,.118f,.162f,1.f));
+    ImGui::BeginChild("w20-source-panel",ImVec2(0,197),ImGuiChildFlags_Borders);
+    ImGui::TextColored(ImVec4(.75f,.87f,.98f,1.f),"01  CAPTURE SOURCE");
+    ImGui::TextDisabled("Choose a local capture directory. No files leave this computer.");
     ImGui::SetNextItemWidth(-1);
-    ImGui::InputText("CTF folder",ctf_directory_.data(),ctf_directory_.size());
-    if(ImGui::Button("Open CTF / reload"))(void)open_ctf_directory(ctf_directory_.data());
+    ImGui::InputText("##ctf-source-path",ctf_directory_.data(),ctf_directory_.size());
+#ifdef _WIN32
+    if(ImGui::Button("Browse folders...")) {
+        if(auto selected=choose_ctf_directory_native()) {
+            // Selecting the folder explicitly opens it without another click.
+            (void)open_ctf_directory(*selected);
+        }
+    }
     ImGui::SameLine();
-    if(ImGui::Button("Refresh growing file"))follow_ctf();
+#endif
+    if(ImGui::Button("Open & analyse"))
+        (void)open_ctf_directory(ctf_directory_.data());
     ImGui::SameLine();
-    ImGui::Checkbox("Follow local file", &ctf_follow_);
-    if(!ctf_error_.empty())ImGui::TextColored(ImVec4(1.f,.48f,.38f,1.f),"%s",ctf_error_.c_str());
+    if(ImGui::Button("Refresh"))
+        follow_ctf();
+    ImGui::SameLine();
+    ImGui::Checkbox("Follow file",&ctf_follow_);
+    ImGui::TextDisabled("Required: metadata + channel0_0 in the same directory.");
+    if(!ctf_error_.empty()) {
+        ImGui::TextColored(ImVec4(1.f,.56f,.43f,1.f),"%s",ctf_error_.c_str());
+    }else if(ctf_) {
+        ImGui::TextColored(ImVec4(.48f,.85f,.66f,1.f),
+            "Loaded locally  |  %zu events  |  %zu resource cases",
+            ctf_->events.size(),ctf_->findings.size());
+    }else {
+        ImGui::TextDisabled("No CTF capture opened yet. Browse a folder to begin.");
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+
     if(!ctf_) {
-        ImGui::TextWrapped("Choose the directory containing metadata and channel0_0 from your private local Zephyr CTF capture.");
+        ImGui::Spacing();
+        ImGui::TextDisabled("Supported: Zephyr CTF 1.8 little-endian saved captures.");
+        ImGui::TextDisabled("Also accepts a parent directory containing a single CTF capture folder.");
         return;
     }
+    ImGui::TextColored(ImVec4(1.f,.78f,.47f,1.f),
+        "Evidence status: clock uncalibrated  |  trace loss unknown  |  correlations not proven causes.");
     auto& data=*ctf_;
     ImGui::Separator();
     if(ImGui::BeginTable("ctf-summary",4,ImGuiTableFlags_SizingStretchSame)) {
@@ -2357,9 +2391,10 @@ void Workspace::draw() {
     const float footer_height=ImGui::GetTextLineHeightWithSpacing()+14.f;
     ImGui::BeginChild("Investigation",ImVec2(0,-footer_height),ImGuiChildFlags_None);
     ImGui::SetWindowFontScale(1.18f);
-    ImGui::TextColored(ImVec4(.92f,.96f,1.f,1.f),"Trace investigation");
+    ImGui::TextColored(ImVec4(.92f,.96f,1.f,1.f),
+        page_==Page::Ctf ? "W20 / Zephyr CTF" : "Trace investigation");
     ImGui::SetWindowFontScale(1.f);
-    if(controller_.loaded()) {
+    if(controller_.loaded() && page_!=Page::Ctf) {
         ImGui::SameLine();
         ImGui::TextDisabled("Session: %s",controller_.report().session.c_str());
     }
@@ -2368,7 +2403,7 @@ void Workspace::draw() {
         ImGui::TextColored(ImVec4(1,.53f,.40f,1),"ERROR: %s",error_.c_str());
         ImGui::SameLine();
         if(ImGui::SmallButton("Dismiss")) error_.clear();
-    } else if(!notice_.empty()) {
+    } else if(!notice_.empty() && page_!=Page::Ctf) {
         ImGui::TextDisabled("%s",notice_.c_str());
     }
     switch(page_) {
