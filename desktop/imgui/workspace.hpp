@@ -122,6 +122,7 @@ class Workspace final {
     void draw_shared_tool(Page page);
     void draw_shared_dashboard();
     void draw_shared_timeline();
+    void draw_shared_graph();
     void draw_shared_resources();
     void draw_shared_events();
     void draw_shared_evidence();
