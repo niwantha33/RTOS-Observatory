@@ -583,7 +583,8 @@ void Workspace::refresh_unified_view() {
                                    decoded.evidence.missing_events == 0 &&
                                    decoded.evidence.declared_drops == 0;
             unified_ = project_normalized(decoded.capture, report,
-                          timeline_ ? &*timeline_ : nullptr, qualified);
+                          timeline_ ? &*timeline_ : nullptr, qualified,
+                          resources_ ? &*resources_ : nullptr);
         } else unified_ = ToolSummary{};
         break;
     case SourceAdapter::Ctf:
