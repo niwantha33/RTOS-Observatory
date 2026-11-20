@@ -488,6 +488,10 @@ int main(int argc, char **argv) {
         glfwTerminate();
         return 5;
     }
+    // Only a deliberate Window > Save writes local workspace preferences.
+    // Hidden CI smoke tests never load the machine's personal layout.
+    if (!smoke_ui)
+        workspace.restore_saved_layout();
     int frames = 0;
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -522,6 +526,7 @@ int main(int argc, char **argv) {
             ImGui::GetStyle().FontScaleDpi = font_dpi;
             applied_scale = requested_scale;
         }
+        workspace.apply_pending_layout();
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();

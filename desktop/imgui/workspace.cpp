@@ -623,6 +623,62 @@ void Workspace::refresh_unified_view(bool preserve_selection) {
     shared_filtered_events_.clear();
 }
 
+void Workspace::save_layout() {
+    SavedWorkspaceLayout value;
+    value.text_zoom = ui_scale_;
+    value.compact_spacing = compact_spacing_;
+    value.show_navigation = show_sidebar_;
+    value.detach_resources = ctf_explorer_detached_;
+    value.detach_evidence = ctf_inspector_detached_;
+    value.detach_timeline = ctf_scheduler_detached_;
+    for (const auto page : detached_analysis_pages_)
+        value.detached_pages.push_back(static_cast<int>(page));
+    std::size_t bytes = 0;
+    const char *raw_ini = ImGui::SaveIniSettingsToMemory(&bytes);
+    if (raw_ini && bytes)
+        value.imgui_geometry.assign(raw_ini, bytes);
+    std::string error;
+    if (save_workspace_layout(workspace_layout_file(), value, error))
+        layout_feedback_ = "Workspace layout saved locally. No capture data stored.";
+    else
+        layout_feedback_ = error;
+}
+
+void Workspace::restore_saved_layout() {
+    std::string error;
+    const auto layout = load_workspace_layout(workspace_layout_file(), error);
+    if (!layout) {
+        if (!error.empty())
+            layout_feedback_ = error;
+        return;
+    }
+    ui_scale_ = clamp_text_zoom(layout->text_zoom);
+    compact_spacing_ = layout->compact_spacing;
+    show_sidebar_ = layout->show_navigation;
+    ctf_explorer_detached_ = layout->detach_resources;
+    ctf_inspector_detached_ = layout->detach_evidence;
+    ctf_scheduler_detached_ = layout->detach_timeline;
+    detached_analysis_pages_.clear();
+    for (const int page : layout->detached_pages)
+        detached_analysis_pages_.push_back(static_cast<Page>(page));
+    ImGui::ClearIniSettings();
+    if (!layout->imgui_geometry.empty())
+        ImGui::LoadIniSettingsFromMemory(layout->imgui_geometry.data(),
+                                          layout->imgui_geometry.size());
+    layout_feedback_ = "Saved workspace layout restored.";
+}
+
+void Workspace::apply_pending_layout() {
+    if (layout_reset_requested_) {
+        layout_reset_requested_ = false;
+        ImGui::ClearIniSettings();
+    }
+    if (layout_restore_requested_) {
+        layout_restore_requested_ = false;
+        restore_saved_layout();
+    }
+}
+
 void Workspace::draw_menus() {
     if (!ImGui::BeginMenuBar())
         return;
@@ -781,6 +837,19 @@ void Workspace::draw_menus() {
             ctf_inspector_detached_ = false;
             ctf_scheduler_detached_ = false;
         }
+        ImGui::SeparatorText("Workspace layouts");
+        if (ImGui::MenuItem("Save layout locally"))
+            save_layout();
+        if (ImGui::MenuItem("Restore saved layout"))
+            layout_restore_requested_ = true;
+        if (ImGui::MenuItem("Forget saved layout")) {
+            std::error_code ec;
+            std::filesystem::remove(workspace_layout_file(), ec);
+            layout_feedback_ = ec ? "Could not remove saved layout."
+                                  : "Saved layout forgotten. Current view unchanged.";
+        }
+        if (!layout_feedback_.empty())
+            ImGui::TextWrapped("%s", layout_feedback_.c_str());
         ImGui::Separator();
         if (ImGui::MenuItem("Reset layout")) {
             detached_analysis_pages_.clear();
@@ -788,6 +857,8 @@ void Workspace::draw_menus() {
             ctf_inspector_detached_ = false;
             ctf_scheduler_detached_ = false;
             show_sidebar_ = true;
+            layout_reset_requested_ = true;
+            layout_feedback_ = "Layout reset for this run. Save to keep it.";
             page_ = Page::Overview;
             workspace_tab_ = WorkspaceTab::Analysis;
             select_analysis_tab_ = true;

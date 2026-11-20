@@ -16,6 +16,7 @@
 #include "observatory/ctf_analysis.hpp"
 #include "observatory/desktop/unified_view.hpp"
 #include "observatory/desktop/ui_layout.hpp"
+#include "observatory/desktop/layout_persistence.hpp"
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -60,6 +61,8 @@ class Workspace final {
     void accept_drop(const std::string &path);
     void set_dockspace_id(std::uint32_t id) noexcept { dockspace_id_ = id; }
     void draw();
+    void restore_saved_layout();
+    void apply_pending_layout();
     float ui_scale() const noexcept { return ui_scale_; }
     void set_ui_scale(float next) noexcept { ui_scale_ = clamp_text_zoom(next); }
     bool exit_requested() const noexcept { return exit_requested_; }
@@ -139,6 +142,7 @@ class Workspace final {
     void draw_ctf_resources();
     void draw_ctf_events();
     void draw_menus();
+    void save_layout();
     void draw_dialogs();
     void update_timeline();
     void update_graph();
@@ -255,8 +259,11 @@ class Workspace final {
     Page page_{Page::Overview};
     bool legacy_decoder_{};
     bool show_sidebar_{true};
-    bool compact_spacing_{};
-    float ui_scale_{1.0f}; // 75%-220%, DPI applied by GLFW host
+    bool compact_spacing_{true};
+    float ui_scale_{0.85f}; // compact default; 75%-220%, DPI applied by GLFW host
+    bool layout_restore_requested_{};
+    bool layout_reset_requested_{};
+    std::string layout_feedback_;
     WorkspaceTab workspace_tab_{WorkspaceTab::Analysis};
     bool select_adapters_tab_{};
     bool select_analysis_tab_{};
