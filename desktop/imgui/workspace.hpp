@@ -12,6 +12,8 @@
 #include "observatory/debug_bridge.hpp"
 #include "observatory/snapshot_receipt.hpp"
 #include "observatory/live_session.hpp"
+#include "observatory/zephyr_ctf.hpp"
+#include <chrono>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -32,6 +34,10 @@ public:
     bool open_bridge_status(const std::string& path);
     bool open_snapshot_receipt(const std::string& path);
     bool open_live_file(const std::string& path);
+    bool open_ctf_directory(const std::string& path);
+    bool open_ctf_comparison(const std::string& path);
+    const ctf::Session* ctf_session() const noexcept { return ctf_ ? &*ctf_ : nullptr; }
+    void show_ctf() noexcept { page_=Page::Ctf; }
     bool poll_live_file();
     bool export_report(const std::string& path);
     void accept_drop(const std::string& path);
@@ -63,7 +69,7 @@ public:
     const SessionController& controller() const noexcept { return controller_; }
     const TimelineView* timeline() const noexcept { return timeline_ ? &*timeline_ : nullptr; }
 private:
-    enum class Page { Overview, Timeline, CpuWaits, Graph, Replay, Diagnostics, Resources, Causality, Faults, SourceGraph, DebugBridge, Snapshot, LiveTrace, Events, Findings, Evidence };
+    enum class Page { Overview, Timeline, CpuWaits, Graph, Replay, Diagnostics, Resources, Causality, Faults, SourceGraph, DebugBridge, Snapshot, LiveTrace, Events, Findings, Evidence, Ctf };
     enum class OpenDialog { None, Trace, Session };
     void draw_menus();
     void draw_dialogs();
@@ -88,6 +94,8 @@ private:
     void draw_debug_bridge();
     void draw_snapshot_receipt();
     void draw_live_trace();
+    void draw_ctf();
+    void follow_ctf();
     void draw_events();
     void draw_findings();
     void draw_evidence();
@@ -104,6 +112,18 @@ private:
     std::optional<FaultSnapshot> fault_snapshot_;
     std::optional<FaultView> fault_view_;
     std::optional<LiveSession> live_session_;
+    std::optional<ctf::Session> ctf_;
+    std::optional<ctf::Session> ctf_compare_;
+    std::array<char,2048> ctf_directory_{};
+    std::array<char,2048> ctf_comparison_{};
+    std::array<char,128> ctf_filter_{};
+    std::string ctf_active_directory_;
+    std::string ctf_error_;
+    std::size_t ctf_selected_finding_{};
+    std::size_t ctf_selected_event_{};
+    std::uintmax_t ctf_last_size_{};
+    bool ctf_follow_{};
+    std::chrono::steady_clock::time_point ctf_last_poll_{};
     std::array<char,2048> live_file_path_{};
     std::uint64_t live_file_offset_{};
     std::string live_active_file_;
