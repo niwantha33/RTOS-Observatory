@@ -130,6 +130,7 @@ int main(int argc, char **argv) {
     bool smoke_ctf_timeline = false;
     bool smoke_ctf_resources = false;
     bool smoke_ctf_graph = false;
+    bool smoke_adapters = false;
     std::string ctf_directory_path;
     std::string live_binary_path;
     std::string snapshot_path;
@@ -150,6 +151,7 @@ int main(int argc, char **argv) {
             "  --version        Version, source commit and UTC build configuration time\n"
             "  --smoke PATH     Headless decoder/controller/timeline test (no graphics)\n"
             "  --smoke-ui PATH  Hidden GLFW/OpenGL+ImGui one-frame integration test\n"
+            "  --smoke-ui-adapters  Hidden adapter tab GUI smoke test\n"
             "  --smoke-graph PATH  Headless W07 graph-model smoke test\n"
             "  --smoke-ui-graph PATH  Hidden W07 graph-canvas integration test\n"
             "  --smoke-replay PATH  Headless W08 replay smoke test\n"
@@ -303,7 +305,10 @@ int main(int argc, char **argv) {
         std::puts("W12 offline stack, TCB, fault and memory evidence smoke passed");
         return 0;
     }
-    if (argc >= 3 &&
+    if (argc >= 2 && std::string_view(argv[1]) == "--smoke-ui-adapters") {
+        smoke_ui = true;
+        smoke_adapters = true;
+    } else if (argc >= 3 &&
         (std::string_view(argv[1]) == "--ctf" || std::string_view(argv[1]) == "--smoke-ui-ctf" ||
          std::string_view(argv[1]) == "--smoke-ui-ctf-docking" ||
          std::string_view(argv[1]) == "--smoke-ui-ctf-timeline" ||
@@ -412,6 +417,8 @@ int main(int argc, char **argv) {
         workspace.show_snapshot_receipt();
     if (smoke_live)
         workspace.show_live_trace();
+    if (smoke_adapters)
+        workspace.show_adapters();
     if (smoke_ctf)
         workspace.show_ctf();
     if (smoke_ctf_timeline)

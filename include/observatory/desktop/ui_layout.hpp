@@ -36,6 +36,6 @@ inline LayoutPolicy plan_layout(float available_width, float font_pixels,
 }
 
 inline float clamp_text_zoom(float desired) noexcept {
-    return std::isfinite(desired) ? std::clamp(desired, 1.0f, 2.2f) : 1.2f;
+    return std::isfinite(desired) ? std::clamp(desired, 0.75f, 2.2f) : 1.0f;
 }
 } // namespace observatory::desktop
