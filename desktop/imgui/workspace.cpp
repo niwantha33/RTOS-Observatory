@@ -2559,81 +2559,19 @@ void Workspace::follow_ctf() {
         ctf_follow_ = false;
     }
 }
-void Workspace::draw_ctf() {
-    ImGui::TextColored(ImVec4(.49f, .76f, .97f, 1.f), "ZEPHYR  /  CTF INVESTIGATION");
-    ImGui::SetWindowFontScale(1.22f);
-    ImGui::TextUnformatted("Kernel resource analysis");
-    ImGui::SetWindowFontScale(1.f);
 
-    // Source controls never live inside a fixed-height scrolling card.
-    ImGui::Spacing();
-    ImGui::TextDisabled("CAPTURE SOURCE  |  Private local files");
-    if (ImGui::BeginTable("w20-source", 2, ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Local folder", ImGuiTableColumnFlags_WidthStretch, 0.62f);
-        ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthStretch, 0.38f);
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::SetNextItemWidth(-1);
-        ImGui::InputTextWithHint("##w20-folder", "Capture folder path (metadata + channel0_0)",
-                                 ctf_directory_.data(), ctf_directory_.size());
-        ImGui::TableNextColumn();
-#ifdef _WIN32
-        if (ImGui::Button("Browse...")) {
-            if (auto folder = choose_ctf_directory_native())
-                (void)open_ctf_directory(*folder);
-        }
-        ImGui::SameLine();
-#endif
-        if (ImGui::Button("Open / reload"))
-            (void)open_ctf_directory(ctf_directory_.data());
-        ImGui::SameLine();
-        if (ImGui::Button("Refresh"))
-            follow_ctf();
-        ImGui::EndTable();
-    }
-    ImGui::Checkbox("Follow growing file", &ctf_follow_);
-    ImGui::SameLine();
-    ImGui::TextDisabled("Select a folder with metadata and channel0_0.");
-    if (!ctf_error_.empty()) {
-        ImGui::TextColored(ImVec4(1.f, .52f, .41f, 1.f), "Cannot open: %s", ctf_error_.c_str());
-    }
-    if (!ctf_) {
-        ImGui::Separator();
-        ImGui::TextDisabled("Browse a Zephyr CTF capture to view resource timelines and evidence.");
-        return;
-    }
+void Workspace::select_ctf_case(std::size_t index) {
+    if (!ctf_ || index >= ctf_->findings.size()) return;
+    ctf_selected_finding_ = index;
+    const auto& finding = ctf_->findings[index];
+    if (!finding.evidence.empty() && finding.evidence.front() < ctf_->events.size())
+        ctf_selected_event_ = finding.evidence.front();
+}
 
-    auto &data = *ctf_;
-    if (!data.findings.empty()) {
-        ctf_selected_finding_ = std::min(ctf_selected_finding_, data.findings.size() - 1);
-    }
-    if (!data.events.empty())
-        ctf_selected_event_ = std::min(ctf_selected_event_, data.events.size() - 1);
-    const auto select_case = [&](std::size_t index) {
-        ctf_selected_finding_ = index;
-        const auto &finding = data.findings[index];
-        if (!finding.evidence.empty() && finding.evidence.front() < data.events.size())
-            ctf_selected_event_ = finding.evidence.front();
-    };
-    ImGui::Separator();
-    if (ImGui::BeginTable("w20-kpis", 4, ImGuiTableFlags_SizingStretchSame)) {
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        small_metric("EVENTS", std::to_string(data.events.size()));
-        ImGui::TableNextColumn();
-        small_metric("THREADS", std::to_string(data.thread_names.size()));
-        ImGui::TableNextColumn();
-        small_metric("RESOURCE CASES", std::to_string(data.findings.size()));
-        ImGui::TableNextColumn();
-        small_metric("PENDING BYTES", std::to_string(data.pending_bytes));
-        ImGui::EndTable();
-    }
-    ImGui::TextColored(ImVec4(.98f, .75f, .44f, 1.f),
-                       "Clock not calibrated  |  Event loss unknown  |  Findings are correlations");
-    if (data.pending_bytes)
-        ImGui::TextDisabled("Trailing %zu bytes are not decoded events.", data.pending_bytes);
+void Workspace::draw_ctf_explorer() {
+    if (!ctf_) return;
+    auto& data = *ctf_;
 
-    const auto explorer = [&]() {
         ImGui::TextColored(ImVec4(.74f, .86f, .97f, 1.f), "01  RESOURCE EXPLORER");
         ImGui::TextDisabled("Choose a case or event; details appear on the right.");
         ImGui::Spacing();
@@ -2653,7 +2591,7 @@ void Workspace::draw_ctf() {
                         };
                         for (std::size_t i = 0; i < data.findings.size(); ++i) {
                             if (accepts(data.findings[i])) {
-                                select_case(i);
+                                select_ctf_case(i);
                                 break;
                             }
                         }
@@ -2680,7 +2618,7 @@ void Workspace::draw_ctf() {
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
                         if (ImGui::Selectable(item.title.c_str(), ctf_selected_finding_ == i))
-                            select_case(i);
+                            select_ctf_case(i);
                         ImGui::TableNextColumn();
                         ImGui::Text("%llu", static_cast<unsigned long long>(item.end_tick -
                                                                             item.start_tick));
@@ -2715,7 +2653,7 @@ void Workspace::draw_ctf() {
                             ImGui::TableNextRow();
                             ImGui::TableNextColumn();
                             if (ImGui::Selectable(item.title.c_str(), ctf_selected_finding_ == i))
-                                select_case(i);
+                                select_ctf_case(i);
                             ImGui::TextDisabled("%llu ticks", static_cast<unsigned long long>(
                                                                   item.end_tick - item.start_tick));
                             ImGui::TableNextColumn();
@@ -2750,7 +2688,7 @@ void Workspace::draw_ctf() {
                                                   static_cast<unsigned long long>(item.end_tick -
                                                                                   item.start_tick));
                             if (ImGui::IsItemClicked())
-                                select_case(i);
+                                select_ctf_case(i);
                             ImGui::PopID();
                         }
                         if (data.findings.size() > count)
@@ -2821,8 +2759,16 @@ void Workspace::draw_ctf() {
             }
             ImGui::EndTabBar();
         }
-    };
-    const auto inspector = [&]() {
+}
+
+void Workspace::draw_ctf_inspector() {
+    if (!ctf_) return;
+    auto& data = *ctf_;
+    if (!data.findings.empty())
+        ctf_selected_finding_ = std::min(ctf_selected_finding_, data.findings.size()-1);
+    if (!data.events.empty())
+        ctf_selected_event_ = std::min(ctf_selected_event_, data.events.size()-1);
+
         ImGui::TextColored(ImVec4(.74f, .86f, .97f, 1.f), "02  EVIDENCE INSPECTOR");
         ImGui::TextDisabled("Selection stays visible while exploring.");
         ImGui::Separator();
@@ -2884,7 +2830,79 @@ void Workspace::draw_ctf() {
         }
         ImGui::Spacing();
         ImGui::TextDisabled("Correlation does not prove causality or CPU load.");
-    };
+}
+
+void Workspace::draw_ctf() {
+    ImGui::TextColored(ImVec4(.49f, .76f, .97f, 1.f), "ZEPHYR  /  CTF INVESTIGATION");
+    ImGui::SetWindowFontScale(1.22f);
+    ImGui::TextUnformatted("Kernel resource analysis");
+    ImGui::SetWindowFontScale(1.f);
+
+    // Source controls never live inside a fixed-height scrolling card.
+    ImGui::Spacing();
+    ImGui::TextDisabled("CAPTURE SOURCE  |  Private local files");
+    if (ImGui::BeginTable("w20-source", 2, ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Local folder", ImGuiTableColumnFlags_WidthStretch, 0.62f);
+        ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthStretch, 0.38f);
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputTextWithHint("##w20-folder", "Capture folder path (metadata + channel0_0)",
+                                 ctf_directory_.data(), ctf_directory_.size());
+        ImGui::TableNextColumn();
+#ifdef _WIN32
+        if (ImGui::Button("Browse...")) {
+            if (auto folder = choose_ctf_directory_native())
+                (void)open_ctf_directory(*folder);
+        }
+        ImGui::SameLine();
+#endif
+        if (ImGui::Button("Open / reload"))
+            (void)open_ctf_directory(ctf_directory_.data());
+        ImGui::SameLine();
+        if (ImGui::Button("Refresh"))
+            follow_ctf();
+        ImGui::EndTable();
+    }
+    ImGui::Checkbox("Follow growing file", &ctf_follow_);
+    ImGui::SameLine();
+    ImGui::TextDisabled("Select a folder with metadata and channel0_0.");
+    if (!ctf_error_.empty()) {
+        ImGui::TextColored(ImVec4(1.f, .52f, .41f, 1.f), "Cannot open: %s", ctf_error_.c_str());
+    }
+    if (!ctf_) {
+        ImGui::Separator();
+        ImGui::TextDisabled("Browse a Zephyr CTF capture to view resource timelines and evidence.");
+        return;
+    }
+
+    auto &data = *ctf_;
+    if (!data.findings.empty()) {
+        ctf_selected_finding_ = std::min(ctf_selected_finding_, data.findings.size() - 1);
+    }
+    if (!data.events.empty())
+        ctf_selected_event_ = std::min(ctf_selected_event_, data.events.size() - 1);
+
+    ImGui::Separator();
+    if (ImGui::BeginTable("w20-kpis", 4, ImGuiTableFlags_SizingStretchSame)) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        small_metric("EVENTS", std::to_string(data.events.size()));
+        ImGui::TableNextColumn();
+        small_metric("THREADS", std::to_string(data.thread_names.size()));
+        ImGui::TableNextColumn();
+        small_metric("RESOURCE CASES", std::to_string(data.findings.size()));
+        ImGui::TableNextColumn();
+        small_metric("PENDING BYTES", std::to_string(data.pending_bytes));
+        ImGui::EndTable();
+    }
+    ImGui::TextColored(ImVec4(.98f, .75f, .44f, 1.f),
+                       "Clock not calibrated  |  Event loss unknown  |  Findings are correlations");
+    if (data.pending_bytes)
+        ImGui::TextDisabled("Trailing %zu bytes are not decoded events.", data.pending_bytes);
+
+
+
 
     // Desktop: true two-column investigation. Narrow windows stack the panels.
     if (ImGui::GetContentRegionAvail().x >= 840.f) {
@@ -2898,19 +2916,19 @@ void Workspace::draw_ctf() {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::BeginChild("w20-left-pane", ImVec2(0, height - 10.f), ImGuiChildFlags_None);
-            explorer();
+            draw_ctf_explorer();
             ImGui::EndChild();
             ImGui::TableNextColumn();
             ImGui::BeginChild("w20-right-pane", ImVec2(0, height - 10.f), ImGuiChildFlags_None);
-            inspector();
+            draw_ctf_inspector();
             ImGui::EndChild();
             ImGui::EndTable();
         }
     } else {
         ImGui::SeparatorText("Resource explorer");
-        explorer();
+        draw_ctf_explorer();
         ImGui::SeparatorText("Evidence inspector");
-        inspector();
+        draw_ctf_inspector();
     }
 }
 
