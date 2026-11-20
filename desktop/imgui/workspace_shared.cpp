@@ -216,6 +216,97 @@ void Workspace::draw_shared_timeline() {
                            "Display capped: source evidence is larger than this view.");
 }
 
+void Workspace::draw_shared_graph() {
+    const auto &data = unified_;
+    if (!has_capability(data.capabilities, ToolCapability::Resources)) {
+        ImGui::TextWrapped("This adapter does not identify resource relationships. "
+                           "Raw numeric event IDs cannot be treated as kernel objects.");
+        return;
+    }
+    ImGui::TextDisabled("Recorded object -> interval -> original event, only where linked.");
+    ImGui::TextColored(ImVec4(.99f, .78f, .46f, 1.f),
+                       "A visible link is evidence association, NOT proven causality.");
+    const auto count = std::min<std::size_t>(data.cases.size(), 24);
+    if (count == 0) {
+        ImGui::TextDisabled("No observed complete resource intervals to connect.");
+        return;
+    }
+    const auto width = ImGui::GetContentRegionAvail().x;
+    const auto em = ImGui::GetFontSize();
+    for (std::size_t i = 0; i < count; ++i) {
+        ImGui::PushID(static_cast<int>(i));
+        const auto &item = data.cases[i];
+        const bool linked = item.evidence_event &&
+                            *item.evidence_event < data.events.size();
+        if (width < em * 45.f) {
+            ImGui::Separator();
+            ImGui::TextWrapped("%s: %s", item.kind.c_str(), item.title.c_str());
+            ImGui::ProgressBar(1.f, ImVec2(-1.f, em * 1.1f),
+                               (std::to_string(item.end - item.start) +
+                                " observed ticks / units").c_str());
+            if (ImGui::Button("Inspect interval")) {
+                shared_selected_case_ = i;
+                page_ = Page::Resources;
+            }
+            if (linked) {
+                ImGui::SameLine();
+                if (ImGui::Button("Source event")) {
+                    shared_selected_event_ = *item.evidence_event;
+                    page_ = Page::Evidence;
+                }
+            }
+        } else {
+            const float h = std::max(50.f, em * 3.2f);
+            ImGui::InvisibleButton("##relation", ImVec2(width, h));
+            const auto p = ImGui::GetItemRectMin();
+            const float pad = em * .42f;
+            const float col = (width - em * 5.f) / 3.f;
+            const float x0 = p.x;
+            const float x1 = x0 + col + em * 2.5f;
+            const float x2 = x1 + col + em * 2.5f;
+            const float y0 = p.y + 2.f;
+            const float y1 = p.y + h - 2.f;
+            auto *draw = ImGui::GetWindowDrawList();
+            const auto box = [&](float x, ImU32 colour, const std::string &title) {
+                draw->AddRectFilled(ImVec2(x, y0), ImVec2(x + col, y1),
+                                    colour, 6.f);
+                draw->PushClipRect(ImVec2(x + pad, y0 + pad),
+                                   ImVec2(x + col - pad, y1 - pad), true);
+                draw->AddText(ImVec2(x + pad, y0 + em * .7f),
+                              IM_COL32(242, 248, 255, 255), title.c_str());
+                draw->PopClipRect();
+            };
+            box(x0, category_colour(item.kind), item.kind + ": " + item.title);
+            box(x1, IM_COL32(49, 89, 119, 255),
+                std::to_string(item.end - item.start) + " " + clock_unit(data.unit));
+            box(x2, linked ? IM_COL32(50, 107, 96, 255) :
+                             IM_COL32(54, 59, 70, 255),
+                linked ? data.events[*item.evidence_event].title :
+                         "No exact event link");
+            draw->AddLine(ImVec2(x0 + col, p.y + h * .5f),
+                          ImVec2(x1, p.y + h * .5f),
+                          IM_COL32(126, 180, 222, 255), 2.f);
+            if (linked)
+                draw->AddLine(ImVec2(x1 + col, p.y + h * .5f),
+                              ImVec2(x2, p.y + h * .5f),
+                              IM_COL32(99, 193, 158, 255), 2.f);
+            if (ImGui::IsItemHovered() && ImGui::IsItemClicked()) {
+                const auto mouse = ImGui::GetMousePos();
+                if (linked && mouse.x >= x2) {
+                    shared_selected_event_ = *item.evidence_event;
+                    page_ = Page::Evidence;
+                } else {
+                    shared_selected_case_ = i;
+                    page_ = Page::Resources;
+                }
+            }
+        }
+        ImGui::PopID();
+    }
+    if (data.cases.size() > count)
+        ImGui::TextDisabled("First 24 relationships shown. Resource list contains all cases.");
+}
+
 void Workspace::draw_shared_resources() {
     const auto &data = unified_;
     if (!has_capability(data.capabilities, ToolCapability::Resources)) {
