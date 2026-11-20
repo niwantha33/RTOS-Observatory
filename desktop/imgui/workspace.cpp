@@ -2314,8 +2314,7 @@ void Workspace::draw_ctf() {
                 for (std::size_t kind = 0; kind < 4; ++kind) {
                     if (kind != 0) ImGui::SameLine();
                     ImGui::PushID(static_cast<int>(kind));
-                    if (ImGui::Selectable(kinds[kind], ctf_kind_filter_ == kind,
-                                          0, ImVec2(0, ImGui::GetFrameHeight()))) {
+                    if (ImGui::RadioButton(kinds[kind], ctf_kind_filter_ == kind)) {
                         ctf_kind_filter_ = kind;
                         const auto accepts = [&](const ctf::Finding& finding) {
                             return kind == 0 || (kind == 1 && finding.kind == "Mutex") ||
