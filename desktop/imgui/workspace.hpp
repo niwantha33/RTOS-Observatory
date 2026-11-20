@@ -42,6 +42,10 @@ class Workspace final {
     bool open_ctf_comparison(const std::string &path);
     const ctf::Session *ctf_session() const noexcept { return ctf_ ? &*ctf_ : nullptr; }
     void show_ctf() noexcept { page_ = Page::Overview; }
+    void show_adapters() noexcept {
+        workspace_tab_ = WorkspaceTab::Adapters;
+        select_adapters_tab_ = true;
+    }
     const ctf::AnalysisIndex* ctf_analysis() const noexcept {
         return ctf_analysis_ ? &*ctf_analysis_ : nullptr;
     }
