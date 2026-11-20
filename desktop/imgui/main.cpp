@@ -488,7 +488,10 @@ int main(int argc, char **argv) {
         ImGui::NewFrame();
         // Host a single shared dockspace. All CTF and normalized analyses
         // retain one source/session and can be rearranged independently.
-        workspace.set_dockspace_id(ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport()));
+        // No redundant "RTOS Observatory" dock tab when it is the only
+        // workspace window; detachable tools keep their normal tabs.
+        workspace.set_dockspace_id(ImGui::DockSpaceOverViewport(
+            0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_AutoHideTabBar));
         workspace.draw();
         if (workspace.exit_requested())
             glfwSetWindowShouldClose(window, GLFW_TRUE);
