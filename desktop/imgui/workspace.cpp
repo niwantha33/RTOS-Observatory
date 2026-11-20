@@ -707,24 +707,26 @@ void Workspace::draw_sidebar() {
         if(ImGui::Button("Open saved session",ImVec2(-1,0)))
             (void)open_session(path_.data());
     }
-    header("INVESTIGATE");
-    nav(Page::Overview,"Overview");
-    nav(Page::Timeline,"Execution timeline");
-    nav(Page::CpuWaits,"CPU / Wait analysis");
-    nav(Page::Resources,"Resource contention");
-    nav(Page::Causality,"Causal diagnostics");
-    nav(Page::Graph,"Evidence graph");
-    nav(Page::Diagnostics,"Scheduling");
-    nav(Page::Replay,"Time-travel replay");
+    header("OTHER ANALYSIS TOOLS");
     ImGui::SetNextItemOpen(false, ImGuiCond_Once);
-    if(ImGui::CollapsingHeader("Advanced tools")) {
-        nav(Page::Events,"Raw events");
-        nav(Page::Findings,"Findings");
-        nav(Page::Evidence,"Evidence details");
-        nav(Page::Faults,"Fault & memory");
-        nav(Page::SourceGraph,"Source/symbol graph");
-        nav(Page::DebugBridge,"Debugger lifecycle");
-        nav(Page::Snapshot,"Snapshot receipts");
+    if (ImGui::CollapsingHeader("Normalized trace tools")) {
+        ImGui::TextDisabled("Requires a compatible offline trace.");
+        nav(Page::Overview, "Overview");
+        nav(Page::Timeline, "Execution timeline");
+        nav(Page::CpuWaits, "CPU / Wait analysis");
+        nav(Page::Resources, "Resource contention");
+        nav(Page::Causality, "Causal diagnostics");
+        nav(Page::Graph, "Evidence graph");
+        nav(Page::Diagnostics, "Scheduling");
+        nav(Page::Replay, "Time-travel replay");
+        ImGui::Separator();
+        nav(Page::Events, "Raw events");
+        nav(Page::Findings, "Findings");
+        nav(Page::Evidence, "Evidence details");
+        nav(Page::Faults, "Fault & memory");
+        nav(Page::SourceGraph, "Source/symbol graph");
+        nav(Page::DebugBridge, "Debugger lifecycle");
+        nav(Page::Snapshot, "Snapshot receipts");
     }
     if(!recents_.empty() && ImGui::CollapsingHeader("Recent files")) {
         for(std::size_t i=0;i<recents_.size();++i) {
@@ -2242,7 +2244,8 @@ void Workspace::draw_ctf() {
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-1);
-        ImGui::InputText("##w20-folder", ctf_directory_.data(), ctf_directory_.size());
+        ImGui::InputTextWithHint("##w20-folder", "Capture folder path (metadata + channel0_0)",
+                             ctf_directory_.data(), ctf_directory_.size());
         ImGui::TableNextColumn();
 #ifdef _WIN32
         if (ImGui::Button("Browse...")) {
@@ -2307,6 +2310,27 @@ void Workspace::draw_ctf() {
         ImGui::Spacing();
         if (ImGui::BeginTabBar("w20-explorer-tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
             if (ImGui::BeginTabItem("Cases")) {
+                const char* kinds[] = {"All", "Mutex", "Semaphore", "Queue"};
+                for (std::size_t kind = 0; kind < 4; ++kind) {
+                    if (kind != 0) ImGui::SameLine();
+                    ImGui::PushID(static_cast<int>(kind));
+                    if (ImGui::Selectable(kinds[kind], ctf_kind_filter_ == kind,
+                                          0, ImVec2(0, ImGui::GetFrameHeight()))) {
+                        ctf_kind_filter_ = kind;
+                        const auto accepts = [&](const ctf::Finding& finding) {
+                            return kind == 0 || (kind == 1 && finding.kind == "Mutex") ||
+                                   (kind == 2 && finding.kind == "Semaphore") ||
+                                   (kind == 3 && finding.kind == "Message queue");
+                        };
+                        for (std::size_t i = 0; i < data.findings.size(); ++i) {
+                            if (accepts(data.findings[i])) {
+                                select_case(i);
+                                break;
+                            }
+                        }
+                    }
+                    ImGui::PopID();
+                }
                 if (data.findings.empty()) {
                     ImGui::TextDisabled("No matching resource-blocking callbacks in this capture.");
                 } else if (ImGui::BeginTable("w20-cases", 3,
@@ -2318,6 +2342,9 @@ void Workspace::draw_ctf() {
                     ImGui::TableHeadersRow();
                     for (std::size_t i = 0; i < data.findings.size(); ++i) {
                         const auto& item = data.findings[i];
+                        if (ctf_kind_filter_ == 1 && item.kind != "Mutex") continue;
+                        if (ctf_kind_filter_ == 2 && item.kind != "Semaphore") continue;
+                        if (ctf_kind_filter_ == 3 && item.kind != "Message queue") continue;
                         ImGui::PushID(static_cast<int>(i));
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
