@@ -5,6 +5,7 @@
 // nor an assertion of equivalent kernel instrumentation across RTOSes.
 #include "observatory/engine.hpp"
 #include "observatory/timeline.hpp"
+#include "observatory/resource_analysis.hpp"
 #include "observatory/ctf_analysis.hpp"
 #include "observatory/live_session.hpp"
 #include <algorithm>
@@ -52,6 +53,11 @@ struct ToolFinding {
     std::string title, detail, confidence;
     std::optional<std::size_t> evidence_event;
 };
+struct ToolObject {
+    std::string kind, name;
+    std::size_t observed_events{}, completed_waits{}, unresolved_waits{};
+    bool ownership_unverified{true};
+};
 struct ToolSummary {
     AdapterKind adapter{AdapterKind::None};
     ClockUnit unit{ClockUnit::RawCtfTicks};
@@ -66,6 +72,7 @@ struct ToolSummary {
     std::vector<ToolEvent> events;
     std::vector<ToolSpan> spans;
     std::vector<ToolCase> cases;
+    std::vector<ToolObject> objects;
     std::vector<ToolFinding> findings;
     std::vector<std::pair<std::string, double>> qualified_cpu; // use only qualified source
 };
@@ -93,7 +100,8 @@ inline void finish_projection(ToolSummary& view) {
 
 inline ToolSummary project_normalized(const Capture& capture, const Report& report,
                                       const TimelineView* timeline,
-                                      bool loss_qualified) {
+                                      bool loss_qualified,
+                                      const ResourceView* resources = nullptr) {
     ToolSummary v;
     v.adapter = AdapterKind::Normalized;
     v.name = report.session;
@@ -145,6 +153,16 @@ inline ToolSummary project_normalized(const Capture& capture, const Report& repo
         if (v.spans.size() < span_limit)
             v.spans.push_back({wait.task + " / " + wait.resource, item.kind,
                                wait.start_us, wait.end_us, std::nullopt});
+    }
+    if (resources) {
+        for (const auto& resource : resources->resources) {
+            if (v.objects.size() >= 1000) { v.records_limited = true; break; }
+            v.objects.push_back({resource_kind_name(resource.kind), resource.name,
+                resource.observed_events, resource.completed_waits,
+                resource.unresolved_waits, !resource.owner_observation_valid});
+        }
+        // Unresolved waits are still evidence, but have NO completed interval.
+        // Do not fabricate timing bars for unmatched starts.
     }
     for (const auto& f : report.findings) {
         if (v.findings.size() >= 3000) { v.records_limited = true; break; }
@@ -210,6 +228,14 @@ inline ToolSummary project_ctf(const ctf::Session& session,
         append(analysis->thread_spans);
         append(analysis->isr_spans);
         v.records_limited |= analysis->truncated;
+    }
+    std::map<std::pair<std::string, std::string>, std::size_t> object_frequency;
+    for (const auto& f : session.findings)
+        ++object_frequency[{f.kind, f.title}];
+    for (const auto& [key, count] : object_frequency) {
+        if (v.objects.size() >= 1000) { v.records_limited = true; break; }
+        // CTF correlation has no authoritative owner or semaphore count.
+        v.objects.push_back({key.first, key.second, count, 0u, 0u, true});
     }
     for (const auto& f : session.findings) {
         if (v.cases.size() >= case_limit) { v.records_limited = true; break; }
