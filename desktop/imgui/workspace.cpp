@@ -614,6 +614,10 @@ void Workspace::refresh_unified_view(bool preserve_selection) {
     if (!preserve_selection) {
         shared_selected_event_.reset();
         shared_selected_case_.reset();
+        timeline_viewport_.initialized = false;
+        timeline_unit_preference_ = 0;
+        timeline_manual_clock_enabled_ = false;
+        timeline_manual_clock_hz_ = 0;
     } else {
         if (shared_selected_event_ && *shared_selected_event_ >= unified_.events.size())
             shared_selected_event_.reset();
