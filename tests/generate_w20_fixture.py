@@ -3,6 +3,7 @@
 """Generate exclusively synthetic CTF for native W20 GUI smoke tests."""
 from pathlib import Path
 import struct
+import shutil
 import sys
 
 out = Path(sys.argv[1])
@@ -82,4 +83,9 @@ for tick, kind, *payload in events:
     fmt = "<Ii" if len(payload) == 2 else "<I"
     buf += struct.pack(fmt, *payload)
 (out / "channel0_0").write_bytes(buf)
+# Exercise folder browsing/auto-detection with an ordinary synthetic subdirectory.
+nested = out / "wrapped" / "capture"
+nested.mkdir(parents=True, exist_ok=True)
+shutil.copyfile(out / "metadata", nested / "metadata")
+shutil.copyfile(out / "channel0_0", nested / "channel0_0")
 print("W20 synthetic CTF created (contains no user/private trace)")
