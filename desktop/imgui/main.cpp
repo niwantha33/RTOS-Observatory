@@ -78,7 +78,7 @@ std::string setup_fonts(GLFWwindow *window) {
         if (path.empty() || !std::filesystem::is_regular_file(path, ec))
             return false;
         const std::string filename = path.string();
-        return fonts->AddFontFromFileTTF(filename.c_str(), 17.f * scale) != nullptr;
+        return fonts->AddFontFromFileTTF(filename.c_str(), 18.f) != nullptr;
     };
     if (const char *custom = std::getenv("OBSERVATORY_UI_FONT"); custom && *custom) {
         if (add_font(std::filesystem::path(custom), "Custom"))
@@ -107,9 +107,9 @@ std::string setup_fonts(GLFWwindow *window) {
             return name;
 #endif
     ImFontConfig fallback;
-    fallback.SizePixels = 17.f * scale;
+    fallback.SizePixels = 18.f;
     fonts->AddFontDefault(&fallback);
-    return "Built-in (17px)";
+    return "Built-in (18px)";
 }
 } // namespace
 int main(int argc, char **argv) {
@@ -440,6 +440,10 @@ int main(int argc, char **argv) {
     // Official ImGui docking release: panels can dock, float and move to
     // independent OS windows (GLFW multi-viewport backend).
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
+    // Dear ImGui 1.92 viewport DPI scaling: each detached platform window
+    // receives its monitor font scale, independently of the main window.
+    io.ConfigDpiScaleFonts = true;
+    io.ConfigDpiScaleViewports = true;
     io.IniFilename = nullptr; // No user profile or trace identity persisted without consent.
     dark_style();
     const std::string font_name = setup_fonts(window);
@@ -486,9 +490,15 @@ int main(int argc, char **argv) {
         const float requested_scale = std::clamp(
             dpi_factor * workspace.ui_scale() * screen_factor, .75f, 3.2f);
         if (std::abs(requested_scale - applied_scale) > .01f) {
+            // Style size/padding follows the main window's monitor scale.
+            // FontScaleDpi is managed by ImGui per viewport; do not apply
+            // dpi_factor again to FontScaleMain (would double-scale text).
+            const float font_dpi = ImGui::GetStyle().FontScaleDpi;
             ImGui::GetStyle() = initial_style;
             ImGui::GetStyle().ScaleAllSizes(requested_scale);
-            ImGui::GetStyle().FontScaleMain = requested_scale;
+            ImGui::GetStyle().FontScaleMain =
+                workspace.ui_scale() * screen_factor;
+            ImGui::GetStyle().FontScaleDpi = font_dpi;
             applied_scale = requested_scale;
         }
         ImGui_ImplOpenGL3_NewFrame();
