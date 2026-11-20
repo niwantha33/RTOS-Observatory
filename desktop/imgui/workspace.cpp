@@ -510,7 +510,7 @@ bool Workspace::poll_live_file() {
         live_session_->feed(buffer.data(), static_cast<std::size_t>(received));
         live_file_offset_ += static_cast<std::uint64_t>(received);
         if (active_adapter_ == SourceAdapter::Live)
-            refresh_unified_view();
+            refresh_unified_view(true);
         return true;
     } catch (const std::exception &e) {
         live_error_ = e.what();
@@ -580,7 +580,7 @@ void Workspace::zoom(bool in) {
     end_us_ = start + next;
     update_timeline();
 }
-void Workspace::refresh_unified_view() {
+void Workspace::refresh_unified_view(bool preserve_selection) {
     // All adapters project into a single read-only GUI contract. Original
     // time units are retained, and no unsupported capability is asserted.
     switch (active_adapter_) {
@@ -610,8 +610,15 @@ void Workspace::refresh_unified_view() {
         unified_ = ToolSummary{};
         break;
     }
-    shared_selected_event_.reset();
-    shared_selected_case_.reset();
+    if (!preserve_selection) {
+        shared_selected_event_.reset();
+        shared_selected_case_.reset();
+    } else {
+        if (shared_selected_event_ && *shared_selected_event_ >= unified_.events.size())
+            shared_selected_event_.reset();
+        if (shared_selected_case_ && *shared_selected_case_ >= unified_.cases.size())
+            shared_selected_case_.reset();
+    }
     shared_cached_filter_ = "\x01"; // force refresh even if query is empty
     shared_filtered_events_.clear();
 }
@@ -2717,7 +2724,7 @@ void Workspace::follow_ctf() {
         auto index = ctf::build_analysis_index(updated);
         ctf_ = std::move(updated);
         ctf_analysis_ = std::move(index);
-        refresh_unified_view();
+        refresh_unified_view(true);
         ctf_last_size_ = size;
         ctf_selected_event_ = std::min(ctf_selected_event_, ctf_->events.size() - 1);
         if (!ctf_->findings.empty())
