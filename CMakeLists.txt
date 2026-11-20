@@ -394,6 +394,10 @@ if(OBSERVATORY_BUILD_DESKTOP)
         add_test(NAME observatory_imgui_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
           $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui
           ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
+        add_test(NAME observatory_imgui_adapters_ui_smoke COMMAND
+          ${OBSERVATORY_XVFB_RUN} -a $<TARGET_FILE:rtos-observatory-desktop>
+          --smoke-ui-adapters)
+        set_tests_properties(observatory_imgui_adapters_ui_smoke PROPERTIES TIMEOUT 30)
         add_test(NAME observatory_imgui_graph_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
           $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-graph
           ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
