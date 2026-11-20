@@ -137,6 +137,8 @@ class Workspace final {
     void draw_ctf_inspector();
     void draw_ctf_scheduler();
     void draw_ctf_floating();
+    void draw_page(Page page);
+    void draw_detached_analysis();
     void select_ctf_case(std::size_t index);
     void follow_ctf();
     void draw_events();
@@ -145,6 +147,7 @@ class Workspace final {
     void recent(const std::string &path, const std::string &decoder, bool session);
     void fit();
     void zoom(bool in);
+    std::vector<Page> detached_analysis_pages_; // at most 6 independently movable panels
     SessionController controller_;
     std::optional<TimelineView> timeline_;
     std::optional<GraphView> graph_;
