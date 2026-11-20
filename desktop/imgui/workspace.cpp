@@ -364,7 +364,11 @@ bool Workspace::export_report(const std::string& path) {
     } catch (const std::exception& e) { error_ = e.what(); return false; }
 }
 void Workspace::accept_drop(const std::string& path) {
-    if (path.ends_with(".rtob")) (void)open_live_file(path);
+    if (std::filesystem::is_directory(file_path(path)) &&
+        std::filesystem::is_regular_file(file_path(path)/"metadata") &&
+        std::filesystem::is_regular_file(file_path(path)/"channel0_0"))
+        (void)open_ctf_directory(path);
+    else if (path.ends_with(".rtob")) (void)open_live_file(path);
     else if (path.ends_with(".fault.tsv") || path.ends_with("fault-snapshot.tsv"))
         (void)open_fault_snapshot(path);
     else if (std::filesystem::is_directory(file_path(path))) (void)open_session(path);
@@ -406,6 +410,7 @@ void Workspace::draw_menus() {
     if(ImGui::BeginMenu("File")) {
         if(ImGui::MenuItem("Open trace...")) pending_open_=OpenDialog::Trace;
         if(ImGui::MenuItem("Open saved session...")) pending_open_=OpenDialog::Session;
+        if(ImGui::MenuItem("Open Zephyr CTF folder...")) page_=Page::Ctf;
         if(ImGui::MenuItem("Open fault snapshot...")) page_=Page::Faults;
         if(ImGui::MenuItem("Open C/C++/Rust symbol index...")) page_=Page::SourceGraph;
         if(ImGui::MenuItem("Inspect Eclipse DSF bridge status...")) page_=Page::DebugBridge;
@@ -482,6 +487,7 @@ void Workspace::draw_menus() {
         if(ImGui::MenuItem("Debugger lifecycle (passive)")) page_=Page::DebugBridge;
         if(ImGui::MenuItem("Snapshot receipts (read-only)")) page_=Page::Snapshot;
         if(ImGui::MenuItem("Live trace epochs (binary spool)")) page_=Page::LiveTrace;
+        if(ImGui::MenuItem("Zephyr CTF diagnostics")) page_=Page::Ctf;
         if(ImGui::MenuItem("Trace integrity",nullptr,false,loaded())) page_=Page::Evidence;
         ImGui::EndMenu();
     }
@@ -571,14 +577,16 @@ void Workspace::draw_sidebar() {
     if (ImGui::Button("Debugger lifecycle...", ImVec2(-1, 0))) page_=Page::DebugBridge;
     if (ImGui::Button("Snapshot receipts...", ImVec2(-1, 0))) page_=Page::Snapshot;
     if (ImGui::Button("Live trace epochs...", ImVec2(-1, 0))) page_=Page::LiveTrace;
+    if (ImGui::Button("Zephyr CTF diagnostics...", ImVec2(-1, 0))) page_=Page::Ctf;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
     header("Explore");
     constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
                                       "Causal graph", "Time-travel replay", "Scheduling diagnostics",
                                       "Resources and waits", "Causal diagnostics", "Fault & memory",
                                       "Source/symbol graph", "Debugger lifecycle", "Approved snapshot receipts",
-                                      "Live trace epochs", "Events", "Findings", "Evidence details"};
-    for (int i=0; i<16; ++i) {
+                                      "Live trace epochs", "Events", "Findings", "Evidence details",
+                                      "Zephyr CTF (W20)"};
+    for (int i=0; i<17; ++i) {
         if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
                               ImVec2(0,ImGui::GetFrameHeight()+2.f)))
             page_=static_cast<Page>(i);
@@ -2013,8 +2021,225 @@ void Workspace::draw_evidence() {
     ImGui::TextDisabled("Existing files and immutable session directories cannot be overwritten.");
     ImGui::TextDisabled("Offline normalized evidence only. No live target connection or raw CTF adapter.");
 }
+
+bool Workspace::open_ctf_directory(const std::string& path) {
+    try {
+        auto candidate=ctf::open(file_path(path),true);
+        const auto total=std::filesystem::file_size(file_path(path)/"channel0_0");
+        ctf_=std::move(candidate);
+        ctf_active_directory_=path;
+        ctf_last_size_=total;
+        ctf_selected_finding_=0;
+        ctf_selected_event_=0;
+        ctf_error_.clear();
+        std::snprintf(ctf_directory_.data(),ctf_directory_.size(),"%s",path.c_str());
+        page_=Page::Ctf;
+        return true;
+    } catch(const std::exception& e) {
+        ctf_error_=e.what();
+        ctf_follow_=false;
+        return false;
+    }
+}
+bool Workspace::open_ctf_comparison(const std::string& path) {
+    try {
+        if(!ctf_)throw Error("Open the main CTF capture first");
+        if(std::filesystem::equivalent(file_path(path),file_path(ctf_active_directory_)))
+            throw Error("Before/after must use two independent captures");
+        auto candidate=ctf::open(file_path(path));
+        ctf_compare_=std::move(candidate);
+        ctf_error_.clear();
+        return true;
+    } catch(const std::exception& e) {
+        ctf_error_=e.what();
+        ctf_compare_.reset();
+        return false;
+    }
+}
+void Workspace::follow_ctf() {
+    if(!ctf_ || ctf_active_directory_.empty())return;
+    try {
+        const auto channel=file_path(ctf_active_directory_)/"channel0_0";
+        if(std::filesystem::is_symlink(channel) || !std::filesystem::is_regular_file(channel))
+            throw Error("Follow input disappeared or became a symlink");
+        const auto size=std::filesystem::file_size(channel);
+        if(size<ctf_last_size_)throw Error("CTF channel truncated or replaced; stop following");
+        if(size==ctf_last_size_)return;
+        auto updated=ctf::open(file_path(ctf_active_directory_),true);
+        if(updated.events.size()<ctf_->events.size())
+            throw Error("CTF event history changed; stopped following");
+        // This is a local growing-file poll, not a probe/transport connection.
+        ctf_=std::move(updated);
+        ctf_last_size_=size;
+        ctf_selected_event_=std::min(ctf_selected_event_,ctf_->events.size()-1);
+        if(!ctf_->findings.empty())
+            ctf_selected_finding_=std::min(ctf_selected_finding_,ctf_->findings.size()-1);
+        ctf_error_.clear();
+    } catch(const std::exception& e) {
+        ctf_error_=e.what();
+        ctf_follow_=false;
+    }
+}
+void Workspace::draw_ctf() {
+    header("W20 / Zephyr kernel resource investigation");
+    ImGui::TextDisabled("Native CTF 1.8 saved-file adapter. No debugger, probe or network access.");
+    ImGui::TextColored(ImVec4(1.f,.75f,.43f,1.f),
+        "Clock, trace loss, ISR identity and cross-core scheduling are NOT qualified.");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputText("CTF folder",ctf_directory_.data(),ctf_directory_.size());
+    if(ImGui::Button("Open CTF / reload"))(void)open_ctf_directory(ctf_directory_.data());
+    ImGui::SameLine();
+    if(ImGui::Button("Refresh growing file"))follow_ctf();
+    ImGui::SameLine();
+    ImGui::Checkbox("Follow local file", &ctf_follow_);
+    if(!ctf_error_.empty())ImGui::TextColored(ImVec4(1.f,.48f,.38f,1.f),"%s",ctf_error_.c_str());
+    if(!ctf_) {
+        ImGui::TextWrapped("Choose the directory containing metadata and channel0_0 from your private local Zephyr CTF capture.");
+        return;
+    }
+    auto& data=*ctf_;
+    ImGui::Separator();
+    if(ImGui::BeginTable("ctf-summary",4,ImGuiTableFlags_SizingStretchSame)) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();small_metric("Observed events",std::to_string(data.events.size()));
+        ImGui::TableNextColumn();small_metric("Threads named",std::to_string(data.thread_names.size()));
+        ImGui::TableNextColumn();small_metric("Resource cases",std::to_string(data.findings.size()));
+        ImGui::TableNextColumn();small_metric("Pending bytes",std::to_string(data.pending_bytes));
+        ImGui::EndTable();
+    }
+    if(data.pending_bytes)ImGui::TextColored(ImVec4(1.f,.75f,.43f,1.f),
+        "Partial last event: %zu bytes buffered; not treated as decoded evidence",data.pending_bytes);
+    else ImGui::TextDisabled("All file bytes parsed; this does NOT prove capture completeness.");
+    if(ImGui::BeginTabBar("W20-view")) {
+        if(ImGui::BeginTabItem("Resource cases / causal evidence")) {
+            if(ImGui::BeginTable("ctf-case-list",3,table_flags,ImVec2(0,200))) {
+                ImGui::TableSetupColumn("Kernel resource");
+                ImGui::TableSetupColumn("Raw wait ticks");
+                ImGui::TableSetupColumn("Observed return");
+                ImGui::TableHeadersRow();
+                for(std::size_t i=0;i<data.findings.size();++i) {
+                    const auto& c=data.findings[i];
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    if(ImGui::Selectable(c.title.c_str(),ctf_selected_finding_==i,ImGuiSelectableFlags_SpanAllColumns))
+                        ctf_selected_finding_=i;
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%llu",static_cast<unsigned long long>(c.end_tick-c.start_tick));
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(c.complete?"Successful callback":"UNKNOWN / incomplete");
+                    ImGui::PopID();
+                }
+                ImGui::EndTable();
+            }
+            if(!data.findings.empty()) {
+                ctf_selected_finding_=std::min(ctf_selected_finding_,data.findings.size()-1);
+                const auto& f=data.findings[ctf_selected_finding_];
+                header("Evidence chain / investigation");
+                ImGui::TextWrapped("%s",f.assessment.c_str());
+                ImGui::TextDisabled("Correlations are not proofs of root cause, mutex ownership, or actual CPU load.");
+                for(const auto index:f.evidence) {
+                    if(index>=data.events.size())continue;
+                    const auto& event=data.events[index];
+                    ImGui::PushID(static_cast<int>(index));
+                    const auto caption="#"+std::to_string(index)+" "+event.name+
+                        " @"+std::to_string(event.tick);
+                    if(ImGui::Selectable(caption.c_str(),ctf_selected_event_==index))
+                        ctf_selected_event_=index;
+                    ImGui::PopID();
+                }
+            }
+            ImGui::EndTabItem();
+        }
+        if(ImGui::BeginTabItem("Wait timeline")) {
+            ImGui::TextDisabled("Raw tick intervals only. Longer bars do not imply higher CPU load.");
+            if(!data.findings.empty()) {
+                const auto min=data.events.front().tick, max=data.events.back().tick;
+                const auto span=max>min?max-min:1;
+                const auto canvas_width=std::max(180.f,ImGui::GetContentRegionAvail().x-15.f);
+                const auto x0=ImGui::GetCursorScreenPos().x;
+                auto y=ImGui::GetCursorScreenPos().y+5.f;
+                const auto* colors=ImGui::GetStyle().Colors;
+                const auto bar=ImGui::GetWindowDrawList();
+                for(std::size_t i=0;i<std::min<std::size_t>(data.findings.size(),80);++i){
+                    const auto& f=data.findings[i];
+                    auto lo=static_cast<float>(static_cast<double>(f.start_tick-min)/static_cast<double>(span));
+                    auto hi=static_cast<float>(static_cast<double>(f.end_tick-min)/static_cast<double>(span));
+                    const float left=x0+lo*canvas_width, right=x0+hi*canvas_width;
+                    const auto color=f.kind=="Mutex"?IM_COL32(251,176,94,255):
+                                     f.kind=="Semaphore"?IM_COL32(63,186,208,255):IM_COL32(168,143,244,255);
+                    bar->AddRectFilled(ImVec2(left,y),ImVec2(std::max(right,left+2.f),y+12.f),color,3.f);
+                    ImGui::SetCursorScreenPos(ImVec2(x0,y+12.f));
+                    ImGui::PushID(static_cast<int>(i));
+                    if(ImGui::SmallButton(f.title.c_str()))ctf_selected_finding_=i;
+                    ImGui::PopID();
+                    y+=33.f;
+                }
+                ImGui::Dummy(ImVec2(canvas_width,10.f));
+            }
+            ImGui::EndTabItem();
+        }
+        if(ImGui::BeginTabItem("Raw event inspector")) {
+            ImGui::SetNextItemWidth(300.f);
+            ImGui::InputText("Search events",ctf_filter_.data(),ctf_filter_.size());
+            const auto query=lower(ctf_filter_.data());
+            if(ImGui::BeginChild("w20-event-list",ImVec2(0,200),ImGuiChildFlags_Borders)) {
+                std::size_t shown=0;
+                for(std::size_t i=0;i<data.events.size() && shown<5000;++i) {
+                    const auto& event=data.events[i];
+                    if(!query.empty() && lower(event.name).find(query)==std::string::npos)continue;
+                    ++shown;
+                    ImGui::PushID(static_cast<int>(i));
+                    const auto caption="#"+std::to_string(i)+"  "+event.name+"  tick "+
+                        std::to_string(event.tick)+"  byte "+std::to_string(event.byte_offset);
+                    if(ImGui::Selectable(caption.c_str(),ctf_selected_event_==i))
+                        ctf_selected_event_=i;
+                    ImGui::PopID();
+                }
+                if(shown>=5000)ImGui::TextDisabled("Display capped at 5000 events. Full bounded source retained.");
+            }
+            ImGui::EndChild();
+            ImGui::EndTabItem();
+        }
+        if(ImGui::BeginTabItem("Before / after")) {
+            ImGui::TextDisabled("Optional second independent CTF capture; relative changes are NOT performance proof.");
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputText("Comparison CTF folder",ctf_comparison_.data(),ctf_comparison_.size());
+            if(ImGui::Button("Load comparison"))(void)open_ctf_comparison(ctf_comparison_.data());
+            if(ctf_compare_) {
+                ImGui::Text("Events: %zu / %zu",data.events.size(),ctf_compare_->events.size());
+                ImGui::Text("Resource cases: %zu / %zu",data.findings.size(),ctf_compare_->findings.size());
+                ImGui::TextDisabled("Clock frequency, workload equality, firmware identity and loss must be qualified.");
+                ImGui::TextDisabled("No automatic faster/slower conclusion is issued.");
+            }
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
+    if(!data.events.empty()){
+        ctf_selected_event_=std::min(ctf_selected_event_,data.events.size()-1);
+        const auto& ev=data.events[ctf_selected_event_];
+        header("Raw evidence / selected event");
+        ImGui::Text("#%zu | %s | tick %llu | byte offset %zu",ctf_selected_event_,
+            ev.name.c_str(),static_cast<unsigned long long>(ev.tick),ev.byte_offset);
+        if(ev.actor>=0)ImGui::Text("Observed actor: %lld",static_cast<long long>(ev.actor));
+        else ImGui::TextDisabled("Actor not determined from switched-in context");
+        for(const auto& [key,value]:ev.fields){
+            ImGui::Text("%s: %s",key.c_str(),value.c_str());
+        }
+    }
+    ImGui::TextDisabled("Private local trace only. Nothing is uploaded or persisted by this panel.");
+}
+
 void Workspace::draw() {
     if(live_follow_ && live_session_) (void)poll_live_file();
+    if(ctf_follow_) {
+        const auto now=std::chrono::steady_clock::now();
+        if(now-ctf_last_poll_>std::chrono::milliseconds(500)) {
+            ctf_last_poll_=now;
+            follow_ctf();
+        }
+    }
     const auto* viewport=ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -2059,6 +2284,7 @@ void Workspace::draw() {
       case Page::DebugBridge: draw_debug_bridge();break;
       case Page::Snapshot: draw_snapshot_receipt();break;
       case Page::LiveTrace: draw_live_trace();break;
+      case Page::Ctf: draw_ctf();break;
       case Page::Events: draw_events();break;
       case Page::Findings: draw_findings();break;
       case Page::Evidence: draw_evidence();break;
