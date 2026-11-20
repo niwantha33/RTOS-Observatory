@@ -13,7 +13,7 @@ cmake --build build-w20 --config Release
 .\build-w20\rtos-observatory-desktop.exe --ctf "C:\PrivateTraces\ZephyrCapture"
 ```
 
-On multi-config CMake generators the executable may instead be inside `build-w20\Release`. You can also run the native GUI without a CLI argument and use **File → Open Zephyr CTF folder...**, enter the directory, then select **Open CTF / reload**. Dragging the CTF directory onto the GUI is supported.
+On multi-config CMake generators the executable may instead be inside `build-w20\Release`. You can also double-click `tools/run-w20-gui.bat`, select **Zephyr CTF / W20** in the compact sidebar and click **Browse folders...**. On Windows this opens the native system folder chooser. **File → Open Zephyr CTF folder...** also opens the chooser. Choose the folder containing `metadata` and `channel0_0` (or its immediate parent if it contains exactly one CTF capture folder). The panel displays a specific error for a missing file; it never searches arbitrary locations or uploads the recording. Dragging a CTF directory onto the GUI is also supported.
 
 ## Included
 
