@@ -28,7 +28,6 @@ struct AnalysisIndex {
     bool time_calibrated{false};
     bool full_coverage_verified{false};
 };
-AnalysisIndex build_analysis_index(const Session& source,
-                                   std::size_t maximum_events = 1000000,
+AnalysisIndex build_analysis_index(const Session &source, std::size_t maximum_events = 1000000,
                                    std::size_t maximum_spans = 50000);
 } // namespace observatory::ctf

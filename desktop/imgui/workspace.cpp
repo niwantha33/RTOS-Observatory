@@ -634,14 +634,18 @@ void Workspace::draw_menus() {
         ImGui::TextDisabled("Drag detached windows outside to another monitor.");
         ImGui::Separator();
         ImGui::SeparatorText("CTF linked analysis windows");
-        if (ImGui::MenuItem("Detach resource explorer", nullptr, &ctf_explorer_detached_, ctf_.has_value()))
+        if (ImGui::MenuItem("Detach resource explorer", nullptr, &ctf_explorer_detached_,
+                            ctf_.has_value()))
             page_ = Page::Ctf;
-        if (ImGui::MenuItem("Detach evidence inspector", nullptr, &ctf_inspector_detached_, ctf_.has_value()))
+        if (ImGui::MenuItem("Detach evidence inspector", nullptr, &ctf_inspector_detached_,
+                            ctf_.has_value()))
             page_ = Page::Ctf;
-        if (ImGui::MenuItem("Show scheduling / ISR analysis", nullptr, &ctf_scheduler_detached_, ctf_.has_value()))
+        if (ImGui::MenuItem("Show scheduling / ISR analysis", nullptr, &ctf_scheduler_detached_,
+                            ctf_.has_value()))
             page_ = Page::Ctf;
         if (ImGui::MenuItem("Restore embedded CTF panels", nullptr, false,
-                            ctf_explorer_detached_ || ctf_inspector_detached_ || ctf_scheduler_detached_)) {
+                            ctf_explorer_detached_ || ctf_inspector_detached_ ||
+                                ctf_scheduler_detached_)) {
             ctf_explorer_detached_ = false;
             ctf_inspector_detached_ = false;
             ctf_scheduler_detached_ = false;
@@ -817,7 +821,7 @@ void Workspace::draw_sidebar() {
     nav(Page::Ctf, "Zephyr CTF  /  W20");
     if (ctf_) {
         ImGui::Indent(12.f);
-        const auto ctf_nav = [&](const char* title, int focus) {
+        const auto ctf_nav = [&](const char *title, int focus) {
             if (ImGui::Selectable(title, false)) {
                 page_ = Page::Ctf;
                 ctf_tab_request_ = focus;
@@ -2608,317 +2612,316 @@ void Workspace::follow_ctf() {
 }
 
 void Workspace::select_ctf_case(std::size_t index) {
-    if (!ctf_ || index >= ctf_->findings.size()) return;
+    if (!ctf_ || index >= ctf_->findings.size())
+        return;
     ctf_selected_finding_ = index;
-    const auto& finding = ctf_->findings[index];
+    const auto &finding = ctf_->findings[index];
     if (!finding.evidence.empty() && finding.evidence.front() < ctf_->events.size())
         ctf_selected_event_ = finding.evidence.front();
 }
 
 void Workspace::draw_ctf_explorer() {
-    if (!ctf_) return;
-    auto& data = *ctf_;
+    if (!ctf_)
+        return;
+    auto &data = *ctf_;
 
-        ImGui::TextColored(ImVec4(.74f, .86f, .97f, 1.f), "01  RESOURCE EXPLORER");
-        ImGui::TextDisabled("Choose a case or event; details appear on the right.");
-        ImGui::Spacing();
-        if (ImGui::BeginTabBar("w20-explorer-tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
-            if (ImGui::BeginTabItem("Cases", nullptr,
-                                     ctf_tab_request_ == 0 ? ImGuiTabItemFlags_SetSelected : 0)) {
-                const char *kinds[] = {"All", "Mutex", "Semaphore", "Queue"};
-                for (std::size_t kind = 0; kind < 4; ++kind) {
-                    if (kind != 0)
-                        ImGui::SameLine();
-                    ImGui::PushID(static_cast<int>(kind));
-                    if (ImGui::RadioButton(kinds[kind], ctf_kind_filter_ == kind)) {
-                        ctf_kind_filter_ = kind;
-                        const auto accepts = [&](const ctf::Finding &finding) {
-                            return kind == 0 || (kind == 1 && finding.kind == "Mutex") ||
-                                   (kind == 2 && finding.kind == "Semaphore") ||
-                                   (kind == 3 && finding.kind == "Message queue");
-                        };
-                        for (std::size_t i = 0; i < data.findings.size(); ++i) {
-                            if (accepts(data.findings[i])) {
-                                select_ctf_case(i);
-                                break;
-                            }
+    ImGui::TextColored(ImVec4(.74f, .86f, .97f, 1.f), "01  RESOURCE EXPLORER");
+    ImGui::TextDisabled("Choose a case or event; details appear on the right.");
+    ImGui::Spacing();
+    if (ImGui::BeginTabBar("w20-explorer-tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
+        if (ImGui::BeginTabItem("Cases", nullptr,
+                                ctf_tab_request_ == 0 ? ImGuiTabItemFlags_SetSelected : 0)) {
+            const char *kinds[] = {"All", "Mutex", "Semaphore", "Queue"};
+            for (std::size_t kind = 0; kind < 4; ++kind) {
+                if (kind != 0)
+                    ImGui::SameLine();
+                ImGui::PushID(static_cast<int>(kind));
+                if (ImGui::RadioButton(kinds[kind], ctf_kind_filter_ == kind)) {
+                    ctf_kind_filter_ = kind;
+                    const auto accepts = [&](const ctf::Finding &finding) {
+                        return kind == 0 || (kind == 1 && finding.kind == "Mutex") ||
+                               (kind == 2 && finding.kind == "Semaphore") ||
+                               (kind == 3 && finding.kind == "Message queue");
+                    };
+                    for (std::size_t i = 0; i < data.findings.size(); ++i) {
+                        if (accepts(data.findings[i])) {
+                            select_ctf_case(i);
+                            break;
                         }
                     }
+                }
+                ImGui::PopID();
+            }
+            if (data.findings.empty()) {
+                ImGui::TextDisabled("No matching resource-blocking callbacks in this capture.");
+            } else if (ImGui::BeginTable("w20-cases", 3, table_flags, ImVec2(0, 0))) {
+                ImGui::TableSetupColumn("Resource", ImGuiTableColumnFlags_WidthStretch, .56f);
+                ImGui::TableSetupColumn("Wait (ticks)", ImGuiTableColumnFlags_WidthStretch, .22f);
+                ImGui::TableSetupColumn("Callback", ImGuiTableColumnFlags_WidthStretch, .22f);
+                ImGui::TableHeadersRow();
+                for (std::size_t i = 0; i < data.findings.size(); ++i) {
+                    const auto &item = data.findings[i];
+                    if (ctf_kind_filter_ == 1 && item.kind != "Mutex")
+                        continue;
+                    if (ctf_kind_filter_ == 2 && item.kind != "Semaphore")
+                        continue;
+                    if (ctf_kind_filter_ == 3 && item.kind != "Message queue")
+                        continue;
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    if (ImGui::Selectable(item.title.c_str(), ctf_selected_finding_ == i))
+                        select_ctf_case(i);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%llu",
+                                static_cast<unsigned long long>(item.end_tick - item.start_tick));
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(item.complete ? "Observed" : "Unknown");
                     ImGui::PopID();
                 }
-                if (data.findings.empty()) {
-                    ImGui::TextDisabled("No matching resource-blocking callbacks in this capture.");
-                } else if (ImGui::BeginTable("w20-cases", 3, table_flags, ImVec2(0, 0))) {
-                    ImGui::TableSetupColumn("Resource", ImGuiTableColumnFlags_WidthStretch, .56f);
-                    ImGui::TableSetupColumn("Wait (ticks)", ImGuiTableColumnFlags_WidthStretch,
-                                            .22f);
-                    ImGui::TableSetupColumn("Callback", ImGuiTableColumnFlags_WidthStretch, .22f);
+                ImGui::EndTable();
+            }
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Timeline", nullptr,
+                                ctf_tab_request_ == 1 ? ImGuiTabItemFlags_SetSelected : 0)) {
+            ImGui::TextDisabled("Bars show raw tick intervals, not CPU usage.");
+            if (!data.events.empty() && !data.findings.empty()) {
+                const auto start_tick = data.events.front().tick;
+                const auto end_tick = data.events.back().tick;
+                const auto span = std::max<std::uint64_t>(1, end_tick - start_tick);
+                if (ImGui::BeginTable("w20-timeline", 2,
+                                      ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg |
+                                          ImGuiTableFlags_SizingStretchProp |
+                                          ImGuiTableFlags_ScrollY,
+                                      ImVec2(0, 0))) {
+                    ImGui::TableSetupColumn("Resource / duration",
+                                            ImGuiTableColumnFlags_WidthStretch, .50f);
+                    ImGui::TableSetupColumn("Observed interval", ImGuiTableColumnFlags_WidthStretch,
+                                            .50f);
                     ImGui::TableHeadersRow();
-                    for (std::size_t i = 0; i < data.findings.size(); ++i) {
+                    const std::size_t count = std::min<std::size_t>(data.findings.size(), 200);
+                    for (std::size_t i = 0; i < count; ++i) {
                         const auto &item = data.findings[i];
-                        if (ctf_kind_filter_ == 1 && item.kind != "Mutex")
-                            continue;
-                        if (ctf_kind_filter_ == 2 && item.kind != "Semaphore")
-                            continue;
-                        if (ctf_kind_filter_ == 3 && item.kind != "Message queue")
-                            continue;
                         ImGui::PushID(static_cast<int>(i));
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
                         if (ImGui::Selectable(item.title.c_str(), ctf_selected_finding_ == i))
                             select_ctf_case(i);
+                        ImGui::TextDisabled("%llu ticks", static_cast<unsigned long long>(
+                                                              item.end_tick - item.start_tick));
                         ImGui::TableNextColumn();
-                        ImGui::Text("%llu", static_cast<unsigned long long>(item.end_tick -
-                                                                            item.start_tick));
-                        ImGui::TableNextColumn();
-                        ImGui::TextUnformatted(item.complete ? "Observed" : "Unknown");
+                        const float width = std::max(40.f, ImGui::GetContentRegionAvail().x);
+                        ImGui::InvisibleButton("##span", ImVec2(width, 27.f));
+                        const auto p0 = ImGui::GetItemRectMin();
+                        const auto p1 = ImGui::GetItemRectMax();
+                        auto *draw = ImGui::GetWindowDrawList();
+                        draw->AddRectFilled(ImVec2(p0.x, p0.y + 6.f), ImVec2(p1.x, p0.y + 21.f),
+                                            IM_COL32(31, 43, 59, 255), 3.f);
+                        const double x0 = static_cast<double>(item.start_tick - start_tick) /
+                                          static_cast<double>(span);
+                        const double x1 = static_cast<double>(item.end_tick - start_tick) /
+                                          static_cast<double>(span);
+                        const float left = p0.x + static_cast<float>(x0) * width;
+                        const float right = p0.x + static_cast<float>(x1) * width;
+                        const ImU32 color = item.kind == "Mutex" ? IM_COL32(243, 166, 85, 255)
+                                            : item.kind == "Semaphore"
+                                                ? IM_COL32(71, 187, 209, 255)
+                                                : IM_COL32(177, 151, 240, 255);
+                        draw->AddRectFilled(
+                            ImVec2(left, p0.y + 6.f),
+                            ImVec2(std::min(p1.x, std::max(left + 3.f, right)), p0.y + 21.f), color,
+                            3.f);
+                        if (ctf_selected_finding_ == i)
+                            draw->AddRect(
+                                ImVec2(left, p0.y + 5.f),
+                                ImVec2(std::min(p1.x, std::max(left + 4.f, right)), p0.y + 22.f),
+                                IM_COL32(236, 246, 255, 255), 3.f);
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip(
+                                "%s\nRaw wait: %llu ticks", item.title.c_str(),
+                                static_cast<unsigned long long>(item.end_tick - item.start_tick));
+                        if (ImGui::IsItemClicked())
+                            select_ctf_case(i);
                         ImGui::PopID();
                     }
+                    if (data.findings.size() > count)
+                        ImGui::TextDisabled("Timeline displays first 200 resource cases.");
                     ImGui::EndTable();
                 }
-                ImGui::EndTabItem();
             }
-            if (ImGui::BeginTabItem("Timeline", nullptr,
-                                     ctf_tab_request_ == 1 ? ImGuiTabItemFlags_SetSelected : 0)) {
-                ImGui::TextDisabled("Bars show raw tick intervals, not CPU usage.");
-                if (!data.events.empty() && !data.findings.empty()) {
-                    const auto start_tick = data.events.front().tick;
-                    const auto end_tick = data.events.back().tick;
-                    const auto span = std::max<std::uint64_t>(1, end_tick - start_tick);
-                    if (ImGui::BeginTable("w20-timeline", 2,
-                                          ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg |
-                                              ImGuiTableFlags_SizingStretchProp |
-                                              ImGuiTableFlags_ScrollY,
-                                          ImVec2(0, 0))) {
-                        ImGui::TableSetupColumn("Resource / duration",
-                                                ImGuiTableColumnFlags_WidthStretch, .50f);
-                        ImGui::TableSetupColumn("Observed interval",
-                                                ImGuiTableColumnFlags_WidthStretch, .50f);
-                        ImGui::TableHeadersRow();
-                        const std::size_t count = std::min<std::size_t>(data.findings.size(), 200);
-                        for (std::size_t i = 0; i < count; ++i) {
-                            const auto &item = data.findings[i];
-                            ImGui::PushID(static_cast<int>(i));
-                            ImGui::TableNextRow();
-                            ImGui::TableNextColumn();
-                            if (ImGui::Selectable(item.title.c_str(), ctf_selected_finding_ == i))
-                                select_ctf_case(i);
-                            ImGui::TextDisabled("%llu ticks", static_cast<unsigned long long>(
-                                                                  item.end_tick - item.start_tick));
-                            ImGui::TableNextColumn();
-                            const float width = std::max(40.f, ImGui::GetContentRegionAvail().x);
-                            ImGui::InvisibleButton("##span", ImVec2(width, 27.f));
-                            const auto p0 = ImGui::GetItemRectMin();
-                            const auto p1 = ImGui::GetItemRectMax();
-                            auto *draw = ImGui::GetWindowDrawList();
-                            draw->AddRectFilled(ImVec2(p0.x, p0.y + 6.f), ImVec2(p1.x, p0.y + 21.f),
-                                                IM_COL32(31, 43, 59, 255), 3.f);
-                            const double x0 = static_cast<double>(item.start_tick - start_tick) /
-                                              static_cast<double>(span);
-                            const double x1 = static_cast<double>(item.end_tick - start_tick) /
-                                              static_cast<double>(span);
-                            const float left = p0.x + static_cast<float>(x0) * width;
-                            const float right = p0.x + static_cast<float>(x1) * width;
-                            const ImU32 color = item.kind == "Mutex" ? IM_COL32(243, 166, 85, 255)
-                                                : item.kind == "Semaphore"
-                                                    ? IM_COL32(71, 187, 209, 255)
-                                                    : IM_COL32(177, 151, 240, 255);
-                            draw->AddRectFilled(
-                                ImVec2(left, p0.y + 6.f),
-                                ImVec2(std::min(p1.x, std::max(left + 3.f, right)), p0.y + 21.f),
-                                color, 3.f);
-                            if (ctf_selected_finding_ == i)
-                                draw->AddRect(ImVec2(left, p0.y + 5.f),
-                                              ImVec2(std::min(p1.x, std::max(left + 4.f, right)),
-                                                     p0.y + 22.f),
-                                              IM_COL32(236, 246, 255, 255), 3.f);
-                            if (ImGui::IsItemHovered())
-                                ImGui::SetTooltip("%s\nRaw wait: %llu ticks", item.title.c_str(),
-                                                  static_cast<unsigned long long>(item.end_tick -
-                                                                                  item.start_tick));
-                            if (ImGui::IsItemClicked())
-                                select_ctf_case(i);
-                            ImGui::PopID();
-                        }
-                        if (data.findings.size() > count)
-                            ImGui::TextDisabled("Timeline displays first 200 resource cases.");
-                        ImGui::EndTable();
-                    }
-                }
-                ImGui::EndTabItem();
-            }
-            if (ImGui::BeginTabItem("Threads / ISR", nullptr,
-                                     ctf_tab_request_ == 2 ? ImGuiTabItemFlags_SetSelected : 0)) {
-                draw_ctf_scheduler();
-                ImGui::EndTabItem();
-            }
-            if (ImGui::BeginTabItem("Events", nullptr,
-                                     ctf_tab_request_ == 3 ? ImGuiTabItemFlags_SetSelected : 0)) {
-                ImGui::SetNextItemWidth(-1);
-                ImGui::InputText("##w20-filter", ctf_filter_.data(), ctf_filter_.size());
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Filter event names (first 20,000 events scanned)");
-                const auto query = lower(ctf_filter_.data());
-                std::vector<std::size_t> matches;
-                const std::size_t scan = std::min<std::size_t>(data.events.size(), 20000);
-                for (std::size_t i = 0; i < scan && matches.size() < 5000; ++i) {
-                    if (query.empty() ||
-                        lower(data.events[i].name).find(query) != std::string::npos)
-                        matches.push_back(i);
-                }
-                ImGui::BeginChild("w20-events-scroll", ImVec2(0, 0), ImGuiChildFlags_Borders);
-                ImGuiListClipper clipper;
-                clipper.Begin(static_cast<int>(matches.size()));
-                while (clipper.Step()) {
-                    for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
-                        const auto index = matches[static_cast<std::size_t>(row)];
-                        const auto &event = data.events[index];
-                        ImGui::PushID(static_cast<int>(index));
-                        const auto description = "#" + std::to_string(index) + "  " + event.name +
-                                                 "  |  " + std::to_string(event.tick);
-                        if (ImGui::Selectable(description.c_str(), ctf_selected_event_ == index))
-                            ctf_selected_event_ = index;
-                        ImGui::PopID();
-                    }
-                }
-                if (data.events.size() > scan)
-                    ImGui::TextDisabled("Event browser scans first 20,000 records.");
-                ImGui::EndChild();
-                ImGui::EndTabItem();
-            }
-            if (ImGui::BeginTabItem("Compare", nullptr,
-                                     ctf_tab_request_ == 4 ? ImGuiTabItemFlags_SetSelected : 0)) {
-                ImGui::TextDisabled("Before / after requires two comparable independent captures.");
-                ImGui::SetNextItemWidth(-1);
-                ImGui::InputText("##w20-compare", ctf_comparison_.data(), ctf_comparison_.size());
-#ifdef _WIN32
-                if (ImGui::Button("Browse comparison...")) {
-                    if (auto folder = choose_ctf_directory_native()) {
-                        std::snprintf(ctf_comparison_.data(), ctf_comparison_.size(), "%s",
-                                      folder->c_str());
-                        (void)open_ctf_comparison(*folder);
-                    }
-                }
-                ImGui::SameLine();
-#endif
-                if (ImGui::Button("Load comparison"))
-                    (void)open_ctf_comparison(ctf_comparison_.data());
-                if (ctf_compare_) {
-                    ImGui::Text("Events: %zu  ->  %zu", data.events.size(),
-                                ctf_compare_->events.size());
-                    ImGui::Text("Resource cases: %zu  ->  %zu", data.findings.size(),
-                                ctf_compare_->findings.size());
-                }
-                ImGui::TextWrapped("Workload, clocks, firmware identity and trace loss must "
-                                   "be qualified before comparing performance.");
-                ImGui::EndTabItem();
-            }
-            ImGui::EndTabBar();
-        ctf_tab_request_ = -1;
+            ImGui::EndTabItem();
         }
+        if (ImGui::BeginTabItem("Threads / ISR", nullptr,
+                                ctf_tab_request_ == 2 ? ImGuiTabItemFlags_SetSelected : 0)) {
+            draw_ctf_scheduler();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Events", nullptr,
+                                ctf_tab_request_ == 3 ? ImGuiTabItemFlags_SetSelected : 0)) {
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputText("##w20-filter", ctf_filter_.data(), ctf_filter_.size());
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Filter event names (first 20,000 events scanned)");
+            const auto query = lower(ctf_filter_.data());
+            std::vector<std::size_t> matches;
+            const std::size_t scan = std::min<std::size_t>(data.events.size(), 20000);
+            for (std::size_t i = 0; i < scan && matches.size() < 5000; ++i) {
+                if (query.empty() || lower(data.events[i].name).find(query) != std::string::npos)
+                    matches.push_back(i);
+            }
+            ImGui::BeginChild("w20-events-scroll", ImVec2(0, 0), ImGuiChildFlags_Borders);
+            ImGuiListClipper clipper;
+            clipper.Begin(static_cast<int>(matches.size()));
+            while (clipper.Step()) {
+                for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
+                    const auto index = matches[static_cast<std::size_t>(row)];
+                    const auto &event = data.events[index];
+                    ImGui::PushID(static_cast<int>(index));
+                    const auto description = "#" + std::to_string(index) + "  " + event.name +
+                                             "  |  " + std::to_string(event.tick);
+                    if (ImGui::Selectable(description.c_str(), ctf_selected_event_ == index))
+                        ctf_selected_event_ = index;
+                    ImGui::PopID();
+                }
+            }
+            if (data.events.size() > scan)
+                ImGui::TextDisabled("Event browser scans first 20,000 records.");
+            ImGui::EndChild();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Compare", nullptr,
+                                ctf_tab_request_ == 4 ? ImGuiTabItemFlags_SetSelected : 0)) {
+            ImGui::TextDisabled("Before / after requires two comparable independent captures.");
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputText("##w20-compare", ctf_comparison_.data(), ctf_comparison_.size());
+#ifdef _WIN32
+            if (ImGui::Button("Browse comparison...")) {
+                if (auto folder = choose_ctf_directory_native()) {
+                    std::snprintf(ctf_comparison_.data(), ctf_comparison_.size(), "%s",
+                                  folder->c_str());
+                    (void)open_ctf_comparison(*folder);
+                }
+            }
+            ImGui::SameLine();
+#endif
+            if (ImGui::Button("Load comparison"))
+                (void)open_ctf_comparison(ctf_comparison_.data());
+            if (ctf_compare_) {
+                ImGui::Text("Events: %zu  ->  %zu", data.events.size(),
+                            ctf_compare_->events.size());
+                ImGui::Text("Resource cases: %zu  ->  %zu", data.findings.size(),
+                            ctf_compare_->findings.size());
+            }
+            ImGui::TextWrapped("Workload, clocks, firmware identity and trace loss must "
+                               "be qualified before comparing performance.");
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+        ctf_tab_request_ = -1;
+    }
 }
 
 void Workspace::draw_ctf_inspector() {
-    if (!ctf_) return;
-    auto& data = *ctf_;
+    if (!ctf_)
+        return;
+    auto &data = *ctf_;
     if (!data.findings.empty())
-        ctf_selected_finding_ = std::min(ctf_selected_finding_, data.findings.size()-1);
+        ctf_selected_finding_ = std::min(ctf_selected_finding_, data.findings.size() - 1);
     if (!data.events.empty())
-        ctf_selected_event_ = std::min(ctf_selected_event_, data.events.size()-1);
+        ctf_selected_event_ = std::min(ctf_selected_event_, data.events.size() - 1);
 
-        ImGui::TextColored(ImVec4(.74f, .86f, .97f, 1.f), "02  EVIDENCE INSPECTOR");
-        ImGui::TextDisabled("Selection stays visible while exploring.");
-        ImGui::Separator();
-        if (!data.findings.empty()) {
-            const auto &item = data.findings[ctf_selected_finding_];
-            ImGui::TextColored(ImVec4(.97f, .91f, .82f, 1.f), "%s", item.title.c_str());
-            ImGui::Text("Observed window: %llu raw ticks",
-                        static_cast<unsigned long long>(item.end_tick - item.start_tick));
-            ImGui::TextDisabled("%s", item.complete ? "Matched successful callback"
-                                                    : "Completion not proven");
-            ImGui::Spacing();
-            ImGui::TextWrapped("%s", item.assessment.c_str());
-            ImGui::SeparatorText("Linked evidence");
-            for (const auto index : item.evidence) {
-                if (index >= data.events.size())
-                    continue;
-                const auto &event = data.events[index];
-                ImGui::PushID(static_cast<int>(index));
-                const auto description = "#" + std::to_string(index) + "  " + event.name +
-                                         "  |  tick " + std::to_string(event.tick);
-                if (ImGui::Selectable(description.c_str(), ctf_selected_event_ == index))
-                    ctf_selected_event_ = index;
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Source byte offset: %zu", event.byte_offset);
-                ImGui::PopID();
-            }
-        } else {
-            ImGui::TextDisabled("No resource case selected.");
-        }
-        if (data.events.empty())
-            return;
-        ImGui::SeparatorText("Selected source event");
-        if (ImGui::SmallButton("Previous") && ctf_selected_event_ > 0)
-            --ctf_selected_event_;
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Next") && ctf_selected_event_ + 1 < data.events.size())
-            ++ctf_selected_event_;
-        const auto &event = data.events[ctf_selected_event_];
-        ImGui::TextWrapped("#%zu  %s", ctf_selected_event_, event.name.c_str());
-        ImGui::Text("Tick: %llu   |   File byte: %zu", static_cast<unsigned long long>(event.tick),
-                    event.byte_offset);
-        if (event.actor >= 0)
-            ImGui::Text("Observed thread: %lld", static_cast<long long>(event.actor));
-        else
-            ImGui::TextDisabled("Thread identity not observed");
-        if (ImGui::BeginTable("w20-field-details", 2,
-                              ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
-                                  ImGuiTableFlags_SizingStretchProp)) {
-            ImGui::TableSetupColumn("Field", ImGuiTableColumnFlags_WidthStretch, .42f);
-            ImGui::TableSetupColumn("Recorded value", ImGuiTableColumnFlags_WidthStretch, .58f);
-            for (const auto &[key, value] : event.fields) {
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::TextUnformatted(key.c_str());
-                ImGui::TableNextColumn();
-                ImGui::TextUnformatted(value.c_str());
-            }
-            ImGui::EndTable();
-        }
+    ImGui::TextColored(ImVec4(.74f, .86f, .97f, 1.f), "02  EVIDENCE INSPECTOR");
+    ImGui::TextDisabled("Selection stays visible while exploring.");
+    ImGui::Separator();
+    if (!data.findings.empty()) {
+        const auto &item = data.findings[ctf_selected_finding_];
+        ImGui::TextColored(ImVec4(.97f, .91f, .82f, 1.f), "%s", item.title.c_str());
+        ImGui::Text("Observed window: %llu raw ticks",
+                    static_cast<unsigned long long>(item.end_tick - item.start_tick));
+        ImGui::TextDisabled("%s", item.complete ? "Matched successful callback"
+                                                : "Completion not proven");
         ImGui::Spacing();
-        ImGui::TextDisabled("Correlation does not prove causality or CPU load.");
+        ImGui::TextWrapped("%s", item.assessment.c_str());
+        ImGui::SeparatorText("Linked evidence");
+        for (const auto index : item.evidence) {
+            if (index >= data.events.size())
+                continue;
+            const auto &event = data.events[index];
+            ImGui::PushID(static_cast<int>(index));
+            const auto description = "#" + std::to_string(index) + "  " + event.name +
+                                     "  |  tick " + std::to_string(event.tick);
+            if (ImGui::Selectable(description.c_str(), ctf_selected_event_ == index))
+                ctf_selected_event_ = index;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Source byte offset: %zu", event.byte_offset);
+            ImGui::PopID();
+        }
+    } else {
+        ImGui::TextDisabled("No resource case selected.");
+    }
+    if (data.events.empty())
+        return;
+    ImGui::SeparatorText("Selected source event");
+    if (ImGui::SmallButton("Previous") && ctf_selected_event_ > 0)
+        --ctf_selected_event_;
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Next") && ctf_selected_event_ + 1 < data.events.size())
+        ++ctf_selected_event_;
+    const auto &event = data.events[ctf_selected_event_];
+    ImGui::TextWrapped("#%zu  %s", ctf_selected_event_, event.name.c_str());
+    ImGui::Text("Tick: %llu   |   File byte: %zu", static_cast<unsigned long long>(event.tick),
+                event.byte_offset);
+    if (event.actor >= 0)
+        ImGui::Text("Observed thread: %lld", static_cast<long long>(event.actor));
+    else
+        ImGui::TextDisabled("Thread identity not observed");
+    if (ImGui::BeginTable("w20-field-details", 2,
+                          ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                              ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Field", ImGuiTableColumnFlags_WidthStretch, .42f);
+        ImGui::TableSetupColumn("Recorded value", ImGuiTableColumnFlags_WidthStretch, .58f);
+        for (const auto &[key, value] : event.fields) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(key.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(value.c_str());
+        }
+        ImGui::EndTable();
+    }
+    ImGui::Spacing();
+    ImGui::TextDisabled("Correlation does not prove causality or CPU load.");
 }
-
 
 void Workspace::draw_ctf_scheduler() {
     if (!ctf_ || !ctf_analysis_) {
         ImGui::TextDisabled("No qualified CTF scheduling callbacks available.");
         return;
     }
-    const auto& model = *ctf_analysis_;
-    const auto& events = ctf_->events;
+    const auto &model = *ctf_analysis_;
+    const auto &events = ctf_->events;
     ImGui::TextColored(ImVec4(.73f, .86f, .97f, 1.f), "CTF SCHEDULING / INTERRUPT OBSERVATIONS");
     ImGui::TextDisabled("Recorded switch/ISR pairs only. Not CPU load or real-time latency.");
-    ImGui::Text("Thread spans: %zu    ISR spans: %zu",
-                model.thread_spans.size(), model.isr_spans.size());
+    ImGui::Text("Thread spans: %zu    ISR spans: %zu", model.thread_spans.size(),
+                model.isr_spans.size());
     if (model.unpaired_thread_switches || model.unpaired_isr_callbacks || model.truncated)
-        ImGui::TextColored(ImVec4(1.f, .78f, .43f, 1.f),
-                           "Unpaired: thread %zu, ISR %zu%s",
+        ImGui::TextColored(ImVec4(1.f, .78f, .43f, 1.f), "Unpaired: thread %zu, ISR %zu%s",
                            model.unpaired_thread_switches, model.unpaired_isr_callbacks,
                            model.truncated ? " | INDEX TRUNCATED" : "");
     if (ImGui::BeginTable("ctf-linked-scheduling", 4,
                           ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
-                          ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY,
+                              ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY,
                           ImVec2(0, 0))) {
         ImGui::TableSetupColumn("Kind", ImGuiTableColumnFlags_WidthStretch, .13f);
         ImGui::TableSetupColumn("Actor", ImGuiTableColumnFlags_WidthStretch, .37f);
         ImGui::TableSetupColumn("Ticks", ImGuiTableColumnFlags_WidthStretch, .23f);
         ImGui::TableSetupColumn("Evidence", ImGuiTableColumnFlags_WidthStretch, .27f);
         ImGui::TableHeadersRow();
-        const auto draw_spans = [&](const std::vector<ctf::AnalysisSpan>& spans) {
+        const auto draw_spans = [&](const std::vector<ctf::AnalysisSpan> &spans) {
             const std::size_t cap = std::min<std::size_t>(spans.size(), 1000);
             for (std::size_t i = 0; i < cap; ++i) {
-                const auto& span = spans[i];
+                const auto &span = spans[i];
                 ImGui::PushID(static_cast<int>(i));
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
@@ -2926,8 +2929,8 @@ void Workspace::draw_ctf_scheduler() {
                 ImGui::TableNextColumn();
                 ImGui::TextUnformatted(span.subject.c_str());
                 ImGui::TableNextColumn();
-                ImGui::Text("%llu", static_cast<unsigned long long>(
-                    span.end_tick - span.start_tick));
+                ImGui::Text("%llu",
+                            static_cast<unsigned long long>(span.end_tick - span.start_tick));
                 ImGui::TableNextColumn();
                 if (ImGui::SmallButton("Start")) {
                     ctf_selected_event_ = span.begin_event;
@@ -2955,11 +2958,11 @@ void Workspace::draw_ctf_scheduler() {
 }
 
 void Workspace::draw_ctf_floating() {
-    if (!ctf_) return;
+    if (!ctf_)
+        return;
     if (ctf_explorer_detached_) {
         ImGui::SetNextWindowSize(ImVec2(780.f, 560.f), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("CTF Resource Explorer##w20-floating-explorer",
-                          &ctf_explorer_detached_)) {
+        if (ImGui::Begin("CTF Resource Explorer##w20-floating-explorer", &ctf_explorer_detached_)) {
             if (ImGui::SmallButton("Return to workspace"))
                 ctf_explorer_detached_ = false;
             ImGui::Separator();
@@ -2971,7 +2974,7 @@ void Workspace::draw_ctf_floating() {
     if (ctf_inspector_detached_) {
         ImGui::SetNextWindowSize(ImVec2(570.f, 650.f), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("CTF Evidence Inspector##w20-floating-evidence",
-                          &ctf_inspector_detached_)) {
+                         &ctf_inspector_detached_)) {
             if (ImGui::SmallButton("Return to workspace"))
                 ctf_inspector_detached_ = false;
             ImGui::Separator();
@@ -2983,7 +2986,7 @@ void Workspace::draw_ctf_floating() {
     if (ctf_scheduler_detached_) {
         ImGui::SetNextWindowSize(ImVec2(820.f, 550.f), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("CTF Scheduling and ISR##w20-floating-scheduling",
-                          &ctf_scheduler_detached_)) {
+                         &ctf_scheduler_detached_)) {
             if (ImGui::SmallButton("Close analysis window"))
                 ctf_scheduler_detached_ = false;
             ImGui::Separator();
@@ -3073,9 +3076,6 @@ void Workspace::draw_ctf() {
     if (data.pending_bytes)
         ImGui::TextDisabled("Trailing %zu bytes are not decoded events.", data.pending_bytes);
 
-
-
-
     // Both attached: side-by-side. Detached panes render in dockable,
     // independently movable platform windows sharing this capture.
     if (!ctf_explorer_detached_ && !ctf_inspector_detached_ &&
@@ -3083,7 +3083,8 @@ void Workspace::draw_ctf() {
         const float height = std::max(330.f, ImGui::GetContentRegionAvail().y - 6.f);
         if (ImGui::BeginTable("w20-two-columns", 2,
                               ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV |
-                                  ImGuiTableFlags_Resizable, ImVec2(0, height))) {
+                                  ImGuiTableFlags_Resizable,
+                              ImVec2(0, height))) {
             ImGui::TableSetupColumn("Explorer", ImGuiTableColumnFlags_WidthStretch, .58f);
             ImGui::TableSetupColumn("Inspector", ImGuiTableColumnFlags_WidthStretch, .42f);
             ImGui::TableNextRow();
@@ -3092,8 +3093,7 @@ void Workspace::draw_ctf() {
             draw_ctf_explorer();
             ImGui::EndChild();
             ImGui::TableNextColumn();
-            ImGui::BeginChild("w20-right-pane", ImVec2(0, height - 10.f),
-                              ImGuiChildFlags_None);
+            ImGui::BeginChild("w20-right-pane", ImVec2(0, height - 10.f), ImGuiChildFlags_None);
             draw_ctf_inspector();
             ImGui::EndChild();
             ImGui::EndTable();
@@ -3108,10 +3108,10 @@ void Workspace::draw_ctf() {
             draw_ctf_inspector();
         }
         if (ctf_explorer_detached_ && ctf_inspector_detached_)
-            ImGui::TextDisabled("Both panes are detached. Use Window > Restore embedded CTF panels.");
+            ImGui::TextDisabled(
+                "Both panes are detached. Use Window > Restore embedded CTF panels.");
     }
 }
-
 
 void Workspace::draw_page(Page page) {
     switch (page) {
@@ -3171,17 +3171,26 @@ void Workspace::draw_page(Page page) {
 void Workspace::draw_detached_analysis() {
     for (std::size_t i = 0; i < detached_analysis_pages_.size();) {
         const auto page = detached_analysis_pages_[i];
-        const char* labels[] = {
-            "Overview", "Execution timeline", "CPU and waits", "Causal graph",
-            "Time-travel replay", "Scheduling diagnostics", "Resources and waits",
-            "Causal diagnostics", "Fault and memory", "Source symbol graph",
-            "Debugger lifecycle", "Snapshot receipts", "Live trace epochs",
-            "Events", "Findings", "Evidence details", "Zephyr CTF"
-        };
+        const char *labels[] = {"Overview",
+                                "Execution timeline",
+                                "CPU and waits",
+                                "Causal graph",
+                                "Time-travel replay",
+                                "Scheduling diagnostics",
+                                "Resources and waits",
+                                "Causal diagnostics",
+                                "Fault and memory",
+                                "Source symbol graph",
+                                "Debugger lifecycle",
+                                "Snapshot receipts",
+                                "Live trace epochs",
+                                "Events",
+                                "Findings",
+                                "Evidence details",
+                                "Zephyr CTF"};
         const auto index = static_cast<std::size_t>(page);
         bool keep_open = true;
-        const auto title = std::string(labels[index]) + "##rtos-detached-" +
-                           std::to_string(index);
+        const auto title = std::string(labels[index]) + "##rtos-detached-" + std::to_string(index);
         ImGui::SetNextWindowSize(ImVec2(870.f, 590.f), ImGuiCond_FirstUseEver);
         if (ImGui::Begin(title.c_str(), &keep_open)) {
             ImGui::TextDisabled("Detached analysis | shared session | no extra device connection");

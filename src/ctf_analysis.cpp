@@ -8,9 +8,10 @@
 
 namespace observatory::ctf {
 namespace {
-std::string thread_label(const Session& source, const Event& event) {
+std::string thread_label(const Session &source, const Event &event) {
     const auto id = describe_field(event, "thread_id");
-    if (id.empty()) return {};
+    if (id.empty())
+        return {};
     try {
         const auto numeric = std::stoull(id);
         auto it = source.thread_names.find(numeric);
@@ -21,16 +22,15 @@ std::string thread_label(const Session& source, const Event& event) {
     }
     return "thread " + id;
 }
-bool scheduler_marker(const std::string& name) {
-    return name == "thread_ready" || name == "thread_sched_ready" ||
-           name == "thread_sched_pend" || name == "thread_sched_wakeup" ||
-           name == "thread_sched_priority_set" || name == "thread_sched_lock" ||
-           name == "thread_sched_unlock" || name == "thread_switched_in" ||
-           name == "thread_switched_out";
+bool scheduler_marker(const std::string &name) {
+    return name == "thread_ready" || name == "thread_sched_ready" || name == "thread_sched_pend" ||
+           name == "thread_sched_wakeup" || name == "thread_sched_priority_set" ||
+           name == "thread_sched_lock" || name == "thread_sched_unlock" ||
+           name == "thread_switched_in" || name == "thread_switched_out";
 }
 } // namespace
 
-AnalysisIndex build_analysis_index(const Session& source, std::size_t maximum_events,
+AnalysisIndex build_analysis_index(const Session &source, std::size_t maximum_events,
                                    std::size_t maximum_spans) {
     if (maximum_events == 0 || maximum_spans == 0)
         throw std::invalid_argument("CTF index limits must be positive");
@@ -44,12 +44,12 @@ AnalysisIndex build_analysis_index(const Session& source, std::size_t maximum_ev
     std::optional<std::pair<std::size_t, std::string>> running;
     std::vector<std::size_t> isrs;
     for (std::size_t i = 0; i < bound; ++i) {
-        const auto& event = source.events[i];
-        if (scheduler_marker(event.name) &&
-            result.scheduler_events.size() < maximum_spans)
+        const auto &event = source.events[i];
+        if (scheduler_marker(event.name) && result.scheduler_events.size() < maximum_spans)
             result.scheduler_events.push_back(i);
         if (event.name == "thread_switched_in") {
-            if (running) ++result.unpaired_thread_switches;
+            if (running)
+                ++result.unpaired_thread_switches;
             auto name = thread_label(source, event);
             if (name.empty()) {
                 ++result.unpaired_thread_switches;
@@ -58,14 +58,15 @@ AnalysisIndex build_analysis_index(const Session& source, std::size_t maximum_ev
                 running = std::make_pair(i, std::move(name));
             }
         } else if (event.name == "thread_switched_out") {
-            if (running && describe_field(source.events[running->first], "thread_id") ==
-                               describe_field(event, "thread_id") &&
+            if (running &&
+                describe_field(source.events[running->first], "thread_id") ==
+                    describe_field(event, "thread_id") &&
                 event.tick >= source.events[running->first].tick) {
                 if (result.thread_spans.size() < maximum_spans) {
                     const auto start = running->first;
-                    result.thread_spans.push_back(
-                        {"Thread", running->second, source.events[start].tick, event.tick,
-                         start, i});
+                    result.thread_spans.push_back({"Thread", running->second,
+                                                   source.events[start].tick, event.tick, start,
+                                                   i});
                 } else {
                     result.truncated = true;
                 }
@@ -91,7 +92,7 @@ AnalysisIndex build_analysis_index(const Session& source, std::size_t maximum_ev
                     ++result.unpaired_isr_callbacks;
                 } else if (result.isr_spans.size() < maximum_spans) {
                     result.isr_spans.push_back({"ISR", "identity unknown",
-                        source.events[first].tick, event.tick, first, i});
+                                                source.events[first].tick, event.tick, first, i});
                 } else {
                     result.truncated = true;
                 }

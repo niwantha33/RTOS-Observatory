@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 #include "observatory/causal_diagnostics.hpp"
+#include "observatory/ctf_analysis.hpp"
 #include "observatory/debug_bridge.hpp"
 #include "observatory/desktop/session_controller.hpp"
 #include "observatory/diagnostics.hpp"
@@ -13,7 +14,6 @@
 #include "observatory/source_index.hpp"
 #include "observatory/timeline.hpp"
 #include "observatory/zephyr_ctf.hpp"
-#include "observatory/ctf_analysis.hpp"
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -40,7 +40,7 @@ class Workspace final {
     bool open_ctf_comparison(const std::string &path);
     const ctf::Session *ctf_session() const noexcept { return ctf_ ? &*ctf_ : nullptr; }
     void show_ctf() noexcept { page_ = Page::Ctf; }
-    const ctf::AnalysisIndex* ctf_analysis() const noexcept {
+    const ctf::AnalysisIndex *ctf_analysis() const noexcept {
         return ctf_analysis_ ? &*ctf_analysis_ : nullptr;
     }
     void show_ctf_detached_smoke() noexcept {
@@ -171,7 +171,7 @@ class Workspace final {
     std::array<char, 128> ctf_filter_{};
     std::string ctf_active_directory_;
     std::string ctf_error_;
-    int ctf_tab_request_{-1}; // CTF analysis navigator request, consumed by explorer
+    int ctf_tab_request_{-1};       // CTF analysis navigator request, consumed by explorer
     std::size_t ctf_kind_filter_{}; // 0=all, 1=mutex, 2=semaphore, 3=queue
     std::size_t ctf_selected_finding_{};
     std::size_t ctf_selected_event_{};
