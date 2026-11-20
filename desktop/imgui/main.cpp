@@ -118,6 +118,8 @@ int main(int argc, char** argv) {
     bool smoke_bridge=false;
     bool smoke_snapshot=false;
     bool smoke_live=false;
+    bool smoke_ctf=false;
+    std::string ctf_directory_path;
     std::string live_binary_path;
     std::string snapshot_path;
     std::string bridge_status_path;
@@ -161,7 +163,19 @@ int main(int argc, char** argv) {
                   "  --live FILE  Follow a local W18 binary .rtob spool\n"
                   "  --smoke-live FILE  Headless live session/epoch model smoke\n"
                   "  --smoke-ui-live FILE  Hidden W18 live arrival lanes UI smoke\n"
+                  "  --ctf DIR             Open native Zephyr CTF (metadata + channel0_0)\n"
+                  "  --smoke-ctf DIR       Headless W20 CTF model smoke\n"
+                  "  --smoke-ui-ctf DIR    Hidden W20 native GUI render smoke\n"
                   "Drag a trace file onto the window or enter a filename in the sidebar.");
+        return 0;
+    }
+    if(argc>=3 && std::string_view(argv[1])=="--smoke-ctf") {
+        if(!workspace.open_ctf_directory(argv[2]) || !workspace.ctf_session() ||
+           workspace.ctf_session()->events.empty()) {
+            std::fprintf(stderr,"W20 CTF model smoke failed: %s\n",workspace.error().c_str());
+            return 3;
+        }
+        std::puts("W20 native Zephyr CTF model smoke passed");
         return 0;
     }
     if(argc>=3 && std::string_view(argv[1])=="--smoke-live") {
@@ -275,7 +289,12 @@ int main(int argc, char** argv) {
         std::puts("W12 offline stack, TCB, fault and memory evidence smoke passed");
         return 0;
     }
-    if(argc>=3 && (std::string_view(argv[1])=="--live" ||
+    if(argc>=3 && (std::string_view(argv[1])=="--ctf" ||
+                   std::string_view(argv[1])=="--smoke-ui-ctf")) {
+        ctf_directory_path=argv[2];
+        smoke_ctf=std::string_view(argv[1])=="--smoke-ui-ctf";
+        smoke_ui=smoke_ctf;
+    } else if(argc>=3 && (std::string_view(argv[1])=="--live" ||
                    std::string_view(argv[1])=="--smoke-ui-live")) {
         live_binary_path=argv[2];
         smoke_live=std::string_view(argv[1])=="--smoke-ui-live";
@@ -347,6 +366,10 @@ int main(int argc, char** argv) {
             workspace.error().c_str());
         return 2;
     }
+    if(!ctf_directory_path.empty() && !workspace.open_ctf_directory(ctf_directory_path)) {
+        std::fprintf(stderr,"Cannot open W20 CTF folder\n");
+        return 2;
+    }
     if(!live_binary_path.empty() && !workspace.open_live_file(live_binary_path)) {
         std::fprintf(stderr,"Cannot open W18 binary spool\n");
         return 2;
@@ -359,6 +382,7 @@ int main(int argc, char** argv) {
     if (smoke_causal) workspace.show_causality();
     if (smoke_snapshot) workspace.show_snapshot_receipt();
     if (smoke_live) workspace.show_live_trace();
+    if (smoke_ctf) workspace.show_ctf();
     if (smoke_bridge) workspace.show_debug_bridge();
     if (smoke_symbols) workspace.show_source_graph();
     if (smoke_fault) workspace.show_faults();
@@ -419,7 +443,8 @@ int main(int argc, char** argv) {
     glfwTerminate();
     if(smoke_ui) {
         std::printf("Desktop font: %s\n",font_name.c_str());
-        std::puts(smoke_live ? "W18 live trace epoch UI smoke passed" :
+        std::puts(smoke_ctf ? "W20 native CTF investigation UI smoke passed" :
+                  smoke_live ? "W18 live trace epoch UI smoke passed" :
                   smoke_snapshot ? "W15 unverified snapshot receipt UI smoke passed" :
                   smoke_bridge ? "W14 passive DSF bridge UI smoke passed" :
                   smoke_symbols ? "W13 verified source graph UI smoke passed" :
