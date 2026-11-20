@@ -123,7 +123,11 @@ inline bool save_workspace_layout(const std::filesystem::path &destination,
         return false;
     }
     std::error_code ec;
-    if (std::filesystem::is_symlink(destination, ec) || ec) {
+    const bool destination_is_link = std::filesystem::is_symlink(destination, ec);
+    // POSIX reports ENOENT for an as-yet-uncreated file or parent folder.
+    if (ec == std::errc::no_such_file_or_directory)
+        ec.clear();
+    if (destination_is_link || ec) {
         error = "Refusing to overwrite a layout symlink.";
         return false;
     }
@@ -154,7 +158,10 @@ inline bool save_workspace_layout(const std::filesystem::path &destination,
     }
     auto temp = destination;
     temp += ".tmp";
-    if (std::filesystem::is_symlink(temp, ec) || ec) {
+    const bool temp_is_link = std::filesystem::is_symlink(temp, ec);
+    if (ec == std::errc::no_such_file_or_directory)
+        ec.clear();
+    if (temp_is_link || ec) {
         error = "Refusing to overwrite a temporary layout symlink.";
         return false;
     }
