@@ -40,6 +40,15 @@ class Workspace final {
     bool open_ctf_comparison(const std::string &path);
     const ctf::Session *ctf_session() const noexcept { return ctf_ ? &*ctf_ : nullptr; }
     void show_ctf() noexcept { page_ = Page::Ctf; }
+    const ctf::AnalysisIndex* ctf_analysis() const noexcept {
+        return ctf_analysis_ ? &*ctf_analysis_ : nullptr;
+    }
+    void show_ctf_detached_smoke() noexcept {
+        page_ = Page::Ctf;
+        ctf_explorer_detached_ = true;
+        ctf_inspector_detached_ = true;
+        ctf_scheduler_detached_ = true;
+    }
     bool poll_live_file();
     bool export_report(const std::string &path);
     void accept_drop(const std::string &path);
@@ -157,6 +166,7 @@ class Workspace final {
     std::array<char, 128> ctf_filter_{};
     std::string ctf_active_directory_;
     std::string ctf_error_;
+    int ctf_tab_request_{-1}; // CTF analysis navigator request, consumed by explorer
     std::size_t ctf_kind_filter_{}; // 0=all, 1=mutex, 2=semaphore, 3=queue
     std::size_t ctf_selected_finding_{};
     std::size_t ctf_selected_event_{};
