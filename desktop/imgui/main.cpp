@@ -469,7 +469,7 @@ int main(int argc, char **argv) {
         ImGui::NewFrame();
         // Host a single shared dockspace. All CTF and normalized analyses
         // retain one source/session and can be rearranged independently.
-        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+        workspace.set_dockspace_id(ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport()));
         workspace.draw();
         if (workspace.exit_requested())
             glfwSetWindowShouldClose(window, GLFW_TRUE);
