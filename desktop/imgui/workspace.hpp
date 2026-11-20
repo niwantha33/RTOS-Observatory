@@ -39,12 +39,12 @@ class Workspace final {
     bool open_ctf_directory(const std::string &path);
     bool open_ctf_comparison(const std::string &path);
     const ctf::Session *ctf_session() const noexcept { return ctf_ ? &*ctf_ : nullptr; }
-    void show_ctf() noexcept { page_ = Page::Ctf; }
+    void show_ctf() noexcept { page_ = Page::Overview; }
     const ctf::AnalysisIndex* ctf_analysis() const noexcept {
         return ctf_analysis_ ? &*ctf_analysis_ : nullptr;
     }
     void show_ctf_detached_smoke() noexcept {
-        page_ = Page::Ctf;
+        page_ = Page::Overview;
         ctf_explorer_detached_ = true;
         ctf_inspector_detached_ = true;
         ctf_scheduler_detached_ = true;
