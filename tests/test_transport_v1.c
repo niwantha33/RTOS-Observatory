@@ -2,6 +2,7 @@
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
+#include "obs_recorder.h"
 #include "obs_transport_v1.h"
 #include <assert.h>
 #include <stdio.h>
