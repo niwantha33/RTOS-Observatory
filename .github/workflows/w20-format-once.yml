@@ -1,0 +1,50 @@
+# Temporary, branch-scoped formatter for W20 owned C++ code.
+# Remove this workflow immediately after its formatting commit.
+name: W20 one-time clang-format
+on:
+  push:
+    branches: [feature/w20-zephyr-ctf-native-gui]
+    paths:
+      - .github/workflows/w20-format-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/w20-zephyr-ctf-native-gui
+          persist-credentials: true
+      - name: Install clang-format
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format
+      - name: Format W20 owned source files only
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang-format -i --style=file \
+            src/zephyr_ctf.cpp \
+            include/observatory/zephyr_ctf.hpp \
+            tests/test_zephyr_ctf.cpp \
+            desktop/imgui/workspace.cpp \
+            desktop/imgui/workspace.hpp \
+            desktop/imgui/main.cpp
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            src/zephyr_ctf.cpp \
+            include/observatory/zephyr_ctf.hpp \
+            tests/test_zephyr_ctf.cpp \
+            desktop/imgui/workspace.cpp \
+            desktop/imgui/workspace.hpp \
+            desktop/imgui/main.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m "style(W20): apply project clang-format to native CTF integration"
+            git push origin HEAD:feature/w20-zephyr-ctf-native-gui
+          fi
