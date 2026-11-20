@@ -806,6 +806,21 @@ void Workspace::draw_sidebar() {
     };
     header("DATA SOURCES");
     nav(Page::Ctf, "Zephyr CTF  /  W20");
+    if (ctf_) {
+        ImGui::Indent(12.f);
+        const auto ctf_nav = [&](const char* title, int focus) {
+            if (ImGui::Selectable(title, false)) {
+                page_ = Page::Ctf;
+                ctf_tab_request_ = focus;
+            }
+        };
+        ctf_nav("Kernel objects", 0);
+        ctf_nav("Wait timeline", 1);
+        ctf_nav("Threads / ISR", 2);
+        ctf_nav("Raw events", 3);
+        ctf_nav("Before / after", 4);
+        ImGui::Unindent(12.f);
+    }
     nav(Page::LiveTrace, "Live event epochs");
     ImGui::SetNextItemOpen(false, ImGuiCond_Once);
     if (ImGui::CollapsingHeader("Open other traces")) {
@@ -2599,7 +2614,8 @@ void Workspace::draw_ctf_explorer() {
         ImGui::TextDisabled("Choose a case or event; details appear on the right.");
         ImGui::Spacing();
         if (ImGui::BeginTabBar("w20-explorer-tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
-            if (ImGui::BeginTabItem("Cases")) {
+            if (ImGui::BeginTabItem("Cases", nullptr,
+                                     ctf_tab_request_ == 0 ? ImGuiTabItemFlags_SetSelected : 0)) {
                 const char *kinds[] = {"All", "Mutex", "Semaphore", "Queue"};
                 for (std::size_t kind = 0; kind < 4; ++kind) {
                     if (kind != 0)
@@ -2653,7 +2669,8 @@ void Workspace::draw_ctf_explorer() {
                 }
                 ImGui::EndTabItem();
             }
-            if (ImGui::BeginTabItem("Timeline")) {
+            if (ImGui::BeginTabItem("Timeline", nullptr,
+                                     ctf_tab_request_ == 1 ? ImGuiTabItemFlags_SetSelected : 0)) {
                 ImGui::TextDisabled("Bars show raw tick intervals, not CPU usage.");
                 if (!data.events.empty() && !data.findings.empty()) {
                     const auto start_tick = data.events.front().tick;
@@ -2721,11 +2738,13 @@ void Workspace::draw_ctf_explorer() {
                 }
                 ImGui::EndTabItem();
             }
-            if (ImGui::BeginTabItem("Threads / ISR")) {
+            if (ImGui::BeginTabItem("Threads / ISR", nullptr,
+                                     ctf_tab_request_ == 2 ? ImGuiTabItemFlags_SetSelected : 0)) {
                 draw_ctf_scheduler();
                 ImGui::EndTabItem();
             }
-            if (ImGui::BeginTabItem("Events")) {
+            if (ImGui::BeginTabItem("Events", nullptr,
+                                     ctf_tab_request_ == 3 ? ImGuiTabItemFlags_SetSelected : 0)) {
                 ImGui::SetNextItemWidth(-1);
                 ImGui::InputText("##w20-filter", ctf_filter_.data(), ctf_filter_.size());
                 if (ImGui::IsItemHovered())
@@ -2758,7 +2777,8 @@ void Workspace::draw_ctf_explorer() {
                 ImGui::EndChild();
                 ImGui::EndTabItem();
             }
-            if (ImGui::BeginTabItem("Compare")) {
+            if (ImGui::BeginTabItem("Compare", nullptr,
+                                     ctf_tab_request_ == 4 ? ImGuiTabItemFlags_SetSelected : 0)) {
                 ImGui::TextDisabled("Before / after requires two comparable independent captures.");
                 ImGui::SetNextItemWidth(-1);
                 ImGui::InputText("##w20-compare", ctf_comparison_.data(), ctf_comparison_.size());
@@ -2785,6 +2805,7 @@ void Workspace::draw_ctf_explorer() {
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
+        ctf_tab_request_ = -1;
         }
 }
 
