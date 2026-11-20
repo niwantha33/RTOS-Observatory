@@ -13,6 +13,14 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <optional>
+#include <system_error>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <objbase.h>
+#include <shobjidl.h>
+#endif
 
 namespace observatory::desktop {
 namespace {
@@ -20,6 +28,88 @@ std::filesystem::path file_path(const std::string& text) {
     // Preserve UTF-8 input semantics without deprecated C++20 std::filesystem::u8path.
     return std::filesystem::path(std::u8string(text.begin(), text.end()));
 }
+
+#ifdef _WIN32
+std::optional<std::string> choose_ctf_directory_native() {
+    const auto init=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
+    if(FAILED(init) && init!=RPC_E_CHANGED_MODE) return std::nullopt;
+    IFileOpenDialog* dlg=nullptr;
+    std::optional<std::string> result;
+    if(SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,
+                                  IID_PPV_ARGS(&dlg))) && dlg) {
+        DWORD flags{};
+        if(SUCCEEDED(dlg->GetOptions(&flags)))
+            (void)dlg->SetOptions(flags|FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST);
+        (void)dlg->SetTitle(L"Select Zephyr CTF capture folder");
+        if(SUCCEEDED(dlg->Show(GetForegroundWindow()))) {
+            IShellItem* item=nullptr;
+            if(SUCCEEDED(dlg->GetResult(&item)) && item) {
+                PWSTR wide=nullptr;
+                if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&wide)) && wide) {
+                    const int required=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,
+                                                           wide,-1,nullptr,0,nullptr,nullptr);
+                    if(required>1 && required<8192) {
+                        std::string utf8(static_cast<std::size_t>(required),'\0');
+                        if(WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,wide,-1,
+                                               utf8.data(),required,nullptr,nullptr)>0) {
+                            utf8.pop_back(); // terminal NUL
+                            result=std::move(utf8);
+                        }
+                    }
+                    CoTaskMemFree(wide);
+                }
+                item->Release();
+            }
+        }
+        dlg->Release();
+    }
+    if(SUCCEEDED(init)) CoUninitialize();
+    return result;
+}
+#endif
+
+bool is_ctf_root(const std::filesystem::path& path) {
+    std::error_code ec;
+    if(std::filesystem::is_symlink(path,ec) || !std::filesystem::is_directory(path,ec))
+        return false;
+    for(const auto* filename:{"metadata","channel0_0"}) {
+        const auto file=path/filename;
+        if(std::filesystem::is_symlink(file,ec) ||
+           !std::filesystem::is_regular_file(file,ec))return false;
+    }
+    return true;
+}
+std::filesystem::path resolve_ctf_root(const std::filesystem::path& input) {
+    std::error_code ec;
+    if(input.empty() || std::filesystem::is_symlink(input,ec) ||
+       !std::filesystem::is_directory(input,ec))
+        throw observatory::Error("Capture folder not found. Use Browse to select an existing folder.");
+    if(is_ctf_root(input))return input;
+    // Bounded discovery of one nested level, never follow symbolic links or
+    // silently guess when more than one capture is present.
+    std::optional<std::filesystem::path> candidate;
+    std::filesystem::directory_iterator it(input,
+        std::filesystem::directory_options::skip_permission_denied,ec),end;
+    if(ec)throw observatory::Error("Cannot inspect selected folder (permission denied).");
+    std::size_t visited=0;
+    for(;it!=end && visited<128;it.increment(ec),++visited) {
+        if(ec)break;
+        if(!it->is_symlink(ec) && it->is_directory(ec) && is_ctf_root(it->path())) {
+            if(candidate)throw observatory::Error(
+                "Multiple CTF captures found. Browse to the exact capture folder.");
+            candidate=it->path();
+        }
+    }
+    if(candidate)return *candidate;
+    const auto meta=input/"metadata",channel=input/"channel0_0";
+    if(!std::filesystem::is_regular_file(meta,ec) && !std::filesystem::is_regular_file(channel,ec))
+        throw observatory::Error(
+            "CTF files not found. Select the folder containing BOTH 'metadata' and 'channel0_0'.");
+    if(!std::filesystem::is_regular_file(meta,ec))
+        throw observatory::Error("Missing CTF metadata file in selected folder.");
+    throw observatory::Error("Missing channel0_0 data file in selected folder.");
+}
+
 std::string as_text(std::uint64_t n) { return std::to_string(n); }
 ImU32 rgba(int r, int g, int b, int a = 255) { return IM_COL32(r,g,b,a); }
 ImU32 state_colour(const std::string& state) {
@@ -2024,15 +2114,16 @@ void Workspace::draw_evidence() {
 
 bool Workspace::open_ctf_directory(const std::string& path) {
     try {
-        auto candidate=ctf::open(file_path(path),true);
-        const auto total=std::filesystem::file_size(file_path(path)/"channel0_0");
+        const auto root=resolve_ctf_root(file_path(path));
+        auto candidate=ctf::open(root,true);
+        const auto total=std::filesystem::file_size(root/"channel0_0");
         ctf_=std::move(candidate);
-        ctf_active_directory_=path;
+        ctf_active_directory_=root.string();
         ctf_last_size_=total;
         ctf_selected_finding_=0;
         ctf_selected_event_=0;
         ctf_error_.clear();
-        std::snprintf(ctf_directory_.data(),ctf_directory_.size(),"%s",path.c_str());
+        std::snprintf(ctf_directory_.data(),ctf_directory_.size(),"%s",ctf_active_directory_.c_str());
         page_=Page::Ctf;
         return true;
     } catch(const std::exception& e) {
