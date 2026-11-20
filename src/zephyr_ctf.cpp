@@ -325,6 +325,7 @@ Session open(const std::filesystem::path& directory,bool allow_incomplete_tail){
         offset+=d.record_bytes;
         previous=low;has_previous=true;
     }
+    if(s.events.empty())throw std::runtime_error("CTF contains no complete events yet");
     s.bytes_consumed=offset;
     s.timestamp_wraps=static_cast<std::size_t>(wraps);
     s.complete_file=s.pending_bytes==0;
