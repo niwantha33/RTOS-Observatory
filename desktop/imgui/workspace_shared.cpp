@@ -629,8 +629,9 @@ void Workspace::draw_shared_tool(Page page) {
             follow_ctf();
     }
     if (!unified_.evidence_warning.empty()) {
-        ImGui::TextColored(ImVec4(.98f, .77f, .48f, 1.f),
-                           "%s", unified_.evidence_warning.c_str());
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.98f, .77f, .48f, 1.f));
+        ImGui::TextWrapped("%s", unified_.evidence_warning.c_str());
+        ImGui::PopStyleColor();
     }
     ImGui::Separator();
     switch (page) {
