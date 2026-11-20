@@ -52,6 +52,7 @@ class Workspace final {
     bool poll_live_file();
     bool export_report(const std::string &path);
     void accept_drop(const std::string &path);
+    void set_dockspace_id(std::uint32_t id) noexcept { dockspace_id_ = id; }
     void draw();
     bool exit_requested() const noexcept { return exit_requested_; }
     bool loaded() const noexcept { return controller_.loaded(); }
@@ -147,6 +148,7 @@ class Workspace final {
     void recent(const std::string &path, const std::string &decoder, bool session);
     void fit();
     void zoom(bool in);
+    std::uint32_t dockspace_id_{};
     std::vector<Page> detached_analysis_pages_; // at most 6 independently movable panels
     SessionController controller_;
     std::optional<TimelineView> timeline_;
