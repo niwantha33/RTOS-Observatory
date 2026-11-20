@@ -313,7 +313,8 @@ bool Workspace::open_trace(const std::string &path, const std::string &decoder) 
         fit();
         rebuild_event_filter();
         active_adapter_ = SourceAdapter::Normalized;
-        page_ = Page::Timeline;
+        refresh_unified_view();
+        page_ = Page::Overview;
         return true;
     } catch (const std::exception &e) {
         error_ = e.what();
@@ -345,7 +346,8 @@ bool Workspace::open_session(const std::string &path) {
         fit();
         rebuild_event_filter();
         active_adapter_ = SourceAdapter::Normalized;
-        page_ = Page::Timeline;
+        refresh_unified_view();
+        page_ = Page::Overview;
         return true;
     } catch (const std::exception &e) {
         error_ = e.what();
@@ -454,8 +456,11 @@ bool Workspace::open_live_file(const std::string &path) {
         std::snprintf(live_file_path_.data(), live_file_path_.size(), "%s", path.c_str());
         page_ = Page::LiveTrace;
         const bool ok = poll_live_file();
-        if (ok)
+        if (ok) {
             active_adapter_ = SourceAdapter::Live;
+            refresh_unified_view();
+            page_ = Page::Overview;
+        }
         return ok;
     } catch (const std::exception &e) {
         live_error_ = e.what();
@@ -493,6 +498,8 @@ bool Workspace::poll_live_file() {
             throw Error("W18 spool changed during bounded read");
         live_session_->feed(buffer.data(), static_cast<std::size_t>(received));
         live_file_offset_ += static_cast<std::uint64_t>(received);
+        if (active_adapter_ == SourceAdapter::Live)
+            refresh_unified_view();
         return true;
     } catch (const std::exception &e) {
         live_error_ = e.what();
@@ -562,6 +569,39 @@ void Workspace::zoom(bool in) {
     end_us_ = start + next;
     update_timeline();
 }
+void Workspace::refresh_unified_view() {
+    // All adapters project into a single read-only GUI contract. Original
+    // time units are retained, and no unsupported capability is asserted.
+    switch (active_adapter_) {
+    case SourceAdapter::Normalized:
+        if (controller_.loaded()) {
+            const auto &decoded = controller_.trace();
+            const auto &report = controller_.report();
+            const bool qualified = timeline_ && timeline_->evidence_complete &&
+                                   report.complete &&
+                                   decoded.evidence.sequence_available &&
+                                   decoded.evidence.missing_events == 0 &&
+                                   decoded.evidence.declared_drops == 0;
+            unified_ = project_normalized(decoded.capture, report,
+                          timeline_ ? &*timeline_ : nullptr, qualified);
+        } else unified_ = ToolSummary{};
+        break;
+    case SourceAdapter::Ctf:
+        unified_ = ctf_ ? project_ctf(*ctf_,
+                 ctf_analysis_ ? &*ctf_analysis_ : nullptr,
+                 file_path(ctf_active_directory_).filename().string()) : ToolSummary{};
+        break;
+    case SourceAdapter::Live:
+        unified_ = live_session_ ? project_spool(*live_session_) : ToolSummary{};
+        break;
+    case SourceAdapter::None:
+        unified_ = ToolSummary{};
+        break;
+    }
+    shared_selected_event_.reset();
+    shared_selected_case_.reset();
+}
+
 void Workspace::draw_menus() {
     if (!ImGui::BeginMenuBar())
         return;
@@ -2597,12 +2637,15 @@ bool Workspace::open_ctf_directory(const std::string &path) {
         std::snprintf(ctf_directory_.data(), ctf_directory_.size(), "%s",
                       ctf_active_directory_.c_str());
         active_adapter_ = SourceAdapter::Ctf;
+        refresh_unified_view();
         page_ = Page::Overview;
         return true;
     } catch (const std::exception &e) {
         ctf_error_ = e.what();
-        if (active_adapter_ == SourceAdapter::Ctf)
+        if (active_adapter_ == SourceAdapter::Ctf) {
             active_adapter_ = SourceAdapter::None;
+            unified_ = ToolSummary{};
+        }
         ctf_follow_ = false;
         ctf_.reset(); // Fail closed instead of displaying stale data under a new path.
         ctf_analysis_.reset();
@@ -2648,6 +2691,7 @@ void Workspace::follow_ctf() {
         auto index = ctf::build_analysis_index(updated);
         ctf_ = std::move(updated);
         ctf_analysis_ = std::move(index);
+        refresh_unified_view();
         ctf_last_size_ = size;
         ctf_selected_event_ = std::min(ctf_selected_event_, ctf_->events.size() - 1);
         if (!ctf_->findings.empty())
