@@ -645,57 +645,67 @@ void Workspace::draw_dialogs() {
 }
 void Workspace::draw_sidebar() {
     const float footer_height=ImGui::GetTextLineHeightWithSpacing()+14.f;
-    ImGui::BeginChild("Navigation", ImVec2(ImGui::GetFontSize()*17.f,-footer_height),
+    ImGui::BeginChild("Navigation", ImVec2(ImGui::GetFontSize()*15.5f,-footer_height),
                       ImGuiChildFlags_Borders);
-    ImGui::SetWindowFontScale(1.13f);
-    ImGui::TextColored(ImVec4(.79f,.89f,1.f,1.f),"RTOS Observatory");
+    ImGui::SetWindowFontScale(1.05f);
+    ImGui::TextColored(ImVec4(.77f,.87f,.98f,1.f),"RTOS OBSERVATORY");
     ImGui::SetWindowFontScale(1.f);
-    ImGui::TextDisabled("Offline trace analysis");
+    ImGui::TextDisabled("EVIDENCE WORKSPACE");
     ImGui::Spacing();
-    header("Open files");
-    ImGui::TextDisabled("Trace file or saved session folder");
-    ImGui::SetNextItemWidth(-1);
-    ImGui::InputText("##input_path", path_.data(), path_.size());
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Enter a trace file or indexed-session directory, or drop one on the window.");
-    ImGui::Checkbox("Use legacy TSV format", &legacy_decoder_);
-    if (ImGui::Button("Open trace", ImVec2(-1, 0)))
-        (void)open_trace(path_.data(), legacy_decoder_ ? "legacy-tsv" : "universal-v1");
-    if (ImGui::Button("Open saved session", ImVec2(-1, 0)))
-        (void)open_session(path_.data());
-    if (ImGui::Button("Fault snapshot...", ImVec2(-1, 0))) page_=Page::Faults;
-    if (ImGui::Button("Source/symbol map...", ImVec2(-1, 0))) page_=Page::SourceGraph;
-    if (ImGui::Button("Debugger lifecycle...", ImVec2(-1, 0))) page_=Page::DebugBridge;
-    if (ImGui::Button("Snapshot receipts...", ImVec2(-1, 0))) page_=Page::Snapshot;
-    if (ImGui::Button("Live trace epochs...", ImVec2(-1, 0))) page_=Page::LiveTrace;
-    if (ImGui::Button("Zephyr CTF diagnostics...", ImVec2(-1, 0))) page_=Page::Ctf;
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved session directories must pass their existing integrity checks.");
-    header("Explore");
-    constexpr const char* names[] = {"Overview", "Execution timeline", "CPU and waits",
-                                      "Causal graph", "Time-travel replay", "Scheduling diagnostics",
-                                      "Resources and waits", "Causal diagnostics", "Fault & memory",
-                                      "Source/symbol graph", "Debugger lifecycle", "Approved snapshot receipts",
-                                      "Live trace epochs", "Events", "Findings", "Evidence details",
-                                      "Zephyr CTF (W20)"};
-    for (int i=0; i<17; ++i) {
-        if (ImGui::Selectable(names[i],static_cast<int>(page_)==i,0,
-                              ImVec2(0,ImGui::GetFrameHeight()+2.f)))
-            page_=static_cast<Page>(i);
+
+    auto nav=[this](Page destination,const char* name) {
+        if(ImGui::Selectable(name,page_==destination,0,ImVec2(0,ImGui::GetFrameHeight()+4.f)))
+            page_=destination;
+    };
+    header("DATA SOURCES");
+    nav(Page::Ctf,"Zephyr CTF  /  W20");
+    nav(Page::LiveTrace,"Live event epochs");
+    if(ImGui::CollapsingHeader("Open other traces")) {
+        ImGui::TextDisabled("Offline trace or session");
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputText("##input_path",path_.data(),path_.size());
+        ImGui::Checkbox("Legacy TSV",&legacy_decoder_);
+        if(ImGui::Button("Open trace",ImVec2(-1,0)))
+            (void)open_trace(path_.data(),legacy_decoder_?"legacy-tsv":"universal-v1");
+        if(ImGui::Button("Open saved session",ImVec2(-1,0)))
+            (void)open_session(path_.data());
     }
-    header("Recent files");
-    for (std::size_t i=0; i<recents_.size(); ++i) {
-        ImGui::PushID(static_cast<int>(i));
-        const auto r=recents_[i]; // reloading may mutate recents_ storage
-        auto name=std::filesystem::path(r.path).filename().string();
-        if (name.empty()) name=r.path;
-        if (ImGui::Selectable(name.c_str(), false)) {
-            if (r.session) (void)open_session(r.path);
-            else (void)open_trace(r.path,r.decoder);
+    header("INVESTIGATE");
+    nav(Page::Overview,"Overview");
+    nav(Page::Timeline,"Execution timeline");
+    nav(Page::CpuWaits,"CPU / Wait analysis");
+    nav(Page::Resources,"Resource contention");
+    nav(Page::Causality,"Causal diagnostics");
+    nav(Page::Graph,"Evidence graph");
+    nav(Page::Diagnostics,"Scheduling");
+    nav(Page::Replay,"Time-travel replay");
+    if(ImGui::CollapsingHeader("Advanced tools")) {
+        nav(Page::Events,"Raw events");
+        nav(Page::Findings,"Findings");
+        nav(Page::Evidence,"Evidence details");
+        nav(Page::Faults,"Fault & memory");
+        nav(Page::SourceGraph,"Source/symbol graph");
+        nav(Page::DebugBridge,"Debugger lifecycle");
+        nav(Page::Snapshot,"Snapshot receipts");
+    }
+    if(!recents_.empty() && ImGui::CollapsingHeader("Recent files")) {
+        for(std::size_t i=0;i<recents_.size();++i) {
+            ImGui::PushID(static_cast<int>(i));
+            const auto entry=recents_[i];
+            auto name=std::filesystem::path(entry.path).filename().string();
+            if(name.empty())name=entry.path;
+            if(ImGui::Selectable(name.c_str(),false)) {
+                if(entry.session)(void)open_session(entry.path);
+                else (void)open_trace(entry.path,entry.decoder);
+            }
+            if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",entry.path.c_str());
+            ImGui::PopID();
         }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",r.path.c_str());
-        ImGui::PopID();
     }
+    ImGui::Spacing();
     ImGui::Separator();
-    ImGui::TextDisabled("Offline analysis only. Live capture is not connected.");
+    ImGui::TextDisabled("Local evidence only");
+    ImGui::TextDisabled("No automatic data upload");
     ImGui::EndChild();
 }
 void Workspace::draw_overview() {
