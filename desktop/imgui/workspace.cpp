@@ -2721,6 +2721,10 @@ void Workspace::draw_ctf_explorer() {
                 }
                 ImGui::EndTabItem();
             }
+            if (ImGui::BeginTabItem("Threads / ISR")) {
+                draw_ctf_scheduler();
+                ImGui::EndTabItem();
+            }
             if (ImGui::BeginTabItem("Events")) {
                 ImGui::SetNextItemWidth(-1);
                 ImGui::InputText("##w20-filter", ctf_filter_.data(), ctf_filter_.size());
@@ -3026,19 +3030,30 @@ void Workspace::draw_ctf() {
     }
     ImGui::TextColored(ImVec4(.98f, .75f, .44f, 1.f),
                        "Clock not calibrated  |  Event loss unknown  |  Findings are correlations");
+    if (ImGui::Button(ctf_explorer_detached_ ? "Explorer detached" : "Detach explorer"))
+        ctf_explorer_detached_ = !ctf_explorer_detached_;
+    ImGui::SameLine();
+    if (ImGui::Button(ctf_inspector_detached_ ? "Evidence detached" : "Detach evidence"))
+        ctf_inspector_detached_ = !ctf_inspector_detached_;
+    ImGui::SameLine();
+    if (ImGui::Button("Open scheduling + ISR"))
+        ctf_scheduler_detached_ = true;
+    ImGui::SameLine();
+    ImGui::TextDisabled("Drag floating window titles to another monitor.");
     if (data.pending_bytes)
         ImGui::TextDisabled("Trailing %zu bytes are not decoded events.", data.pending_bytes);
 
 
 
 
-    // Desktop: true two-column investigation. Narrow windows stack the panels.
-    if (ImGui::GetContentRegionAvail().x >= 840.f) {
+    // Both attached: side-by-side. Detached panes render in dockable,
+    // independently movable platform windows sharing this capture.
+    if (!ctf_explorer_detached_ && !ctf_inspector_detached_ &&
+        ImGui::GetContentRegionAvail().x >= 840.f) {
         const float height = std::max(330.f, ImGui::GetContentRegionAvail().y - 6.f);
         if (ImGui::BeginTable("w20-two-columns", 2,
                               ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV |
-                                  ImGuiTableFlags_Resizable,
-                              ImVec2(0, height))) {
+                                  ImGuiTableFlags_Resizable, ImVec2(0, height))) {
             ImGui::TableSetupColumn("Explorer", ImGuiTableColumnFlags_WidthStretch, .58f);
             ImGui::TableSetupColumn("Inspector", ImGuiTableColumnFlags_WidthStretch, .42f);
             ImGui::TableNextRow();
@@ -3047,16 +3062,23 @@ void Workspace::draw_ctf() {
             draw_ctf_explorer();
             ImGui::EndChild();
             ImGui::TableNextColumn();
-            ImGui::BeginChild("w20-right-pane", ImVec2(0, height - 10.f), ImGuiChildFlags_None);
+            ImGui::BeginChild("w20-right-pane", ImVec2(0, height - 10.f),
+                              ImGuiChildFlags_None);
             draw_ctf_inspector();
             ImGui::EndChild();
             ImGui::EndTable();
         }
     } else {
-        ImGui::SeparatorText("Resource explorer");
-        draw_ctf_explorer();
-        ImGui::SeparatorText("Evidence inspector");
-        draw_ctf_inspector();
+        if (!ctf_explorer_detached_) {
+            ImGui::SeparatorText("Resource explorer");
+            draw_ctf_explorer();
+        }
+        if (!ctf_inspector_detached_) {
+            ImGui::SeparatorText("Evidence inspector");
+            draw_ctf_inspector();
+        }
+        if (ctf_explorer_detached_ && ctf_inspector_detached_)
+            ImGui::TextDisabled("Both panes are detached. Use Window > Restore embedded CTF panels.");
     }
 }
 
