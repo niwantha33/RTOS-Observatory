@@ -61,6 +61,8 @@ struct ToolSummary {
     bool loss_qualified{false};
     bool clock_calibrated{false};
     bool records_limited{false};
+    std::map<std::string, std::vector<std::size_t>> lane_index;
+    std::vector<std::pair<std::string, std::size_t>> event_distribution;
     std::vector<ToolEvent> events;
     std::vector<ToolSpan> spans;
     std::vector<ToolCase> cases;
@@ -72,6 +74,21 @@ inline std::uint32_t caps(std::initializer_list<ToolCapability> list) {
     for (const auto capability : list)
         flags |= static_cast<std::uint32_t>(capability);
     return flags;
+}
+
+// Build presentation indices once per import/refresh, not on every frame.
+// This limits UI rendering to already bounded and source-proven observations.
+inline void finish_projection(ToolSummary& view) {
+    for (std::size_t i = 0; i < view.spans.size(); ++i)
+        view.lane_index[view.spans[i].lane].push_back(i);
+    std::map<std::string, std::size_t> frequencies;
+    for (const auto& event : view.events)
+        ++frequencies[event.title];
+    view.event_distribution.assign(frequencies.begin(), frequencies.end());
+    std::sort(view.event_distribution.begin(), view.event_distribution.end(),
+              [](const auto& left, const auto& right) {
+                  return left.second > right.second;
+              });
 }
 
 inline ToolSummary project_normalized(const Capture& capture, const Report& report,
@@ -87,7 +104,7 @@ inline ToolSummary project_normalized(const Capture& capture, const Report& repo
                            ToolCapability::Resources, ToolCapability::Findings,
                            ToolCapability::SourceEvidence});
     v.loss_qualified = loss_qualified;
-    v.clock_calibrated = true; // trace contract declares microsecond units, not calibrated hardware
+    v.clock_calibrated = false; // normalized units do not prove physical clock calibration
     v.observed_threads = report.threads.size();
     v.total_events = capture.events.size();
     v.total_findings = report.findings.size();
@@ -143,6 +160,7 @@ inline ToolSummary project_normalized(const Capture& capture, const Report& repo
     if (v.events.size() < capture.events.size() || v.spans.size() >= span_limit ||
         v.cases.size() >= case_limit)
         v.records_limited = true;
+    finish_projection(v);
     return v;
 }
 
@@ -207,6 +225,7 @@ inline ToolSummary project_ctf(const ctf::Session& session,
     }
     if (session.events.size() > event_limit || session.findings.size() > case_limit)
         v.records_limited = true;
+    finish_projection(v);
     return v;
 }
 
@@ -241,6 +260,7 @@ inline ToolSummary project_spool(const LiveSession& source,
                     {"object ID", std::to_string(record.event.object_id)}};
         v.events.push_back(std::move(e));
     }
+    finish_projection(v);
     return v;
 }
 } // namespace observatory::desktop
