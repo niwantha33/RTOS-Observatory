@@ -40,10 +40,22 @@ int main() {
     core.core = "core0";
     core.busy_percent = 48.0;
     timeline.cores.push_back(core);
-    auto n = project_normalized(capture, report, &timeline, true);
+    ResourceView typed;
+    ResourceSummary pending;
+    pending.name = "sem:ready";
+    pending.kind = ResourceKind::Semaphore;
+    pending.unresolved_waits = 1;
+    pending.observed_events = 1;
+    typed.resources.push_back(pending);
+    auto n = project_normalized(capture, report, &timeline, true, &typed);
+    assert(n.objects.size() == 1);
+    assert(n.objects[0].kind == "Semaphore");
+    assert(n.objects[0].unresolved_waits == 1);
     assert(n.unit == ClockUnit::Microseconds);
     assert(n.events.size() == 1 && n.events[0].source_line == 17);
     assert(n.spans[0].start == 100 && n.spans[0].end == 200);
+    assert(!n.lane_index.empty());
+    assert(n.event_distribution.size() == 1);
     assert(n.cases.size() == 1);
     assert(!n.cases[0].evidence_event.has_value()); // no invented causal link
     assert(has_capability(n.capabilities, ToolCapability::QualifiedCpu));
@@ -63,6 +75,9 @@ int main() {
     assert(z.spans.size() == 2);
     assert(z.cases.size() == 1 && z.cases[0].evidence_event == 0);
     assert(z.events[0].source_byte == 44);
+    assert(!z.lane_index.empty());
+    assert(z.objects.size() == 1);
+    assert(z.objects[0].kind == "Semaphore");
     assert(!has_capability(z.capabilities, ToolCapability::QualifiedCpu));
     assert(has_capability(z.capabilities, ToolCapability::Resources));
 
