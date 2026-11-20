@@ -15,3 +15,22 @@ __pycache__/
 examples/my-report.json
 
 build*/
+
+# Personal/private material must stay OFF this public repository.
+# This protects only untracked files. Existing commits still need manual review.
+/private/
+/internal/
+/local-only/
+/confidential/
+.env
+.env.*
+!.env.example
+*.private.md
+*.internal.md
+*.secret.*
+*.pem
+*.p12
+*.pfx
+*.dmp
+*.dump
+*.rtob
