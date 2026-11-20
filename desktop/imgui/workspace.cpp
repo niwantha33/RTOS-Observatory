@@ -685,11 +685,11 @@ void Workspace::draw_menus() {
         ImGui::TextDisabled("Drag detached windows outside to another monitor.");
         ImGui::Separator();
         ImGui::SeparatorText("CTF linked analysis windows");
-        if (ImGui::MenuItem("Detach resource explorer", nullptr, &ctf_explorer_detached_, ctf_.has_value()))
+        if (ImGui::MenuItem("Detach resource explorer", nullptr, &ctf_explorer_detached_, ctf_.has_value() && active_adapter_ == SourceAdapter::Ctf))
             page_ = Page::Ctf;
-        if (ImGui::MenuItem("Detach evidence inspector", nullptr, &ctf_inspector_detached_, ctf_.has_value()))
+        if (ImGui::MenuItem("Detach evidence inspector", nullptr, &ctf_inspector_detached_, ctf_.has_value() && active_adapter_ == SourceAdapter::Ctf))
             page_ = Page::Ctf;
-        if (ImGui::MenuItem("Show scheduling / ISR analysis", nullptr, &ctf_scheduler_detached_, ctf_.has_value()))
+        if (ImGui::MenuItem("Show scheduling / ISR analysis", nullptr, &ctf_scheduler_detached_, ctf_.has_value() && active_adapter_ == SourceAdapter::Ctf))
             page_ = Page::Ctf;
         if (ImGui::MenuItem("Restore embedded CTF panels", nullptr, false,
                             ctf_explorer_detached_ || ctf_inspector_detached_ || ctf_scheduler_detached_)) {
@@ -3062,7 +3062,7 @@ void Workspace::draw_ctf_scheduler() {
 }
 
 void Workspace::draw_ctf_floating() {
-    if (!ctf_) return;
+    if (active_adapter_ != SourceAdapter::Ctf || !ctf_) return;
     if (ctf_explorer_detached_) {
         ImGui::SetNextWindowSize(ImVec2(780.f, 560.f), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("CTF Resource Explorer##w20-floating-explorer",
@@ -3770,9 +3770,9 @@ void Workspace::draw_detached_analysis() {
 }
 
 void Workspace::draw() {
-    if (live_follow_ && live_session_)
+    if (active_adapter_ == SourceAdapter::Live && live_follow_ && live_session_)
         (void)poll_live_file();
-    if (ctf_follow_) {
+    if (active_adapter_ == SourceAdapter::Ctf && ctf_follow_) {
         const auto now = std::chrono::steady_clock::now();
         if (now - ctf_last_poll_ > std::chrono::milliseconds(500)) {
             ctf_last_poll_ = now;
