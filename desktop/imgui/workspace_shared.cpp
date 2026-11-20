@@ -51,7 +51,7 @@ void Workspace::draw_shared_dashboard() {
                           ImGuiTableFlags_SizingStretchSame)) {
         const std::array<std::pair<const char *, std::size_t>, 4> all{{
             {"EVENTS", data.total_events}, {"THREADS", data.observed_threads},
-            {"RESOURCE CASES", data.cases.size()}, {"FINDINGS", data.total_findings}
+            {"RESOURCE OBJECTS", data.objects.size()}, {"RESOURCE CASES", data.cases.size()}
         }};
         for (std::size_t i = 0; i < all.size(); ++i) {
             if (i % static_cast<std::size_t>(columns) == 0)
@@ -93,8 +93,13 @@ void Workspace::draw_shared_dashboard() {
     }
     ImGui::SeparatorText("Observed callback categories");
     std::map<std::string, std::size_t> summary;
-    for (const auto &entry : data.cases)
-        ++summary[entry.kind];
+    if (!data.objects.empty()) {
+        for (const auto &object : data.objects)
+            ++summary[object.kind];
+    } else {
+        for (const auto &entry : data.cases)
+            ++summary[entry.kind];
+    }
     std::size_t maximum = 1;
     for (const auto &[name, count] : summary) {
         (void)name;
@@ -218,10 +223,51 @@ void Workspace::draw_shared_resources() {
                            "Numeric event IDs alone cannot prove mutex, semaphore or queue state.");
         return;
     }
-    if (data.cases.empty()) {
-        ImGui::TextDisabled("No observed completed resource cases.");
+    if (data.objects.empty() && data.cases.empty()) {
+        ImGui::TextDisabled("No resource evidence in this capture.");
         return;
     }
+    if (!data.objects.empty()) {
+        ImGui::SeparatorText("Observed kernel objects");
+        const bool compact = ImGui::GetContentRegionAvail().x <
+                             42.f * ImGui::GetFontSize();
+        if (ImGui::BeginTable("unified-resource-objects", compact ? 2 : 3,
+            ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY,
+            ImVec2(0.f, std::min(270.f, std::max(110.f,
+                                               ImGui::GetContentRegionAvail().y * .30f))))) {
+            ImGui::TableSetupColumn("Object", ImGuiTableColumnFlags_WidthStretch, .55f);
+            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthStretch, .22f);
+            if (!compact)
+                ImGui::TableSetupColumn("Completed / unresolved",
+                                        ImGuiTableColumnFlags_WidthStretch, .23f);
+            ImGui::TableHeadersRow();
+            ImGuiListClipper clip;
+            clip.Begin(static_cast<int>(data.objects.size()));
+            while (clip.Step()) {
+                for (int row = clip.DisplayStart; row < clip.DisplayEnd; ++row) {
+                    const auto &entry = data.objects[static_cast<std::size_t>(row)];
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextWrapped("%s", entry.name.c_str());
+                    ImGui::TableNextColumn();
+                    ImGui::TextWrapped("%s", entry.kind.c_str());
+                    if (!compact) {
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%zu / %zu", entry.completed_waits,
+                                    entry.unresolved_waits);
+                    }
+                }
+            }
+            ImGui::EndTable();
+        }
+    }
+    if (data.cases.empty()) {
+        ImGui::TextDisabled("No observed matched wait intervals; unresolved waits "
+                            "must not be given fabricated durations.");
+        return;
+    }
+    ImGui::SeparatorText("Observed wait intervals");
     const auto list = [&]() {
         std::uint64_t max_duration = 1;
         for (const auto &entry : data.cases)
