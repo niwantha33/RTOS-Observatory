@@ -376,6 +376,15 @@ if(OBSERVATORY_BUILD_DESKTOP)
             ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
           set_tests_properties(observatory_imgui_w20_ctf_ui_smoke PROPERTIES
             FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
+          foreach(mode timeline resources graph)
+            add_test(NAME observatory_imgui_shared_ctf_${mode}_smoke COMMAND
+              ${OBSERVATORY_XVFB_RUN} -a
+              $<TARGET_FILE:rtos-observatory-desktop>
+              --smoke-ui-ctf-${mode}
+              ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
+            set_tests_properties(observatory_imgui_shared_ctf_${mode}_smoke PROPERTIES
+              FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
+          endforeach()
           add_test(NAME observatory_imgui_w20_detached_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
             $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-ctf-docking
             ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
