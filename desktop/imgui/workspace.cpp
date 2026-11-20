@@ -2185,9 +2185,10 @@ bool Workspace::open_ctf_directory(const std::string& path) {
 bool Workspace::open_ctf_comparison(const std::string& path) {
     try {
         if(!ctf_)throw Error("Open the main CTF capture first");
-        if(std::filesystem::equivalent(file_path(path),file_path(ctf_active_directory_)))
+        const auto comparison_root=resolve_ctf_root(file_path(path));
+        if(std::filesystem::equivalent(comparison_root,file_path(ctf_active_directory_)))
             throw Error("Before/after must use two independent captures");
-        auto candidate=ctf::open(resolve_ctf_root(file_path(path)));
+        auto candidate=ctf::open(comparison_root);
         ctf_compare_=std::move(candidate);
         ctf_error_.clear();
         return true;
