@@ -3899,6 +3899,28 @@ void Workspace::draw() {
         flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
     ImGui::Begin("RTOS Observatory", nullptr, flags);
     draw_menus();
+    // A real workspace tab separates source acquisition from analysis.
+    // Both tabs retain the same in-memory session, no redundant decoder loads.
+    if (ImGui::BeginTabBar("main-workspace-tabs")) {
+        const auto analysis_flag = select_analysis_tab_
+            ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+        const auto adapters_flag = select_adapters_tab_
+            ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+        if (ImGui::BeginTabItem("Analysis", nullptr, analysis_flag)) {
+            workspace_tab_ = WorkspaceTab::Analysis;
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Adapters", nullptr, adapters_flag)) {
+            workspace_tab_ = WorkspaceTab::Adapters;
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
+    select_analysis_tab_ = false;
+    select_adapters_tab_ = false;
+    if (workspace_tab_ == WorkspaceTab::Adapters) {
+        draw_adapters_tab();
+    } else {
     const float workspace_width = ImGui::GetContentRegionAvail().x;
     const bool sidebar_fits =
         plan_layout(workspace_width, ImGui::GetFontSize(), show_sidebar_).show_sidebar;
@@ -3908,10 +3930,10 @@ void Workspace::draw() {
     } else {
         // Narrow and resized windows keep the SAME tools accessible without
         // squeezing the evidence panels into an unusable fixed-width column.
-        if (ImGui::Button("Sources..."))
-            request_source(active_adapter_ == SourceAdapter::Ctf
-                           ? ImportAdapter::ZephyrCtf
-                           : ImportAdapter::NormalizedTrace);
+        if (ImGui::Button("Adapters...")) {
+            workspace_tab_ = WorkspaceTab::Adapters;
+            select_adapters_tab_ = true;
+        }
         if (workspace_width >= 35.f * ImGui::GetFontSize())
             ImGui::SameLine();
         constexpr const char *compact_pages[] = {
@@ -3973,7 +3995,9 @@ void Workspace::draw() {
         draw_page(page_);
     }
     ImGui::EndChild();
+    } // Analysis tab content
     ImGui::Separator();
+    const float workspace_width = ImGui::GetContentRegionAvail().x;
     if (workspace_width < 900.f)
         ImGui::TextDisabled("RTOS Observatory v%s", observatory::build_info::version);
     else
