@@ -3103,50 +3103,9 @@ void Workspace::draw_ctf() {
     }
 }
 
-void Workspace::draw() {
-    if (live_follow_ && live_session_)
-        (void)poll_live_file();
-    if (ctf_follow_) {
-        const auto now = std::chrono::steady_clock::now();
-        if (now - ctf_last_poll_ > std::chrono::milliseconds(500)) {
-            ctf_last_poll_ = now;
-            follow_ctf();
-        }
-    }
-    const auto *viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
-    if (compact_spacing_)
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.f, 4.f));
-    ImGui::Begin("RTOS Observatory", nullptr,
-                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-                     ImGuiWindowFlags_MenuBar);
-    draw_menus();
-    if (show_sidebar_) {
-        draw_sidebar();
-        ImGui::SameLine();
-    }
-    const float footer_height = ImGui::GetTextLineHeightWithSpacing() + 14.f;
-    ImGui::BeginChild("Investigation", ImVec2(0, -footer_height), ImGuiChildFlags_None);
-    ImGui::SetWindowFontScale(1.18f);
-    ImGui::TextColored(ImVec4(.92f, .96f, 1.f, 1.f),
-                       page_ == Page::Ctf ? "W20 / Zephyr CTF" : "Trace investigation");
-    ImGui::SetWindowFontScale(1.f);
-    if (controller_.loaded() && page_ != Page::Ctf) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("Session: %s", controller_.report().session.c_str());
-    }
-    ImGui::Separator();
-    if (!error_.empty()) {
-        ImGui::TextColored(ImVec4(1, .53f, .40f, 1), "ERROR: %s", error_.c_str());
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Dismiss"))
-            error_.clear();
-    } else if (!notice_.empty() && page_ != Page::Ctf) {
-        ImGui::TextDisabled("%s", notice_.c_str());
-    }
-    switch (page_) {
+
+void Workspace::draw_page(Page page) {
+    switch (page) {
     case Page::Overview:
         draw_overview();
         break;
@@ -3199,6 +3158,81 @@ void Workspace::draw() {
         draw_evidence();
         break;
     }
+}
+void Workspace::draw_detached_analysis() {
+    for (std::size_t i = 0; i < detached_analysis_pages_.size();) {
+        const auto page = detached_analysis_pages_[i];
+        const char* labels[] = {
+            "Overview", "Execution timeline", "CPU and waits", "Causal graph",
+            "Time-travel replay", "Scheduling diagnostics", "Resources and waits",
+            "Causal diagnostics", "Fault and memory", "Source symbol graph",
+            "Debugger lifecycle", "Snapshot receipts", "Live trace epochs",
+            "Events", "Findings", "Evidence details", "Zephyr CTF"
+        };
+        const auto index = static_cast<std::size_t>(page);
+        bool keep_open = true;
+        const auto title = std::string(labels[index]) + "##rtos-detached-" +
+                           std::to_string(index);
+        ImGui::SetNextWindowSize(ImVec2(870.f, 590.f), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin(title.c_str(), &keep_open)) {
+            ImGui::TextDisabled("Detached analysis | shared session | no extra device connection");
+            ImGui::Separator();
+            if (page != Page::Ctf)
+                draw_page(page);
+        }
+        ImGui::End();
+        if (!keep_open)
+            detached_analysis_pages_.erase(detached_analysis_pages_.begin() +
+                                           static_cast<std::ptrdiff_t>(i));
+        else
+            ++i;
+    }
+}
+
+void Workspace::draw() {
+    if (live_follow_ && live_session_)
+        (void)poll_live_file();
+    if (ctf_follow_) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now - ctf_last_poll_ > std::chrono::milliseconds(500)) {
+            ctf_last_poll_ = now;
+            follow_ctf();
+        }
+    }
+    const auto *viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    if (compact_spacing_)
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.f, 4.f));
+    ImGui::Begin("RTOS Observatory", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_MenuBar);
+    draw_menus();
+    if (show_sidebar_) {
+        draw_sidebar();
+        ImGui::SameLine();
+    }
+    const float footer_height = ImGui::GetTextLineHeightWithSpacing() + 14.f;
+    ImGui::BeginChild("Investigation", ImVec2(0, -footer_height), ImGuiChildFlags_None);
+    ImGui::SetWindowFontScale(1.18f);
+    ImGui::TextColored(ImVec4(.92f, .96f, 1.f, 1.f),
+                       page_ == Page::Ctf ? "W20 / Zephyr CTF" : "Trace investigation");
+    ImGui::SetWindowFontScale(1.f);
+    if (controller_.loaded() && page_ != Page::Ctf) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("Session: %s", controller_.report().session.c_str());
+    }
+    ImGui::Separator();
+    if (!error_.empty()) {
+        ImGui::TextColored(ImVec4(1, .53f, .40f, 1), "ERROR: %s", error_.c_str());
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Dismiss"))
+            error_.clear();
+    } else if (!notice_.empty() && page_ != Page::Ctf) {
+        ImGui::TextDisabled("%s", notice_.c_str());
+    }
+    draw_page(page_);
     ImGui::EndChild();
     ImGui::Separator();
     ImGui::TextDisabled("v%s   |   Source %s   |   Configured %s", observatory::build_info::version,
@@ -3208,6 +3242,7 @@ void Workspace::draw() {
     // Separate dockable ImGui windows share the exact same session and
     // selected source event; viewports can move them outside the main OS window.
     draw_ctf_floating();
+    draw_detached_analysis();
     if (compact_spacing_)
         ImGui::PopStyleVar();
 }
