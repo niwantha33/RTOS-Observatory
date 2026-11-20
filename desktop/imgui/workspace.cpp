@@ -3658,24 +3658,15 @@ void Workspace::draw_page(Page page) {
     case Page::Events:
     case Page::Findings:
     case Page::Evidence:
+    case Page::Graph:
     case Page::Ctf:
         draw_shared_tool(page);
         return;
     default: break;
     }
     if (active_adapter_ != SourceAdapter::Normalized &&
-        (page == Page::Graph || page == Page::Replay ||
-         page == Page::Causality)) {
-        ImGui::TextColored(ImVec4(.98f, .78f, .48f, 1.f),
-                           "Not qualified by the active adapter");
-        ImGui::TextWrapped("A causal graph or complete RTOS state replay cannot "
-                           "be inferred from this source. Use recorded intervals, "
-                           "original events and linked evidence instead.");
-        if (ImGui::Button("Open graphical timeline"))
-            page_ = Page::Timeline;
-        ImGui::SameLine();
-        if (ImGui::Button("Open evidence"))
-            page_ = Page::Evidence;
+        (page == Page::Replay || page == Page::Causality)) {
+        draw_shared_tool(page); // recorded event order / observed links only
         return;
     }
     if (active_adapter_ != SourceAdapter::Normalized &&
