@@ -57,6 +57,7 @@ class Workspace final {
     void set_dockspace_id(std::uint32_t id) noexcept { dockspace_id_ = id; }
     void draw();
     float ui_scale() const noexcept { return ui_scale_; }
+    void set_ui_scale(float next) noexcept { ui_scale_ = clamp_text_zoom(next); }
     bool exit_requested() const noexcept { return exit_requested_; }
     bool loaded() const noexcept { return controller_.loaded(); }
     const GraphView *graph() const noexcept { return graph_ ? &*graph_ : nullptr; }
