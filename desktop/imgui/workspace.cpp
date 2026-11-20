@@ -2855,6 +2855,111 @@ void Workspace::draw_ctf_inspector() {
         ImGui::TextDisabled("Correlation does not prove causality or CPU load.");
 }
 
+
+void Workspace::draw_ctf_scheduler() {
+    if (!ctf_ || !ctf_analysis_) {
+        ImGui::TextDisabled("No qualified CTF scheduling callbacks available.");
+        return;
+    }
+    const auto& model = *ctf_analysis_;
+    const auto& events = ctf_->events;
+    ImGui::TextColored(ImVec4(.73f, .86f, .97f, 1.f), "CTF SCHEDULING / INTERRUPT OBSERVATIONS");
+    ImGui::TextDisabled("Recorded switch/ISR pairs only. Not CPU load or real-time latency.");
+    ImGui::Text("Thread spans: %zu    ISR spans: %zu",
+                model.thread_spans.size(), model.isr_spans.size());
+    if (model.unpaired_thread_switches || model.unpaired_isr_callbacks || model.truncated)
+        ImGui::TextColored(ImVec4(1.f, .78f, .43f, 1.f),
+                           "Unpaired: thread %zu, ISR %zu%s",
+                           model.unpaired_thread_switches, model.unpaired_isr_callbacks,
+                           model.truncated ? " | INDEX TRUNCATED" : "");
+    if (ImGui::BeginTable("ctf-linked-scheduling", 4,
+                          ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                          ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY,
+                          ImVec2(0, 0))) {
+        ImGui::TableSetupColumn("Kind", ImGuiTableColumnFlags_WidthStretch, .13f);
+        ImGui::TableSetupColumn("Actor", ImGuiTableColumnFlags_WidthStretch, .37f);
+        ImGui::TableSetupColumn("Ticks", ImGuiTableColumnFlags_WidthStretch, .23f);
+        ImGui::TableSetupColumn("Evidence", ImGuiTableColumnFlags_WidthStretch, .27f);
+        ImGui::TableHeadersRow();
+        const auto draw_spans = [&](const std::vector<ctf::AnalysisSpan>& spans) {
+            const std::size_t cap = std::min<std::size_t>(spans.size(), 1000);
+            for (std::size_t i = 0; i < cap; ++i) {
+                const auto& span = spans[i];
+                ImGui::PushID(static_cast<int>(i));
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(span.kind.c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(span.subject.c_str());
+                ImGui::TableNextColumn();
+                ImGui::Text("%llu", static_cast<unsigned long long>(
+                    span.end_tick - span.start_tick));
+                ImGui::TableNextColumn();
+                if (ImGui::SmallButton("Start")) {
+                    ctf_selected_event_ = span.begin_event;
+                    ctf_inspector_detached_ = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("End")) {
+                    ctf_selected_event_ = span.end_event;
+                    ctf_inspector_detached_ = true;
+                }
+                ImGui::PopID();
+            }
+        };
+        ImGui::PushID("thread-spans");
+        draw_spans(model.thread_spans);
+        ImGui::PopID();
+        ImGui::PushID("isr-spans");
+        draw_spans(model.isr_spans);
+        ImGui::PopID();
+        ImGui::EndTable();
+    }
+    // The source selector uses native CTF event indices; it never fabricates
+    // a normalized microsecond timeline or infers lost callbacks.
+    (void)events;
+}
+
+void Workspace::draw_ctf_floating() {
+    if (!ctf_) return;
+    if (ctf_explorer_detached_) {
+        ImGui::SetNextWindowSize(ImVec2(780.f, 560.f), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("CTF Resource Explorer##w20-floating-explorer",
+                          &ctf_explorer_detached_)) {
+            if (ImGui::SmallButton("Return to workspace"))
+                ctf_explorer_detached_ = false;
+            ImGui::Separator();
+            if (ctf_explorer_detached_)
+                draw_ctf_explorer();
+        }
+        ImGui::End();
+    }
+    if (ctf_inspector_detached_) {
+        ImGui::SetNextWindowSize(ImVec2(570.f, 650.f), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("CTF Evidence Inspector##w20-floating-evidence",
+                          &ctf_inspector_detached_)) {
+            if (ImGui::SmallButton("Return to workspace"))
+                ctf_inspector_detached_ = false;
+            ImGui::Separator();
+            if (ctf_inspector_detached_)
+                draw_ctf_inspector();
+        }
+        ImGui::End();
+    }
+    if (ctf_scheduler_detached_) {
+        ImGui::SetNextWindowSize(ImVec2(820.f, 550.f), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("CTF Scheduling and ISR##w20-floating-scheduling",
+                          &ctf_scheduler_detached_)) {
+            if (ImGui::SmallButton("Close analysis window"))
+                ctf_scheduler_detached_ = false;
+            ImGui::Separator();
+            if (ctf_scheduler_detached_)
+                draw_ctf_scheduler();
+        }
+        ImGui::End();
+    }
+}
+
 void Workspace::draw_ctf() {
     ImGui::TextColored(ImVec4(.49f, .76f, .97f, 1.f), "ZEPHYR  /  CTF INVESTIGATION");
     ImGui::SetWindowFontScale(1.22f);
@@ -3057,6 +3162,9 @@ void Workspace::draw() {
                         observatory::build_info::commit, observatory::build_info::configured_utc);
     draw_dialogs();
     ImGui::End();
+    // Separate dockable ImGui windows share the exact same session and
+    // selected source event; viewports can move them outside the main OS window.
+    draw_ctf_floating();
     if (compact_spacing_)
         ImGui::PopStyleVar();
 }
