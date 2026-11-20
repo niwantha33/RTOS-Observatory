@@ -328,6 +328,11 @@ if(OBSERVATORY_BUILD_DESKTOP)
         ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
       set_tests_properties(observatory_desktop_w20_ctf_smoke PROPERTIES
         FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
+      add_test(NAME observatory_desktop_w20_nested_ctf_smoke COMMAND
+        rtos-observatory-desktop --smoke-ctf
+        ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf/wrapped)
+      set_tests_properties(observatory_desktop_w20_nested_ctf_smoke PROPERTIES
+        FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
     endif()
     add_test(NAME observatory_desktop_live_smoke COMMAND rtos-observatory-desktop --smoke-live
       ${CMAKE_CURRENT_BINARY_DIR}/w18-synthetic.rtob)
