@@ -165,3 +165,21 @@ evidence rules. This is a readability iteration, not W07/W08 or live debugging.
 - Saved floating-window coordinates must be manually checked on mixed-DPI,
   disconnected monitors and 4K displays; **Reset layout** is the recovery path.
   No physical multi-monitor testing is claimed by CI.
+
+## CTF timeline: zoom, ruler and display-only time conversion
+
+- Shared Timeline, CPU/scheduling and detached Timeline use one tick-offset viewport.
+  Zoom in/out, Fit all; Ctrl+wheel zooms at cursor; Shift+wheel and middle-drag
+  pan, and the horizontal position slider supports precise navigation.
+  Focus finding zooms to a selected evidence case.
+- Ruler labels show elapsed time relative to original capture start. Floating
+  point is used only for pixel offsets; raw source ticks remain unsigned 64-bit.
+- Time units: Auto, source, us, ms, seconds. Normalized trace unit is us.
+  Zephyr CTF stays in raw ticks until a user explicitly selects known clock Hz
+  and enters the actual frequency for that capture. Converted time is always
+  marked a MANUAL ESTIMATE and never changes clock_calibrated or loss_qualified.
+- Zoom persists across live append, resets on source change; off-screen spans
+  are clipped. 80-lane and preview caps remain visible, not hidden.
+- The standalone C++ test covers long timestamps, zoom, pan, focus, growth
+  retention and clock conversions. Mixed-DPI interactions still need manual
+  verification on Windows/Linux hardware.

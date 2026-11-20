@@ -5,6 +5,7 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <cmath>
 #include <map>
 #include <optional>
 #include <string>
@@ -130,88 +131,230 @@ void Workspace::draw_shared_timeline() {
             page_ = Page::Events;
         return;
     }
-    if (data.spans.empty()) {
-        ImGui::TextDisabled("No recorded complete spans. Missing transitions are not inferred.");
+    if (data.spans.empty() || data.lane_index.empty()) {
+        ImGui::TextDisabled("No recorded complete intervals. Missing transitions are not inferred.");
         return;
     }
+    // Keep the original integer capture origin; double is used ONLY for small
+    // relative offsets in pixels so 64-bit raw ticks remain source-exact.
     std::uint64_t first = data.spans.front().start;
     std::uint64_t last = data.spans.front().end;
-    const auto &lanes = data.lane_index; // indexed once when capture loads
     for (const auto &span : data.spans) {
         if (span.end < span.start) continue;
         first = std::min(first, span.start);
         last = std::max(last, span.end);
     }
-    if (lanes.empty()) {
-        ImGui::TextDisabled("No valid intervals.");
-        return;
+    timeline_sync(timeline_viewport_, first, last);
+    const bool native_us = data.unit == ClockUnit::Microseconds;
+    const bool raw_ctf = data.unit == ClockUnit::RawCtfTicks;
+    const bool valid_manual_hz = timeline_manual_clock_enabled_ &&
+        timeline_manual_clock_hz_ >= 1 && timeline_manual_clock_hz_ <= 10'000'000'000ULL;
+    const std::uint64_t hz = raw_ctf && valid_manual_hz ? timeline_manual_clock_hz_ : 0;
+    const bool convertible = timeline_has_time_units(native_us, hz);
+
+    if (ImGui::Button("Zoom in")) timeline_zoom(timeline_viewport_, .5);
+    ImGui::SameLine();
+    if (ImGui::Button("Zoom out")) timeline_zoom(timeline_viewport_, 2.);
+    ImGui::SameLine();
+    if (ImGui::Button("Fit all")) timeline_fit(timeline_viewport_, first, last);
+    if (shared_selected_case_ && *shared_selected_case_ < data.cases.size()) {
+        ImGui::SameLine();
+        if (ImGui::Button("Focus finding")) {
+            const auto &item = data.cases[*shared_selected_case_];
+            timeline_focus(timeline_viewport_, item.start, item.end);
+        }
     }
-    const double range = last > first ? static_cast<double>(last - first) : 1.;
-    ImGui::TextDisabled("Intervals measured in %s. Only recorded spans are drawn.",
-                        clock_unit(data.unit));
-    ImGui::Text("Window: %llu - %llu",
-                static_cast<unsigned long long>(first),
-                static_cast<unsigned long long>(last));
+
+    constexpr std::array<const char*, 5> choices{"Auto", "Source units", "us", "ms", "s"};
+    timeline_unit_preference_ = std::clamp(timeline_unit_preference_, 0, 4);
+    ImGui::SetNextItemWidth(145.f);
+    if (ImGui::BeginCombo("Time units", choices[static_cast<std::size_t>(timeline_unit_preference_)])) {
+        for (int i = 0; i < static_cast<int>(choices.size()); ++i) {
+            const bool available = i < 2 || convertible;
+            if (!available) ImGui::BeginDisabled();
+            if (ImGui::Selectable(choices[static_cast<std::size_t>(i)],
+                                  timeline_unit_preference_ == i))
+                timeline_unit_preference_ = i;
+            if (!available) ImGui::EndDisabled();
+        }
+        ImGui::EndCombo();
+    }
+    if (raw_ctf) {
+        ImGui::SameLine();
+        ImGui::Checkbox("Use known clock Hz", &timeline_manual_clock_enabled_);
+        if (timeline_manual_clock_enabled_) {
+            ImGui::SetNextItemWidth(185.f);
+            ImGui::InputScalar("CTF clock Hz", ImGuiDataType_U64,
+                               &timeline_manual_clock_hz_, nullptr, nullptr, "%llu");
+            if (!valid_manual_hz)
+                ImGui::TextDisabled("Enter clock frequency (1 to 10,000,000,000 Hz).");
+            else
+                ImGui::TextColored(ImVec4(.99f, .77f, .48f, 1.f),
+                                   "Estimated units from manually supplied frequency; "
+                                   "clock NOT independently calibrated.");
+        }
+    }
+    TimelineTimeUnit unit = TimelineTimeUnit::Source;
+    if (timeline_unit_preference_ == 0)
+        unit = timeline_auto_unit(timeline_viewport_.width, native_us, hz);
+    else if (timeline_unit_preference_ == 2 && convertible)
+        unit = TimelineTimeUnit::Microseconds;
+    else if (timeline_unit_preference_ == 3 && convertible)
+        unit = TimelineTimeUnit::Milliseconds;
+    else if (timeline_unit_preference_ == 4 && convertible)
+        unit = TimelineTimeUnit::Seconds;
+
+    const double total = timeline_total(timeline_viewport_);
+    const double max_pan = std::max(0., total - timeline_viewport_.width);
+    if (max_pan > 0.) {
+        float position = static_cast<float>(timeline_viewport_.start / max_pan);
+        ImGui::SetNextItemWidth(std::min(360.f, ImGui::GetContentRegionAvail().x * .7f));
+        if (ImGui::SliderFloat("Horizontal position", &position, 0.f, 1.f, "%.0f%%")) {
+            timeline_viewport_.start = max_pan * static_cast<double>(position);
+            timeline_viewport_.fit_to_capture = false;
+        }
+    }
+    const auto beginning = timeline_format(timeline_viewport_.start, unit, native_us, hz);
+    const auto ending = timeline_format(timeline_viewport_.start + timeline_viewport_.width,
+                                        unit, native_us, hz);
+    ImGui::TextDisabled("Visible: +%s to +%s  |  capture origin: %llu %s",
+                        beginning.c_str(), ending.c_str(),
+                        static_cast<unsigned long long>(first), clock_unit(data.unit));
+    ImGui::TextDisabled("Ctrl+mouse wheel: zoom at pointer   |   Shift+wheel / middle-drag: pan");
+    if (!convertible && raw_ctf)
+        ImGui::TextColored(ImVec4(.99f, .77f, .48f, 1.f),
+                           "Raw ticks only: source clock Hz is not verified or supplied.");
+
+    // All canvases share one viewport; never mutate the data's raw tick values.
+    const auto interact = [&](float left, float width) {
+        if (!ImGui::IsItemHovered() || width < 1.f) return;
+        const auto &io = ImGui::GetIO();
+        if (io.KeyCtrl && io.MouseWheel != 0.f) {
+            const double at = std::clamp(
+                (static_cast<double>(ImGui::GetMousePos().x) - left) / width, 0., 1.);
+            timeline_zoom(timeline_viewport_, std::pow(.8, io.MouseWheel), at);
+        } else if (io.KeyShift && io.MouseWheel != 0.f) {
+            timeline_pan(timeline_viewport_, -static_cast<double>(io.MouseWheel) * .2);
+        }
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
+            timeline_pan(timeline_viewport_,
+                         -static_cast<double>(io.MouseDelta.x) / width);
+    };
     const auto avail = ImGui::GetContentRegionAvail();
     if (ImGui::BeginTable("unified-timeline", 2,
             ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable |
             ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersInnerV,
             ImVec2(0.f, std::max(160.f, avail.y)))) {
         ImGui::TableSetupColumn("Thread / ISR / resource",
-                                ImGuiTableColumnFlags_WidthStretch, .33f);
+                                ImGuiTableColumnFlags_WidthStretch, .28f);
         ImGui::TableSetupColumn("Observed time intervals",
-                                ImGuiTableColumnFlags_WidthStretch, .67f);
+                                ImGuiTableColumnFlags_WidthStretch, .72f);
         ImGui::TableHeadersRow();
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextDisabled("Time ruler");
+        ImGui::TableNextColumn();
+        const float ruler_width = std::max(50.f, ImGui::GetContentRegionAvail().x);
+        ImGui::InvisibleButton("##timeline-ruler", ImVec2(ruler_width, 32.f));
+        const auto ruler_start = ImGui::GetItemRectMin();
+        const auto ruler_end = ImGui::GetItemRectMax();
+        const auto divisions = ruler_width >= 950.f ? 6 : ruler_width >= 550.f ? 4 : 2;
+        auto *draw = ImGui::GetWindowDrawList();
+        draw->AddRectFilled(ruler_start, ruler_end, IM_COL32(20, 31, 47, 255));
+        draw->PushClipRect(ruler_start, ruler_end, true);
+        for (int i = 0; i <= divisions; ++i) {
+            const float f = static_cast<float>(i) / static_cast<float>(divisions);
+            const float x = ruler_start.x + ruler_width * f;
+            draw->AddLine(ImVec2(x, ruler_start.y), ImVec2(x, ruler_start.y + 7.f),
+                          IM_COL32(165, 185, 205, 210));
+            const auto caption = "+" + timeline_format(
+                timeline_viewport_.start + timeline_viewport_.width * f,
+                unit, native_us, hz);
+            const auto size = ImGui::CalcTextSize(caption.c_str());
+            const float caption_x = std::clamp(x - size.x * .5f,
+                                              ruler_start.x,
+                                              std::max(ruler_start.x, ruler_end.x - size.x));
+            draw->AddText(ImVec2(caption_x, ruler_start.y + 10.f),
+                          IM_COL32(200, 212, 229, 255), caption.c_str());
+        }
+        draw->PopClipRect();
+        interact(ruler_start.x, ruler_width);
+
         std::size_t count = 0;
-        for (const auto &[name, segments] : lanes) {
+        for (const auto &[name, segments] : data.lane_index) {
             if (++count > 80) break;
             ImGui::PushID(static_cast<int>(count));
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::TextWrapped("%s", name.c_str());
             ImGui::TableNextColumn();
-            const auto width = std::max(50.f, ImGui::GetContentRegionAvail().x);
+            const float width = std::max(50.f, ImGui::GetContentRegionAvail().x);
             const float height = std::max(26.f, ImGui::GetFrameHeight() + 5.f);
             ImGui::InvisibleButton("##span-canvas", ImVec2(width, height));
             const auto p0 = ImGui::GetItemRectMin();
             const auto p1 = ImGui::GetItemRectMax();
-            auto *draw = ImGui::GetWindowDrawList();
-            draw->AddRectFilled(ImVec2(p0.x, p0.y + 4.f),
-                                ImVec2(p1.x, p1.y - 4.f),
-                                IM_COL32(30, 42, 60, 255), 4.f);
-            for (int mark = 1; mark < 5; ++mark) {
-                const float x = p0.x + width * static_cast<float>(mark) / 5.f;
-                draw->AddLine(ImVec2(x, p0.y + 4.f), ImVec2(x, p1.y - 4.f),
-                              IM_COL32(119, 140, 162, 60));
+            const bool hovered = ImGui::IsItemHovered();
+            const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+            const auto mouse = ImGui::GetMousePos();
+            const double display_start = timeline_viewport_.start;
+            const double display_width = timeline_viewport_.width;
+            const double display_end = display_start + display_width;
+            auto *lane_draw = ImGui::GetWindowDrawList();
+            lane_draw->PushClipRect(p0, p1, true);
+            lane_draw->AddRectFilled(ImVec2(p0.x, p0.y + 4.f),
+                                     ImVec2(p1.x, p1.y - 4.f),
+                                     IM_COL32(30, 42, 60, 255), 4.f);
+            for (int mark = 1; mark < divisions; ++mark) {
+                const float x = p0.x + width * static_cast<float>(mark) /
+                                                 static_cast<float>(divisions);
+                lane_draw->AddLine(ImVec2(x, p0.y + 4.f), ImVec2(x, p1.y - 4.f),
+                                   IM_COL32(119, 140, 162, 60));
             }
-            const auto x_position = [&](std::uint64_t tick) {
-                const auto offset = tick >= first ? tick - first : 0;
-                return p0.x + static_cast<float>(static_cast<double>(offset) / range) * width;
-            };
             for (const auto index : segments) {
-                const auto *s = &data.spans[index];
-                const auto left = x_position(s->start);
-                const auto right = std::min(p1.x, std::max(left + 3.f, x_position(s->end)));
-                draw->AddRectFilled(ImVec2(left, p0.y + 6.f),
-                                    ImVec2(right, p1.y - 6.f),
-                                    category_colour(s->category), 2.f);
-                if (!ImGui::IsItemHovered()) continue;
-                const auto mouse = ImGui::GetMousePos();
-                if (mouse.x < left || mouse.x > right) continue;
-                ImGui::SetTooltip("%s\n%llu %s\n%s",
-                                  s->lane.c_str(),
-                                  static_cast<unsigned long long>(s->end - s->start),
-                                  clock_unit(data.unit), s->category.c_str());
-                if (ImGui::IsItemClicked() && s->evidence_event) {
-                    shared_selected_event_ = *s->evidence_event;
+                if (index >= data.spans.size()) continue;
+                const auto &span = data.spans[index];
+                if (span.end < span.start || span.start < first || span.end < first)
+                    continue;
+                const double a = static_cast<double>(span.start - first);
+                const double b = static_cast<double>(span.end - first);
+                if (b < display_start || a > display_end) continue;
+                const double left_fraction =
+                    std::clamp((a - display_start) / display_width, 0., 1.);
+                const double right_fraction =
+                    std::clamp((b - display_start) / display_width, 0., 1.);
+                const float left = p0.x + width * static_cast<float>(left_fraction);
+                const float right = std::min(p1.x, std::max(left + 3.f,
+                                    p0.x + width * static_cast<float>(right_fraction)));
+                if (right <= left) continue;
+                lane_draw->AddRectFilled(ImVec2(left, p0.y + 6.f),
+                                         ImVec2(right, p1.y - 6.f),
+                                         category_colour(span.category), 2.f);
+                if (shared_selected_event_ && span.evidence_event &&
+                    *shared_selected_event_ == *span.evidence_event)
+                    lane_draw->AddRect(ImVec2(left, p0.y + 6.f),
+                                       ImVec2(right, p1.y - 6.f),
+                                       IM_COL32(255, 255, 255, 235), 2.f);
+                if (!hovered || mouse.x < left || mouse.x > right) continue;
+                const auto duration = span.end - span.start;
+                const auto time = timeline_format(
+                    static_cast<double>(duration), unit, native_us, hz);
+                ImGui::SetTooltip("%s\n%s\nDuration: %s\nSource duration: %llu %s%s",
+                                  span.lane.c_str(), span.category.c_str(),
+                                  time.c_str(), static_cast<unsigned long long>(duration),
+                                  clock_unit(data.unit),
+                                  hz ? "\nManual Hz estimate, not verified" : "");
+                if (clicked && span.evidence_event) {
+                    shared_selected_event_ = *span.evidence_event;
                     page_ = Page::Evidence;
                 }
             }
+            lane_draw->PopClipRect();
+            interact(p0.x, width);
             ImGui::PopID();
         }
         ImGui::EndTable();
     }
-    if (lanes.size() > 80 || data.records_limited)
+    if (data.lane_index.size() > 80 || data.records_limited)
         ImGui::TextColored(ImVec4(.99f, .77f, .48f, 1.f),
                            "Display capped: source evidence is larger than this view.");
 }
