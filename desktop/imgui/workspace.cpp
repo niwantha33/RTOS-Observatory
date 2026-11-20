@@ -625,6 +625,21 @@ void Workspace::draw_menus() {
     }
     if (ImGui::BeginMenu("Window")) {
         ImGui::MenuItem("Show navigation", nullptr, &show_sidebar_);
+        ImGui::SeparatorText("CTF linked analysis windows");
+        if (ImGui::MenuItem("Detach resource explorer", nullptr, &ctf_explorer_detached_, ctf_.has_value()))
+            page_ = Page::Ctf;
+        if (ImGui::MenuItem("Detach evidence inspector", nullptr, &ctf_inspector_detached_, ctf_.has_value()))
+            page_ = Page::Ctf;
+        if (ImGui::MenuItem("Show scheduling / ISR analysis", nullptr, &ctf_scheduler_detached_, ctf_.has_value()))
+            page_ = Page::Ctf;
+        if (ImGui::MenuItem("Restore embedded CTF panels", nullptr, false,
+                            ctf_explorer_detached_ || ctf_inspector_detached_ || ctf_scheduler_detached_)) {
+            ctf_explorer_detached_ = false;
+            ctf_inspector_detached_ = false;
+            ctf_scheduler_detached_ = false;
+            page_ = Page::Ctf;
+        }
+        ImGui::Separator();
         if (ImGui::BeginMenu("Go to panel")) {
             constexpr const char *names[] = {"Overview",
                                              "Execution timeline",
@@ -648,6 +663,9 @@ void Workspace::draw_menus() {
             ImGui::EndMenu();
         }
         if (ImGui::MenuItem("Reset layout")) {
+            ctf_explorer_detached_ = false;
+            ctf_inspector_detached_ = false;
+            ctf_scheduler_detached_ = false;
             show_sidebar_ = true;
             page_ = Page::Overview;
             if (loaded())
