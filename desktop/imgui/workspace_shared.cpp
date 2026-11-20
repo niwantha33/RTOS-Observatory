@@ -91,7 +91,7 @@ void Workspace::draw_shared_dashboard() {
                                ImVec2(-1.f, 0.f));
         }
     }
-    ImGui::SeparatorText("Observed callback categories");
+    ImGui::SeparatorText("Observed object categories");
     std::map<std::string, std::size_t> summary;
     if (!data.objects.empty()) {
         for (const auto &object : data.objects)
@@ -330,8 +330,9 @@ void Workspace::draw_shared_resources() {
             ImGui::TableSetupColumn("Object", ImGuiTableColumnFlags_WidthStretch, .55f);
             ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthStretch, .22f);
             if (!compact)
-                ImGui::TableSetupColumn("Completed / unresolved",
-                                        ImGuiTableColumnFlags_WidthStretch, .23f);
+                ImGui::TableSetupColumn(
+                    data.adapter == AdapterKind::ZephyrCtf ? "Matched cases" :
+                    "Completed / unresolved", ImGuiTableColumnFlags_WidthStretch, .23f);
             ImGui::TableHeadersRow();
             ImGuiListClipper clip;
             clip.Begin(static_cast<int>(data.objects.size()));
@@ -345,8 +346,11 @@ void Workspace::draw_shared_resources() {
                     ImGui::TextWrapped("%s", entry.kind.c_str());
                     if (!compact) {
                         ImGui::TableNextColumn();
-                        ImGui::Text("%zu / %zu", entry.completed_waits,
-                                    entry.unresolved_waits);
+                        if (data.adapter == AdapterKind::ZephyrCtf)
+                            ImGui::Text("%zu", entry.observed_events);
+                        else
+                            ImGui::Text("%zu / %zu", entry.completed_waits,
+                                        entry.unresolved_waits);
                     }
                 }
             }
