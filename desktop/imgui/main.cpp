@@ -429,6 +429,9 @@ int main(int argc, char **argv) {
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    // Official ImGui docking release: panels can dock, float and move to
+    // independent OS windows (GLFW multi-viewport backend).
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
     io.IniFilename = nullptr; // No user profile or trace identity persisted without consent.
     dark_style();
     const std::string font_name = setup_fonts(window);
@@ -457,6 +460,9 @@ int main(int argc, char **argv) {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        // Host a single shared dockspace. All CTF and normalized analyses
+        // retain one source/session and can be rearranged independently.
+        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
         workspace.draw();
         if (workspace.exit_requested())
             glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -467,6 +473,12 @@ int main(int argc, char **argv) {
         glClearColor(.050f, .067f, .094f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        // Render independent platform windows and restore the main GL context.
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(window);
+        }
         glfwSwapBuffers(window);
         if (smoke_ui && ++frames >= 1)
             break;
