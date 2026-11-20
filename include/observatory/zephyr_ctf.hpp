@@ -13,7 +13,7 @@ struct Event {
     std::uint64_t tick{};
     std::size_t byte_offset{};
     std::int64_t actor{-1}; // Currently observed thread, not a CTF object identity.
-    std::map<std::string,std::string> fields;
+    std::map<std::string, std::string> fields;
 };
 struct Finding {
     std::string kind;
@@ -26,7 +26,7 @@ struct Finding {
 struct Session {
     std::vector<Event> events;
     std::vector<Finding> findings;
-    std::map<std::uint64_t,std::string> thread_names;
+    std::map<std::uint64_t, std::string> thread_names;
     std::size_t pending_bytes{};
     std::size_t bytes_consumed{};
     std::size_t timestamp_wraps{};
@@ -35,6 +35,6 @@ struct Session {
     bool clock_calibrated{false};
     bool loss_qualified{false};
 };
-Session open(const std::filesystem::path& directory, bool allow_incomplete_tail = false);
-std::string describe_field(const Event& event, const std::string& name);
+Session open(const std::filesystem::path &directory, bool allow_incomplete_tail = false);
+std::string describe_field(const Event &event, const std::string &name);
 } // namespace observatory::ctf
