@@ -2225,188 +2225,338 @@ void Workspace::follow_ctf() {
     }
 }
 void Workspace::draw_ctf() {
-    ImGui::TextColored(ImVec4(.55f,.77f,.96f,1.f),"ZEPHYR  /  NATIVE CTF");
-    ImGui::SetWindowFontScale(1.32f);
-    ImGui::TextUnformatted("Kernel resource investigations");
+    ImGui::TextColored(ImVec4(.49f, .76f, .97f, 1.f), "ZEPHYR  /  CTF INVESTIGATION");
+    ImGui::SetWindowFontScale(1.22f);
+    ImGui::TextUnformatted("Kernel resource analysis");
     ImGui::SetWindowFontScale(1.f);
-    ImGui::TextDisabled("Inspect mutex contention, semaphore wakeups, message queues and source evidence.");
+
+    // Source controls never live inside a fixed-height scrolling card.
     ImGui::Spacing();
-
-    ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(.085f,.118f,.162f,1.f));
-    ImGui::BeginChild("w20-source-panel",ImVec2(0,197),ImGuiChildFlags_Borders);
-    ImGui::TextColored(ImVec4(.75f,.87f,.98f,1.f),"01  CAPTURE SOURCE");
-    ImGui::TextDisabled("Choose a local capture directory. No files leave this computer.");
-    ImGui::SetNextItemWidth(-1);
-    ImGui::InputText("##ctf-source-path",ctf_directory_.data(),ctf_directory_.size());
-#ifdef _WIN32
-    if(ImGui::Button("Browse folders...")) {
-        if(auto selected=choose_ctf_directory_native()) {
-            // Selecting the folder explicitly opens it without another click.
-            (void)open_ctf_directory(*selected);
-        }
-    }
-    ImGui::SameLine();
-#endif
-    if(ImGui::Button("Open & analyse"))
-        (void)open_ctf_directory(ctf_directory_.data());
-    ImGui::SameLine();
-    if(ImGui::Button("Refresh"))
-        follow_ctf();
-    ImGui::SameLine();
-    ImGui::Checkbox("Follow file",&ctf_follow_);
-    ImGui::TextDisabled("Required: metadata + channel0_0 in the same directory.");
-    if(!ctf_error_.empty()) {
-        ImGui::TextColored(ImVec4(1.f,.56f,.43f,1.f),"%s",ctf_error_.c_str());
-    }else if(ctf_) {
-        ImGui::TextColored(ImVec4(.48f,.85f,.66f,1.f),
-            "Loaded locally  |  %zu events  |  %zu resource cases",
-            ctf_->events.size(),ctf_->findings.size());
-    }else {
-        ImGui::TextDisabled("No CTF capture opened yet. Browse a folder to begin.");
-    }
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
-
-    if(!ctf_) {
-        ImGui::Spacing();
-        ImGui::TextDisabled("Supported: Zephyr CTF 1.8 little-endian saved captures.");
-        ImGui::TextDisabled("Also accepts a parent directory containing a single CTF capture folder.");
-        return;
-    }
-    ImGui::TextColored(ImVec4(1.f,.78f,.47f,1.f),
-        "Evidence status: clock uncalibrated  |  trace loss unknown  |  correlations not proven causes.");
-    auto& data=*ctf_;
-    ImGui::Separator();
-    if(ImGui::BeginTable("ctf-summary",4,ImGuiTableFlags_SizingStretchSame)) {
+    ImGui::TextDisabled("CAPTURE SOURCE  |  Private local files");
+    if (ImGui::BeginTable("w20-source", 2, ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Local folder", ImGuiTableColumnFlags_WidthStretch, 0.62f);
+        ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthStretch, 0.38f);
         ImGui::TableNextRow();
-        ImGui::TableNextColumn();small_metric("Observed events",std::to_string(data.events.size()));
-        ImGui::TableNextColumn();small_metric("Threads named",std::to_string(data.thread_names.size()));
-        ImGui::TableNextColumn();small_metric("Resource cases",std::to_string(data.findings.size()));
-        ImGui::TableNextColumn();small_metric("Pending bytes",std::to_string(data.pending_bytes));
+        ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputText("##w20-folder", ctf_directory_.data(), ctf_directory_.size());
+        ImGui::TableNextColumn();
+#ifdef _WIN32
+        if (ImGui::Button("Browse...")) {
+            if (auto folder = choose_ctf_directory_native())
+                (void)open_ctf_directory(*folder);
+        }
+        ImGui::SameLine();
+#endif
+        if (ImGui::Button("Open / reload"))
+            (void)open_ctf_directory(ctf_directory_.data());
+        ImGui::SameLine();
+        if (ImGui::Button("Refresh"))
+            follow_ctf();
         ImGui::EndTable();
     }
-    if(data.pending_bytes)ImGui::TextColored(ImVec4(1.f,.75f,.43f,1.f),
-        "Partial last event: %zu bytes buffered; not treated as decoded evidence",data.pending_bytes);
-    else ImGui::TextDisabled("All file bytes parsed; this does NOT prove capture completeness.");
-    if(ImGui::BeginTabBar("W20-view")) {
-        if(ImGui::BeginTabItem("Resource cases / causal evidence")) {
-            if(ImGui::BeginTable("ctf-case-list",3,table_flags,ImVec2(0,200))) {
-                ImGui::TableSetupColumn("Kernel resource");
-                ImGui::TableSetupColumn("Raw wait ticks");
-                ImGui::TableSetupColumn("Observed return");
-                ImGui::TableHeadersRow();
-                for(std::size_t i=0;i<data.findings.size();++i) {
-                    const auto& c=data.findings[i];
-                    ImGui::PushID(static_cast<int>(i));
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    if(ImGui::Selectable(c.title.c_str(),ctf_selected_finding_==i,ImGuiSelectableFlags_SpanAllColumns))
-                        ctf_selected_finding_=i;
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%llu",static_cast<unsigned long long>(c.end_tick-c.start_tick));
-                    ImGui::TableNextColumn();
-                    ImGui::TextUnformatted(c.complete?"Successful callback":"UNKNOWN / incomplete");
-                    ImGui::PopID();
+    ImGui::Checkbox("Follow growing file", &ctf_follow_);
+    ImGui::SameLine();
+    ImGui::TextDisabled("Select a folder with metadata and channel0_0.");
+    if (!ctf_error_.empty()) {
+        ImGui::TextColored(ImVec4(1.f, .52f, .41f, 1.f), "Cannot open: %s",
+                           ctf_error_.c_str());
+    }
+    if (!ctf_) {
+        ImGui::Separator();
+        ImGui::TextDisabled("Browse a Zephyr CTF capture to view resource timelines and evidence.");
+        return;
+    }
+
+    auto& data = *ctf_;
+    if (!data.findings.empty()) {
+        ctf_selected_finding_ = std::min(ctf_selected_finding_, data.findings.size() - 1);
+    }
+    if (!data.events.empty())
+        ctf_selected_event_ = std::min(ctf_selected_event_, data.events.size() - 1);
+    const auto select_case = [&](std::size_t index) {
+        ctf_selected_finding_ = index;
+        const auto& finding = data.findings[index];
+        if (!finding.evidence.empty() && finding.evidence.front() < data.events.size())
+            ctf_selected_event_ = finding.evidence.front();
+    };
+    ImGui::Separator();
+    if (ImGui::BeginTable("w20-kpis", 4, ImGuiTableFlags_SizingStretchSame)) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        small_metric("EVENTS", std::to_string(data.events.size()));
+        ImGui::TableNextColumn();
+        small_metric("THREADS", std::to_string(data.thread_names.size()));
+        ImGui::TableNextColumn();
+        small_metric("RESOURCE CASES", std::to_string(data.findings.size()));
+        ImGui::TableNextColumn();
+        small_metric("PENDING BYTES", std::to_string(data.pending_bytes));
+        ImGui::EndTable();
+    }
+    ImGui::TextColored(ImVec4(.98f, .75f, .44f, 1.f),
+                       "Clock not calibrated  |  Event loss unknown  |  Findings are correlations");
+    if (data.pending_bytes)
+        ImGui::TextDisabled("Trailing %zu bytes are not decoded events.", data.pending_bytes);
+
+    const auto explorer = [&]() {
+        ImGui::TextColored(ImVec4(.74f, .86f, .97f, 1.f), "01  RESOURCE EXPLORER");
+        ImGui::TextDisabled("Choose a case or event; details appear on the right.");
+        ImGui::Spacing();
+        if (ImGui::BeginTabBar("w20-explorer-tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
+            if (ImGui::BeginTabItem("Cases")) {
+                if (data.findings.empty()) {
+                    ImGui::TextDisabled("No matching resource-blocking callbacks in this capture.");
+                } else if (ImGui::BeginTable("w20-cases", 3,
+                                            table_flags, ImVec2(0, 0))) {
+                    ImGui::TableSetupColumn("Resource", ImGuiTableColumnFlags_WidthStretch, .56f);
+                    ImGui::TableSetupColumn("Wait (ticks)", ImGuiTableColumnFlags_WidthStretch,
+                                            .22f);
+                    ImGui::TableSetupColumn("Callback", ImGuiTableColumnFlags_WidthStretch, .22f);
+                    ImGui::TableHeadersRow();
+                    for (std::size_t i = 0; i < data.findings.size(); ++i) {
+                        const auto& item = data.findings[i];
+                        ImGui::PushID(static_cast<int>(i));
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        if (ImGui::Selectable(item.title.c_str(), ctf_selected_finding_ == i))
+                            select_case(i);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%llu", static_cast<unsigned long long>(
+                            item.end_tick - item.start_tick));
+                        ImGui::TableNextColumn();
+                        ImGui::TextUnformatted(item.complete ? "Observed" : "Unknown");
+                        ImGui::PopID();
+                    }
+                    ImGui::EndTable();
                 }
-                ImGui::EndTable();
+                ImGui::EndTabItem();
             }
-            if(!data.findings.empty()) {
-                ctf_selected_finding_=std::min(ctf_selected_finding_,data.findings.size()-1);
-                const auto& f=data.findings[ctf_selected_finding_];
-                header("Evidence chain / investigation");
-                ImGui::TextWrapped("%s",f.assessment.c_str());
-                ImGui::TextDisabled("Correlations are not proofs of root cause, mutex ownership, or actual CPU load.");
-                for(const auto index:f.evidence) {
-                    if(index>=data.events.size())continue;
-                    const auto& event=data.events[index];
-                    ImGui::PushID(static_cast<int>(index));
-                    const auto caption="#"+std::to_string(index)+" "+event.name+
-                        " @"+std::to_string(event.tick);
-                    if(ImGui::Selectable(caption.c_str(),ctf_selected_event_==index))
-                        ctf_selected_event_=index;
-                    ImGui::PopID();
+            if (ImGui::BeginTabItem("Timeline")) {
+                ImGui::TextDisabled("Bars show raw tick intervals, not CPU usage.");
+                if (!data.events.empty() && !data.findings.empty()) {
+                    const auto start_tick = data.events.front().tick;
+                    const auto end_tick = data.events.back().tick;
+                    const auto span = std::max<std::uint64_t>(1, end_tick - start_tick);
+                    if (ImGui::BeginTable("w20-timeline", 2,
+                                         ImGuiTableFlags_BordersInnerV |
+                                             ImGuiTableFlags_RowBg |
+                                             ImGuiTableFlags_SizingStretchProp |
+                                             ImGuiTableFlags_ScrollY,
+                                         ImVec2(0, 0))) {
+                        ImGui::TableSetupColumn("Resource / duration",
+                                                ImGuiTableColumnFlags_WidthStretch, .50f);
+                        ImGui::TableSetupColumn("Observed interval",
+                                                ImGuiTableColumnFlags_WidthStretch, .50f);
+                        ImGui::TableHeadersRow();
+                        const std::size_t count =
+                            std::min<std::size_t>(data.findings.size(), 200);
+                        for (std::size_t i = 0; i < count; ++i) {
+                            const auto& item = data.findings[i];
+                            ImGui::PushID(static_cast<int>(i));
+                            ImGui::TableNextRow();
+                            ImGui::TableNextColumn();
+                            if (ImGui::Selectable(item.title.c_str(), ctf_selected_finding_ == i))
+                                select_case(i);
+                            ImGui::TextDisabled("%llu ticks",
+                                static_cast<unsigned long long>(
+                                    item.end_tick - item.start_tick));
+                            ImGui::TableNextColumn();
+                            const float width = std::max(40.f, ImGui::GetContentRegionAvail().x);
+                            ImGui::InvisibleButton("##span", ImVec2(width, 27.f));
+                            const auto p0 = ImGui::GetItemRectMin();
+                            const auto p1 = ImGui::GetItemRectMax();
+                            auto* draw = ImGui::GetWindowDrawList();
+                            draw->AddRectFilled(ImVec2(p0.x, p0.y + 6.f),
+                                                ImVec2(p1.x, p0.y + 21.f),
+                                                IM_COL32(31, 43, 59, 255), 3.f);
+                            const double x0 = static_cast<double>(item.start_tick - start_tick) /
+                                              static_cast<double>(span);
+                            const double x1 = static_cast<double>(item.end_tick - start_tick) /
+                                              static_cast<double>(span);
+                            const float left = p0.x + static_cast<float>(x0) * width;
+                            const float right = p0.x + static_cast<float>(x1) * width;
+                            const ImU32 color =
+                                item.kind == "Mutex" ? IM_COL32(243, 166, 85, 255) :
+                                item.kind == "Semaphore" ? IM_COL32(71, 187, 209, 255) :
+                                IM_COL32(177, 151, 240, 255);
+                            draw->AddRectFilled(ImVec2(left, p0.y + 6.f),
+                                                ImVec2(std::min(p1.x, std::max(left + 3.f,
+                                                                               right)), p0.y + 21.f),
+                                                color, 3.f);
+                            if (ctf_selected_finding_ == i)
+                                draw->AddRect(ImVec2(left, p0.y + 5.f),
+                                              ImVec2(std::min(p1.x, std::max(left + 4.f,
+                                                                              right)), p0.y + 22.f),
+                                              IM_COL32(236, 246, 255, 255), 3.f);
+                            if (ImGui::IsItemHovered())
+                                ImGui::SetTooltip("%s\nRaw wait: %llu ticks",
+                                    item.title.c_str(),
+                                    static_cast<unsigned long long>(
+                                        item.end_tick - item.start_tick));
+                            if (ImGui::IsItemClicked()) select_case(i);
+                            ImGui::PopID();
+                        }
+                        if (data.findings.size() > count)
+                            ImGui::TextDisabled("Timeline displays first 200 resource cases.");
+                        ImGui::EndTable();
+                    }
                 }
+                ImGui::EndTabItem();
             }
-            ImGui::EndTabItem();
+            if (ImGui::BeginTabItem("Events")) {
+                ImGui::SetNextItemWidth(-1);
+                ImGui::InputText("##w20-filter", ctf_filter_.data(), ctf_filter_.size());
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Filter event names (first 20,000 events scanned)");
+                const auto query = lower(ctf_filter_.data());
+                std::vector<std::size_t> matches;
+                const std::size_t scan = std::min<std::size_t>(data.events.size(), 20000);
+                for (std::size_t i = 0; i < scan && matches.size() < 5000; ++i) {
+                    if (query.empty() ||
+                        lower(data.events[i].name).find(query) != std::string::npos)
+                        matches.push_back(i);
+                }
+                ImGui::BeginChild("w20-events-scroll", ImVec2(0, 0),
+                                  ImGuiChildFlags_Borders);
+                ImGuiListClipper clipper;
+                clipper.Begin(static_cast<int>(matches.size()));
+                while (clipper.Step()) {
+                    for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
+                        const auto index = matches[static_cast<std::size_t>(row)];
+                        const auto& event = data.events[index];
+                        ImGui::PushID(static_cast<int>(index));
+                        const auto description = "#" + std::to_string(index) + "  " +
+                            event.name + "  |  " + std::to_string(event.tick);
+                        if (ImGui::Selectable(description.c_str(), ctf_selected_event_ == index))
+                            ctf_selected_event_ = index;
+                        ImGui::PopID();
+                    }
+                }
+                if (data.events.size() > scan)
+                    ImGui::TextDisabled("Event browser scans first 20,000 records.");
+                ImGui::EndChild();
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Compare")) {
+                ImGui::TextDisabled("Before / after requires two comparable independent captures.");
+                ImGui::SetNextItemWidth(-1);
+                ImGui::InputText("##w20-compare", ctf_comparison_.data(),
+                                 ctf_comparison_.size());
+#ifdef _WIN32
+                if (ImGui::Button("Browse comparison...")) {
+                    if (auto folder = choose_ctf_directory_native()) {
+                        std::snprintf(ctf_comparison_.data(), ctf_comparison_.size(), "%s",
+                                      folder->c_str());
+                        (void)open_ctf_comparison(*folder);
+                    }
+                }
+                ImGui::SameLine();
+#endif
+                if (ImGui::Button("Load comparison"))
+                    (void)open_ctf_comparison(ctf_comparison_.data());
+                if (ctf_compare_) {
+                    ImGui::Text("Events: %zu  ->  %zu", data.events.size(),
+                                ctf_compare_->events.size());
+                    ImGui::Text("Resource cases: %zu  ->  %zu", data.findings.size(),
+                                ctf_compare_->findings.size());
+                }
+                ImGui::TextWrapped("Workload, clocks, firmware identity and trace loss must "
+                                   "be qualified before comparing performance.");
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
         }
-        if(ImGui::BeginTabItem("Wait timeline")) {
-            ImGui::TextDisabled("Raw tick intervals only. Longer bars do not imply higher CPU load.");
-            if(!data.findings.empty()) {
-                const auto min=data.events.front().tick, max=data.events.back().tick;
-                const auto span=max>min?max-min:1;
-                const auto canvas_width=std::max(180.f,ImGui::GetContentRegionAvail().x-15.f);
-                const auto x0=ImGui::GetCursorScreenPos().x;
-                auto y=ImGui::GetCursorScreenPos().y+5.f;
-                const auto* colors=ImGui::GetStyle().Colors;
-                const auto bar=ImGui::GetWindowDrawList();
-                for(std::size_t i=0;i<std::min<std::size_t>(data.findings.size(),80);++i){
-                    const auto& f=data.findings[i];
-                    auto lo=static_cast<float>(static_cast<double>(f.start_tick-min)/static_cast<double>(span));
-                    auto hi=static_cast<float>(static_cast<double>(f.end_tick-min)/static_cast<double>(span));
-                    const float left=x0+lo*canvas_width, right=x0+hi*canvas_width;
-                    const auto color=f.kind=="Mutex"?IM_COL32(251,176,94,255):
-                                     f.kind=="Semaphore"?IM_COL32(63,186,208,255):IM_COL32(168,143,244,255);
-                    bar->AddRectFilled(ImVec2(left,y),ImVec2(std::max(right,left+2.f),y+12.f),color,3.f);
-                    ImGui::SetCursorScreenPos(ImVec2(x0,y+12.f));
-                    ImGui::PushID(static_cast<int>(i));
-                    if(ImGui::SmallButton(f.title.c_str()))ctf_selected_finding_=i;
-                    ImGui::PopID();
-                    y+=33.f;
-                }
-                ImGui::Dummy(ImVec2(canvas_width,10.f));
+    };
+    const auto inspector = [&]() {
+        ImGui::TextColored(ImVec4(.74f, .86f, .97f, 1.f), "02  EVIDENCE INSPECTOR");
+        ImGui::TextDisabled("Selection stays visible while exploring.");
+        ImGui::Separator();
+        if (!data.findings.empty()) {
+            const auto& item = data.findings[ctf_selected_finding_];
+            ImGui::TextColored(ImVec4(.97f, .91f, .82f, 1.f), "%s", item.title.c_str());
+            ImGui::Text("Observed window: %llu raw ticks",
+                        static_cast<unsigned long long>(item.end_tick - item.start_tick));
+            ImGui::TextDisabled("%s", item.complete ?
+                                "Matched successful callback" : "Completion not proven");
+            ImGui::Spacing();
+            ImGui::TextWrapped("%s", item.assessment.c_str());
+            ImGui::SeparatorText("Linked evidence");
+            for (const auto index : item.evidence) {
+                if (index >= data.events.size()) continue;
+                const auto& event = data.events[index];
+                ImGui::PushID(static_cast<int>(index));
+                const auto description = "#" + std::to_string(index) + "  " +
+                    event.name + "  |  tick " + std::to_string(event.tick);
+                if (ImGui::Selectable(description.c_str(), ctf_selected_event_ == index))
+                    ctf_selected_event_ = index;
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Source byte offset: %zu", event.byte_offset);
+                ImGui::PopID();
             }
-            ImGui::EndTabItem();
+        } else {
+            ImGui::TextDisabled("No resource case selected.");
         }
-        if(ImGui::BeginTabItem("Raw event inspector")) {
-            ImGui::SetNextItemWidth(300.f);
-            ImGui::InputText("Search events",ctf_filter_.data(),ctf_filter_.size());
-            const auto query=lower(ctf_filter_.data());
-            if(ImGui::BeginChild("w20-event-list",ImVec2(0,200),ImGuiChildFlags_Borders)) {
-                std::size_t shown=0;
-                for(std::size_t i=0;i<data.events.size() && shown<5000;++i) {
-                    const auto& event=data.events[i];
-                    if(!query.empty() && lower(event.name).find(query)==std::string::npos)continue;
-                    ++shown;
-                    ImGui::PushID(static_cast<int>(i));
-                    const auto caption="#"+std::to_string(i)+"  "+event.name+"  tick "+
-                        std::to_string(event.tick)+"  byte "+std::to_string(event.byte_offset);
-                    if(ImGui::Selectable(caption.c_str(),ctf_selected_event_==i))
-                        ctf_selected_event_=i;
-                    ImGui::PopID();
-                }
-                if(shown>=5000)ImGui::TextDisabled("Display capped at 5000 events. Full bounded source retained.");
+        if (data.events.empty()) return;
+        ImGui::SeparatorText("Selected source event");
+        if (ImGui::SmallButton("Previous") && ctf_selected_event_ > 0)
+            --ctf_selected_event_;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Next") && ctf_selected_event_ + 1 < data.events.size())
+            ++ctf_selected_event_;
+        const auto& event = data.events[ctf_selected_event_];
+        ImGui::TextWrapped("#%zu  %s", ctf_selected_event_, event.name.c_str());
+        ImGui::Text("Tick: %llu   |   File byte: %zu",
+                    static_cast<unsigned long long>(event.tick), event.byte_offset);
+        if (event.actor >= 0)
+            ImGui::Text("Observed thread: %lld", static_cast<long long>(event.actor));
+        else
+            ImGui::TextDisabled("Thread identity not observed");
+        if (ImGui::BeginTable("w20-field-details", 2,
+                              ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                                  ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("Field", ImGuiTableColumnFlags_WidthStretch, .42f);
+            ImGui::TableSetupColumn("Recorded value", ImGuiTableColumnFlags_WidthStretch,
+                                    .58f);
+            for (const auto& [key, value] : event.fields) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(key.c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(value.c_str());
             }
+            ImGui::EndTable();
+        }
+        ImGui::Spacing();
+        ImGui::TextDisabled("Correlation does not prove causality or CPU load.");
+    };
+
+    // Desktop: true two-column investigation. Narrow windows stack the panels.
+    if (ImGui::GetContentRegionAvail().x >= 840.f) {
+        const float height = std::max(330.f, ImGui::GetContentRegionAvail().y - 6.f);
+        if (ImGui::BeginTable("w20-two-columns", 2,
+                              ImGuiTableFlags_SizingStretchProp |
+                                  ImGuiTableFlags_BordersInnerV |
+                                  ImGuiTableFlags_Resizable, ImVec2(0, height))) {
+            ImGui::TableSetupColumn("Explorer", ImGuiTableColumnFlags_WidthStretch, .58f);
+            ImGui::TableSetupColumn("Inspector", ImGuiTableColumnFlags_WidthStretch, .42f);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::BeginChild("w20-left-pane", ImVec2(0, height - 10.f), ImGuiChildFlags_None);
+            explorer();
             ImGui::EndChild();
-            ImGui::EndTabItem();
+            ImGui::TableNextColumn();
+            ImGui::BeginChild("w20-right-pane", ImVec2(0, height - 10.f),
+                              ImGuiChildFlags_None);
+            inspector();
+            ImGui::EndChild();
+            ImGui::EndTable();
         }
-        if(ImGui::BeginTabItem("Before / after")) {
-            ImGui::TextDisabled("Optional second independent CTF capture; relative changes are NOT performance proof.");
-            ImGui::SetNextItemWidth(-1);
-            ImGui::InputText("Comparison CTF folder",ctf_comparison_.data(),ctf_comparison_.size());
-            if(ImGui::Button("Load comparison"))(void)open_ctf_comparison(ctf_comparison_.data());
-            if(ctf_compare_) {
-                ImGui::Text("Events: %zu / %zu",data.events.size(),ctf_compare_->events.size());
-                ImGui::Text("Resource cases: %zu / %zu",data.findings.size(),ctf_compare_->findings.size());
-                ImGui::TextDisabled("Clock frequency, workload equality, firmware identity and loss must be qualified.");
-                ImGui::TextDisabled("No automatic faster/slower conclusion is issued.");
-            }
-            ImGui::EndTabItem();
-        }
-        ImGui::EndTabBar();
+    } else {
+        ImGui::SeparatorText("Resource explorer");
+        explorer();
+        ImGui::SeparatorText("Evidence inspector");
+        inspector();
     }
-    if(!data.events.empty()){
-        ctf_selected_event_=std::min(ctf_selected_event_,data.events.size()-1);
-        const auto& ev=data.events[ctf_selected_event_];
-        header("Raw evidence / selected event");
-        ImGui::Text("#%zu | %s | tick %llu | byte offset %zu",ctf_selected_event_,
-            ev.name.c_str(),static_cast<unsigned long long>(ev.tick),ev.byte_offset);
-        if(ev.actor>=0)ImGui::Text("Observed actor: %lld",static_cast<long long>(ev.actor));
-        else ImGui::TextDisabled("Actor not determined from switched-in context");
-        for(const auto& [key,value]:ev.fields){
-            ImGui::Text("%s: %s",key.c_str(),value.c_str());
-        }
-    }
-    ImGui::TextDisabled("Private local trace only. Nothing is uploaded or persisted by this panel.");
 }
 
 void Workspace::draw() {
