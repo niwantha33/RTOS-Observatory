@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -475,8 +476,15 @@ int main(int argc, char **argv) {
         float dpi_x = 1.f, dpi_y = 1.f;
         glfwGetWindowContentScale(window, &dpi_x, &dpi_y);
         const float dpi_factor = std::max(.5f, std::max(dpi_x, dpi_y)) / original_dpi;
+        // 4K/ultrawide displays at 100% OS scaling need a little more
+        // typography than a 1280-pixel window, without sudden size jumps.
+        int logical_width = 1280, logical_height = 800;
+        glfwGetWindowSize(window, &logical_width, &logical_height);
+        const float screen_factor = std::clamp(
+            1.f + .14f * std::log2(std::max(1280, logical_width) / 1280.f),
+            1.f, 1.30f);
         const float requested_scale = std::clamp(
-            dpi_factor * workspace.ui_scale(), .75f, 2.5f);
+            dpi_factor * workspace.ui_scale() * screen_factor, .75f, 3.2f);
         if (std::abs(requested_scale - applied_scale) > .01f) {
             ImGui::GetStyle() = initial_style;
             ImGui::GetStyle().ScaleAllSizes(requested_scale);
@@ -486,6 +494,16 @@ int main(int argc, char **argv) {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        // Ctrl+Plus / Ctrl+Minus work without opening Settings. Do not
+        // intercept shortcuts while the user is entering a capture path.
+        if (io.KeyCtrl && !io.WantTextInput) {
+            if (ImGui::IsKeyPressed(ImGuiKey_Equal) ||
+                ImGui::IsKeyPressed(ImGuiKey_KeypadAdd))
+                workspace.set_ui_scale(workspace.ui_scale() + .10f);
+            if (ImGui::IsKeyPressed(ImGuiKey_Minus) ||
+                ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract))
+                workspace.set_ui_scale(workspace.ui_scale() - .10f);
+        }
         // Host a single shared dockspace. All CTF and normalized analyses
         // retain one source/session and can be rearranged independently.
         // No redundant "RTOS Observatory" dock tab when it is the only
