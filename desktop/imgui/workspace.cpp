@@ -109,6 +109,8 @@ std::filesystem::path resolve_ctf_root(const std::filesystem::path& input) {
             candidate=it->path();
         }
     }
+    if(ec || it!=end)
+        throw observatory::Error("CTF folder scan incomplete. Select the exact capture folder.");
     if(candidate)return *candidate;
     const auto meta=input/"metadata",channel=input/"channel0_0";
     if(!std::filesystem::is_regular_file(meta,ec) && !std::filesystem::is_regular_file(channel,ec))
