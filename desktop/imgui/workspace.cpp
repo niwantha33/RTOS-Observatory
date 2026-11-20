@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "workspace.hpp"
 #include "imgui.h"
+#include "imgui_internal.h" // ClearIniSettings: internal API of pinned ImGui docking release
 #include "observatory_build_info.hpp"
 #include <algorithm>
 #include <cctype>

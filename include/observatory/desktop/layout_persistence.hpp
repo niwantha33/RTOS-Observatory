@@ -31,12 +31,28 @@ struct SavedWorkspaceLayout {
     std::string imgui_geometry;
 };
 
+#ifdef _WIN32
+// Return a copied Unicode path: the CRT owns a separately allocated buffer.
+// _wdupenv_s avoids deprecated _wgetenv and preserves non-ASCII user names.
+inline std::optional<std::filesystem::path> windows_environment_path(const wchar_t *key) {
+    wchar_t *value = nullptr;
+    std::size_t length = 0;
+    if (_wdupenv_s(&value, &length, key) != 0 || !value)
+        return std::nullopt;
+    std::filesystem::path path(value);
+    std::free(value);
+    if (path.empty())
+        return std::nullopt;
+    return path;
+}
+#endif
+
 inline std::filesystem::path workspace_layout_file() {
 #ifdef _WIN32
-    if (const auto *root = _wgetenv(L"LOCALAPPDATA"); root && *root)
-        return std::filesystem::path(root) / L"RTOS-Observatory" / L"workspace.layout";
-    if (const auto *root = _wgetenv(L"APPDATA"); root && *root)
-        return std::filesystem::path(root) / L"RTOS-Observatory" / L"workspace.layout";
+    if (const auto root = windows_environment_path(L"LOCALAPPDATA"))
+        return *root / L"RTOS-Observatory" / L"workspace.layout";
+    if (const auto root = windows_environment_path(L"APPDATA"))
+        return *root / L"RTOS-Observatory" / L"workspace.layout";
 #else
     if (const auto *root = std::getenv("XDG_CONFIG_HOME"); root && *root)
         return std::filesystem::path(root) / "rtos-observatory" / "workspace.layout";
