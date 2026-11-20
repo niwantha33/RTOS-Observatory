@@ -61,6 +61,7 @@ class Workspace final {
     bool exit_requested() const noexcept { return exit_requested_; }
     bool loaded() const noexcept { return controller_.loaded(); }
     const GraphView *graph() const noexcept { return graph_ ? &*graph_ : nullptr; }
+    void show_timeline() noexcept { page_ = Page::Timeline; }
     void show_graph() noexcept { page_ = Page::Graph; }
     void show_replay() noexcept { page_ = Page::Replay; }
     void show_diagnostics() noexcept { page_ = Page::Diagnostics; }
