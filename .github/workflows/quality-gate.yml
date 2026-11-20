@@ -1,0 +1,91 @@
+name: Quality gate delta
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  quality:
+    name: Quality gate / baseline delta
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Checkout approved base
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'main' }}
+          path: _baseline
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install analyzers and desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang clang-format clang-tidy cppcheck ninja-build \
+            libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev xvfb
+      - name: Verify regression tests for quality policy
+        run: python -m unittest discover -s tests -p test_quality_gate.py -v
+      - name: Report compiler and analyzer versions
+        run: |
+          cmake --version
+          clang --version
+          clang++ --version
+          clang-format --version
+          clang-tidy --version
+          cppcheck --version
+      - name: Build approved baseline and save compiler diagnostics
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake -S _baseline -B _baseline/quality-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DOBSERVATORY_BUILD_TESTS=ON -DOBSERVATORY_BUILD_LIVE=ON \
+            -DOBSERVATORY_BUILD_DESKTOP=ON
+          cmake --build _baseline/quality-build --parallel 2 2>&1 | tee baseline-build.log
+      - name: Build candidate and run CTest
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake -S . -B quality-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DOBSERVATORY_BUILD_TESTS=ON -DOBSERVATORY_BUILD_LIVE=ON \
+            -DOBSERVATORY_BUILD_DESKTOP=ON
+          cmake --build quality-build --parallel 2 2>&1 | tee candidate-build.log
+          ctest --test-dir quality-build --output-on-failure --parallel 2 2>&1 | tee candidate-ctest.log
+      - name: Analyze baseline with candidate policy
+        run: |
+          python tools/quality_gate.py collect --source _baseline \
+            --build _baseline/quality-build --build-log baseline-build.log \
+            --output diagnostics/baseline.json
+      - name: Analyze candidate
+        run: |
+          python tools/quality_gate.py collect --source . \
+            --build quality-build --build-log candidate-build.log \
+            --output diagnostics/candidate.json
+      - name: Enforce no new errors (new warnings advisory)
+        run: |
+          python tools/quality_gate.py compare \
+            --baseline diagnostics/baseline.json \
+            --candidate diagnostics/candidate.json
+      - name: Save evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: quality-gate-evidence
+          path: |
+            diagnostics/
+            baseline-build.log
+            candidate-build.log
+            candidate-ctest.log
+          retention-days: 14
+          if-no-files-found: warn

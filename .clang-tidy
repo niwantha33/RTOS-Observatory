@@ -1,0 +1,10 @@
+Checks: >-
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  modernize-*
+WarningsAsErrors: ''
+HeaderFilterRegex: '(^|/)(src|include|desktop|firmware|tests)/'
+FormatStyle: file
+SystemHeaders: false
