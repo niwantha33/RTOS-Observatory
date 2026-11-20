@@ -13,6 +13,7 @@
 #include "observatory/source_index.hpp"
 #include "observatory/timeline.hpp"
 #include "observatory/zephyr_ctf.hpp"
+#include "observatory/ctf_analysis.hpp"
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -39,6 +40,15 @@ class Workspace final {
     bool open_ctf_comparison(const std::string &path);
     const ctf::Session *ctf_session() const noexcept { return ctf_ ? &*ctf_ : nullptr; }
     void show_ctf() noexcept { page_ = Page::Ctf; }
+    const ctf::AnalysisIndex* ctf_analysis() const noexcept {
+        return ctf_analysis_ ? &*ctf_analysis_ : nullptr;
+    }
+    void show_ctf_detached_smoke() noexcept {
+        page_ = Page::Ctf;
+        ctf_explorer_detached_ = true;
+        ctf_inspector_detached_ = true;
+        ctf_scheduler_detached_ = true;
+    }
     bool poll_live_file();
     bool export_report(const std::string &path);
     void accept_drop(const std::string &path);
@@ -123,6 +133,13 @@ class Workspace final {
     void draw_snapshot_receipt();
     void draw_live_trace();
     void draw_ctf();
+    void draw_ctf_explorer();
+    void draw_ctf_inspector();
+    void draw_ctf_scheduler();
+    void draw_ctf_floating();
+    void draw_page(Page page);
+    void draw_detached_analysis();
+    void select_ctf_case(std::size_t index);
     void follow_ctf();
     void draw_events();
     void draw_findings();
@@ -130,6 +147,7 @@ class Workspace final {
     void recent(const std::string &path, const std::string &decoder, bool session);
     void fit();
     void zoom(bool in);
+    std::vector<Page> detached_analysis_pages_; // at most 6 independently movable panels
     SessionController controller_;
     std::optional<TimelineView> timeline_;
     std::optional<GraphView> graph_;
@@ -141,12 +159,17 @@ class Workspace final {
     std::optional<FaultView> fault_view_;
     std::optional<LiveSession> live_session_;
     std::optional<ctf::Session> ctf_;
+    std::optional<ctf::AnalysisIndex> ctf_analysis_;
+    bool ctf_explorer_detached_{};
+    bool ctf_inspector_detached_{};
+    bool ctf_scheduler_detached_{};
     std::optional<ctf::Session> ctf_compare_;
     std::array<char, 2048> ctf_directory_{};
     std::array<char, 2048> ctf_comparison_{};
     std::array<char, 128> ctf_filter_{};
     std::string ctf_active_directory_;
     std::string ctf_error_;
+    int ctf_tab_request_{-1}; // CTF analysis navigator request, consumed by explorer
     std::size_t ctf_kind_filter_{}; // 0=all, 1=mutex, 2=semaphore, 3=queue
     std::size_t ctf_selected_finding_{};
     std::size_t ctf_selected_event_{};

@@ -125,6 +125,7 @@ int main(int argc, char **argv) {
     bool smoke_snapshot = false;
     bool smoke_live = false;
     bool smoke_ctf = false;
+    bool smoke_ctf_detached = false;
     std::string ctf_directory_path;
     std::string live_binary_path;
     std::string snapshot_path;
@@ -173,12 +174,13 @@ int main(int argc, char **argv) {
             "  --ctf DIR             Open native Zephyr CTF (metadata + channel0_0)\n"
             "  --smoke-ctf DIR       Headless W20 CTF model smoke\n"
             "  --smoke-ui-ctf DIR    Hidden W20 native GUI render smoke\n"
+            "  --smoke-ui-ctf-docking DIR  Hidden detachable panels UI smoke\n"
             "Drag a trace file onto the window or enter a filename in the sidebar.");
         return 0;
     }
     if (argc >= 3 && std::string_view(argv[1]) == "--smoke-ctf") {
         if (!workspace.open_ctf_directory(argv[2]) || !workspace.ctf_session() ||
-            workspace.ctf_session()->events.empty()) {
+            workspace.ctf_session()->events.empty() || !workspace.ctf_analysis()) {
             std::fprintf(stderr, "W20 CTF model smoke failed: %s\n", workspace.error().c_str());
             return 3;
         }
@@ -298,9 +300,12 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (argc >= 3 &&
-        (std::string_view(argv[1]) == "--ctf" || std::string_view(argv[1]) == "--smoke-ui-ctf")) {
+        (std::string_view(argv[1]) == "--ctf" || std::string_view(argv[1]) == "--smoke-ui-ctf" ||
+         std::string_view(argv[1]) == "--smoke-ui-ctf-docking")) {
         ctf_directory_path = argv[2];
-        smoke_ctf = std::string_view(argv[1]) == "--smoke-ui-ctf";
+        smoke_ctf = std::string_view(argv[1]) == "--smoke-ui-ctf" ||
+                    std::string_view(argv[1]) == "--smoke-ui-ctf-docking";
+        smoke_ctf_detached = std::string_view(argv[1]) == "--smoke-ui-ctf-docking";
         smoke_ui = smoke_ctf;
     } else if (argc >= 3 && (std::string_view(argv[1]) == "--live" ||
                              std::string_view(argv[1]) == "--smoke-ui-live")) {
@@ -400,6 +405,8 @@ int main(int argc, char **argv) {
         workspace.show_live_trace();
     if (smoke_ctf)
         workspace.show_ctf();
+    if (smoke_ctf_detached)
+        workspace.show_ctf_detached_smoke();
     if (smoke_bridge)
         workspace.show_debug_bridge();
     if (smoke_symbols)
@@ -429,6 +436,9 @@ int main(int argc, char **argv) {
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    // Official ImGui docking release: panels can dock, float and move to
+    // independent OS windows (GLFW multi-viewport backend).
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
     io.IniFilename = nullptr; // No user profile or trace identity persisted without consent.
     dark_style();
     const std::string font_name = setup_fonts(window);
@@ -457,6 +467,9 @@ int main(int argc, char **argv) {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        // Host a single shared dockspace. All CTF and normalized analyses
+        // retain one source/session and can be rearranged independently.
+        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
         workspace.draw();
         if (workspace.exit_requested())
             glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -467,6 +480,12 @@ int main(int argc, char **argv) {
         glClearColor(.050f, .067f, .094f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        // Render independent platform windows and restore the main GL context.
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(window);
+        }
         glfwSwapBuffers(window);
         if (smoke_ui && ++frames >= 1)
             break;

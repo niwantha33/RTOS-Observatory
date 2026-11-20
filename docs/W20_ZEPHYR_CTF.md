@@ -43,3 +43,32 @@ For narrower windows the explorer and inspector stack vertically. The main
 navigation groups normalized-trace tools separately so those offline views
 cannot be mistaken for CTF findings. The native file picker does not upload
 the capture; the UI makes no unverified CPU load or causal claims.
+
+
+## Linked analysis and dockable OS windows (follow-up)
+
+- **Windows → Detach resource explorer** and **Detach evidence inspector**
+  open movable/resizable panels. **Show scheduling / ISR analysis** opens the
+  independent source-indexed scheduling view. Closing a floating window or
+  **Window → Restore embedded CTF panels** returns it to the workspace.
+- With the pinned **Dear ImGui v1.92.6-docking** source and GLFW multi-viewport
+  backend, floating panels can be dragged outside the main window onto another
+  monitor as independent operating-system windows. These share the active
+  capture, case, event and raw byte offsets without copies.
+- CTF sidebar sub-navigation includes kernel objects, wait timeline,
+  thread/ISR observations, raw event search and before/after descriptive counts.
+- Thread-switch and ISR spans are source-indexed only if callbacks are
+  observed and pair correctly. Incomplete spans and unknown ISR identities are
+  explicitly counted, not inferred as CPU activity.
+- **Important:** Existing W06/W09/W10/W11 normalized microsecond analysis and
+  CTF-native raw tick analysis remain separate. They are linked through the
+  common evidence UI, **not** presented as interchangeable metrics. Enabling
+  true cross-source CPU-load or cross-core latency reporting requires clock
+  and capture-loss qualification.
+- Layout remains session-local by default: ImGui does not persist filenames
+  or trace identities in global UI settings. The CTF files are only accessed
+  on the user's own computer.
+
+CI includes synthetic headless pairing tests and a hidden GLFW/OpenGL docking
+smoke on Linux/Xvfb. Actual multiple-monitor placement and hardware capture
+are still manual qualification tasks.
