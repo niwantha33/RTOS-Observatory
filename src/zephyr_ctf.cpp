@@ -142,7 +142,8 @@ Definitions parse_metadata(const std::string& s) {
         if(!defs.emplace(static_cast<std::uint16_t>(rawid),std::move(d)).second)
             throw std::runtime_error("Duplicate CTF event ID");
     }
-    if(defs.empty() || std::distance(std::sregex_iterator(s.begin(),s.end(),std::regex(R"(\bevent\s*\{)")),
+    const std::regex event_start(R"(\bevent\s*\{)");
+    if(defs.empty() || std::distance(std::sregex_iterator(s.begin(),s.end(),event_start),
                       std::sregex_iterator())!=static_cast<std::ptrdiff_t>(seen))
         throw std::runtime_error("Malformed or absent CTF event blocks");
     return defs;
