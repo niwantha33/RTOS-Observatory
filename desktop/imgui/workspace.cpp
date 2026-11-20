@@ -3716,34 +3716,87 @@ void Workspace::draw() {
         flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
     ImGui::Begin("RTOS Observatory", nullptr, flags);
     draw_menus();
-    if (show_sidebar_) {
+    const float workspace_width = ImGui::GetContentRegionAvail().x;
+    const bool sidebar_fits = show_sidebar_ &&
+        workspace_width >= std::max(680.f, 680.f * ui_scale_);
+    if (sidebar_fits) {
         draw_sidebar();
         ImGui::SameLine();
+    } else {
+        // Narrow and resized windows keep the SAME tools accessible without
+        // squeezing the evidence panels into an unusable fixed-width column.
+        if (ImGui::Button("Sources..."))
+            request_source(active_adapter_ == SourceAdapter::Ctf
+                           ? ImportAdapter::ZephyrCtf
+                           : ImportAdapter::NormalizedTrace);
+        ImGui::SameLine();
+        constexpr const char *compact_pages[] = {
+            "Dashboard", "Timeline", "CPU / scheduling", "Evidence relationships",
+            "Time-travel / order", "Scheduling / ISR", "Resource objects",
+            "Causal diagnostics", "Fault / memory", "Source / symbols",
+            "Debugger lifecycle", "Snapshot receipts", "Live event epochs",
+            "Events", "Findings", "Evidence inspector", "CTF explorer"
+        };
+        ImGui::SetNextItemWidth(std::max(140.f, ImGui::GetContentRegionAvail().x));
+        if (ImGui::BeginCombo("##compact-tool", compact_pages[static_cast<int>(page_)])) {
+            for (int k = 0; k < 16; ++k) {
+                if (ImGui::Selectable(compact_pages[k], static_cast<int>(page_) == k))
+                    page_ = static_cast<Page>(k);
+            }
+            ImGui::EndCombo();
+        }
     }
     const float footer_height = ImGui::GetTextLineHeightWithSpacing() + 14.f;
     ImGui::BeginChild("Investigation", ImVec2(0, -footer_height), ImGuiChildFlags_None);
-    ImGui::SetWindowFontScale(1.18f);
-    ImGui::TextColored(ImVec4(.92f, .96f, 1.f, 1.f),
-                       page_ == Page::Ctf ? "W20 / Zephyr CTF" : "Trace investigation");
-    ImGui::SetWindowFontScale(1.f);
-    if (controller_.loaded() && page_ != Page::Ctf) {
+    constexpr const char *page_labels[] = {
+        "Evidence dashboard", "Execution timeline", "CPU / scheduling",
+        "Evidence relationships", "Time-travel / event order", "Scheduling / ISR",
+        "Resources and waits", "Causal diagnostics", "Fault and memory",
+        "Source / symbol graph", "Debugger lifecycle", "Snapshot receipts",
+        "Live event epochs", "Event explorer", "Findings", "Evidence inspector",
+        "Zephyr CTF"
+    };
+    ImGui::TextColored(ImVec4(.91f, .96f, 1.f, 1.f), "%s",
+                       page_labels[static_cast<int>(page_)]);
+    if (ImGui::GetContentRegionAvail().x > 760.f) {
         ImGui::SameLine();
-        ImGui::TextDisabled("Session: %s", controller_.report().session.c_str());
+        const char *source = active_adapter_ == SourceAdapter::Ctf ? "Zephyr CTF"
+            : active_adapter_ == SourceAdapter::Normalized ? "Universal trace"
+            : active_adapter_ == SourceAdapter::Live ? "Binary spool"
+            : "No source loaded";
+        ImGui::TextDisabled("  |  %s", source);
     }
     ImGui::Separator();
     if (!error_.empty()) {
-        ImGui::TextColored(ImVec4(1, .53f, .40f, 1), "ERROR: %s", error_.c_str());
+        ImGui::TextColored(ImVec4(1.f, .53f, .40f, 1.f), "ERROR: %s",
+                           error_.c_str());
         ImGui::SameLine();
         if (ImGui::SmallButton("Dismiss"))
             error_.clear();
-    } else if (!notice_.empty() && page_ != Page::Ctf) {
+    } else if (!notice_.empty() && active_adapter_ == SourceAdapter::Normalized) {
         ImGui::TextDisabled("%s", notice_.c_str());
     }
-    draw_page(page_);
+    if (active_adapter_ == SourceAdapter::None &&
+        (page_ == Page::Overview || page_ == Page::Timeline ||
+         page_ == Page::CpuWaits || page_ == Page::Resources ||
+         page_ == Page::Events || page_ == Page::Findings ||
+         page_ == Page::Evidence || page_ == Page::Graph)) {
+        ImGui::Spacing();
+        ImGui::TextWrapped("Select an RTOS evidence adapter to start a graphical investigation.");
+        if (ImGui::Button("Open data source..."))
+            request_source(ImportAdapter::ZephyrCtf);
+    } else {
+        draw_page(page_);
+    }
     ImGui::EndChild();
     ImGui::Separator();
-    ImGui::TextDisabled("v%s   |   Source %s   |   Configured %s", observatory::build_info::version,
-                        observatory::build_info::commit, observatory::build_info::configured_utc);
+    if (workspace_width < 900.f)
+        ImGui::TextDisabled("RTOS Observatory v%s", observatory::build_info::version);
+    else
+        ImGui::TextDisabled("v%s   |   Source %s   |   Configured %s",
+                            observatory::build_info::version,
+                            observatory::build_info::commit,
+                            observatory::build_info::configured_utc);
     draw_dialogs();
     ImGui::End();
     // Separate dockable ImGui windows share the exact same session and
