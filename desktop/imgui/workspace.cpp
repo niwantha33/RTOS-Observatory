@@ -3636,18 +3636,42 @@ void Workspace::draw_ctf_tool(Page page) {
 }
 
 void Workspace::draw_page(Page page) {
-    if (active_adapter_ == SourceAdapter::Ctf && ctf_ && page != Page::Ctf) {
-        draw_ctf_tool(page);
+    // Every adapter uses the SAME dashboard/timeline/resources/event/inspector
+    // renderer. The source projection owns evidence and capability semantics.
+    switch (page) {
+    case Page::Overview:
+    case Page::Timeline:
+    case Page::CpuWaits:
+    case Page::Diagnostics:
+    case Page::Resources:
+    case Page::Events:
+    case Page::Findings:
+    case Page::Evidence:
+    case Page::Ctf:
+        draw_shared_tool(page);
+        return;
+    default: break;
+    }
+    if (active_adapter_ != SourceAdapter::Normalized &&
+        (page == Page::Graph || page == Page::Replay ||
+         page == Page::Causality)) {
+        ImGui::TextColored(ImVec4(.98f, .78f, .48f, 1.f),
+                           "Not qualified by the active adapter");
+        ImGui::TextWrapped("A causal graph or complete RTOS state replay cannot "
+                           "be inferred from this source. Use recorded intervals, "
+                           "original events and linked evidence instead.");
+        if (ImGui::Button("Open graphical timeline"))
+            page_ = Page::Timeline;
+        ImGui::SameLine();
+        if (ImGui::Button("Open evidence"))
+            page_ = Page::Evidence;
         return;
     }
-    if (active_adapter_ == SourceAdapter::Live && page != Page::LiveTrace &&
-        page != Page::Faults && page != Page::DebugBridge &&
-        page != Page::Snapshot && page != Page::SourceGraph) {
-        ImGui::TextDisabled("This binary spool supplies event epochs, not a normalized RTOS trace.");
-        if (ImGui::Button("Open event epochs"))
-            page_ = Page::LiveTrace;
-        if (ImGui::Button("Import a different source"))
-            request_source(ImportAdapter::NormalizedTrace);
+    if (active_adapter_ != SourceAdapter::Normalized &&
+        page == Page::LiveTrace && active_adapter_ != SourceAdapter::Live) {
+        ImGui::TextDisabled("No binary event-spool source is active.");
+        if (ImGui::Button("Import binary spool"))
+            request_source(ImportAdapter::BinarySpool);
         return;
     }
     switch (page) {
