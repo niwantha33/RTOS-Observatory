@@ -68,7 +68,7 @@ int main(int argc,char** argv){
     auto s=open(dir);
     assert(s.complete_file && s.events.size()==8);
     assert(s.findings.size()==1 && s.findings[0].kind=="Semaphore");
-    assert(s.findings[0].evidence.size()==2);
+    assert(s.findings[0].evidence.size()==3);
     assert(!s.findings[0].complete);
     assert(s.findings[0].start_tick==110 && s.findings[0].end_tick==205);
     assert(s.events[1].actor==42 && s.events[4].actor==7);
