@@ -143,3 +143,25 @@ the selected font name. CTest hides successful test stdout in normal CI logs.
 Navigation, menu actions, decoder selection, evidence warnings and report
 integrity remain intact. CPU metrics and unknown periods retain their original
 evidence rules. This is a readability iteration, not W07/W08 or live debugging.
+
+
+## Professional workspace presets (Step 1, opt-in local layout)
+
+- Default typography is a compact 85% UI zoom with compact spacing. Settings offers
+  75%, 85%, 100%, 120%, 150%, 180% presets, a fine slider and Ctrl+Plus/Minus.
+  GLFW/ImGui recompute scale on resize, DPI movement and detached viewports.
+- Window > Detach current analysis / Detach resource explorer / Detach evidence
+  inspector / Detach scheduling timeline are native dockable windows.
+- Window > **Save layout locally** stores font zoom, navigation, detached-tool
+  visibility and a tightly allowlisted subset of ImGui geometry in the user's
+  local configuration directory. **Restore saved layout**, **Forget saved layout**
+  and **Reset layout** are explicit actions. Saving is never automatic.
+- On Windows the file lives under LOCALAPPDATA/RTOS-Observatory/workspace.layout;
+  on Linux, under XDG_CONFIG_HOME/rtos-observatory/workspace.layout (or
+  ~/.config/rtos-observatory/workspace.layout).
+- Trace paths, captures, event values, session identities and table content are
+  never serialized. Only fixed application window names and docking geometry
+  pass the load/save filter. Corrupt or oversized files are rejected.
+- Saved floating-window coordinates must be manually checked on mixed-DPI,
+  disconnected monitors and 4K displays; **Reset layout** is the recovery path.
+  No physical multi-monitor testing is claimed by CI.
