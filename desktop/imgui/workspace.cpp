@@ -3062,40 +3062,42 @@ void Workspace::draw_ctf_scheduler() {
 }
 
 void Workspace::draw_ctf_floating() {
-    if (active_adapter_ != SourceAdapter::Ctf || !ctf_) return;
+    // Detached tools follow the active source: no duplicate connections or
+    // CTF-only rendering semantics after selecting a different adapter.
+    if (unified_.adapter == AdapterKind::None) return;
     if (ctf_explorer_detached_) {
         ImGui::SetNextWindowSize(ImVec2(780.f, 560.f), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("CTF Resource Explorer##w20-floating-explorer",
+        if (ImGui::Begin("Resource Explorer##w20-floating-explorer",
                           &ctf_explorer_detached_)) {
             if (ImGui::SmallButton("Return to workspace"))
                 ctf_explorer_detached_ = false;
             ImGui::Separator();
             if (ctf_explorer_detached_)
-                draw_ctf_explorer();
+                draw_shared_resources();
         }
         ImGui::End();
     }
     if (ctf_inspector_detached_) {
         ImGui::SetNextWindowSize(ImVec2(570.f, 650.f), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("CTF Evidence Inspector##w20-floating-evidence",
+        if (ImGui::Begin("Evidence Inspector##w20-floating-evidence",
                           &ctf_inspector_detached_)) {
             if (ImGui::SmallButton("Return to workspace"))
                 ctf_inspector_detached_ = false;
             ImGui::Separator();
             if (ctf_inspector_detached_)
-                draw_ctf_inspector();
+                draw_shared_evidence();
         }
         ImGui::End();
     }
     if (ctf_scheduler_detached_) {
         ImGui::SetNextWindowSize(ImVec2(820.f, 550.f), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("CTF Scheduling and ISR##w20-floating-scheduling",
+        if (ImGui::Begin("Scheduling Timeline##w20-floating-scheduling",
                           &ctf_scheduler_detached_)) {
             if (ImGui::SmallButton("Close analysis window"))
                 ctf_scheduler_detached_ = false;
             ImGui::Separator();
             if (ctf_scheduler_detached_)
-                draw_ctf_scheduler();
+                draw_shared_timeline();
         }
         ImGui::End();
     }
