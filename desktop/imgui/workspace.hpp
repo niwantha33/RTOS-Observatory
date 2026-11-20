@@ -13,6 +13,7 @@
 #include "observatory/source_index.hpp"
 #include "observatory/timeline.hpp"
 #include "observatory/zephyr_ctf.hpp"
+#include "observatory/ctf_analysis.hpp"
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -123,6 +124,11 @@ class Workspace final {
     void draw_snapshot_receipt();
     void draw_live_trace();
     void draw_ctf();
+    void draw_ctf_explorer();
+    void draw_ctf_inspector();
+    void draw_ctf_scheduler();
+    void draw_ctf_floating();
+    void select_ctf_case(std::size_t index);
     void follow_ctf();
     void draw_events();
     void draw_findings();
@@ -141,6 +147,10 @@ class Workspace final {
     std::optional<FaultView> fault_view_;
     std::optional<LiveSession> live_session_;
     std::optional<ctf::Session> ctf_;
+    std::optional<ctf::AnalysisIndex> ctf_analysis_;
+    bool ctf_explorer_detached_{};
+    bool ctf_inspector_detached_{};
+    bool ctf_scheduler_detached_{};
     std::optional<ctf::Session> ctf_compare_;
     std::array<char, 2048> ctf_directory_{};
     std::array<char, 2048> ctf_comparison_{};
