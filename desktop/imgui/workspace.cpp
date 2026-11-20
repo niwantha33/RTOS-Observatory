@@ -460,12 +460,23 @@ bool Workspace::open_live_file(const std::string &path) {
             active_adapter_ = SourceAdapter::Live;
             refresh_unified_view();
             page_ = Page::Overview;
+        } else {
+            live_session_.reset();
+            live_follow_ = false;
+            if (active_adapter_ == SourceAdapter::Live) {
+                active_adapter_ = SourceAdapter::None;
+                unified_ = ToolSummary{}; // no stale evidence after failed replacement
+            }
         }
         return ok;
     } catch (const std::exception &e) {
         live_error_ = e.what();
         live_follow_ = false;
         live_session_.reset();
+        if (active_adapter_ == SourceAdapter::Live) {
+            active_adapter_ = SourceAdapter::None;
+            unified_ = ToolSummary{};
+        }
         return false;
     }
 }
