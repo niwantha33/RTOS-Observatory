@@ -535,6 +535,7 @@ void Workspace::draw_dialogs() {
     }
     if(ImGui::BeginPopupModal("About RTOS Observatory",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted("RTOS Observatory - offline RTOS evidence investigation");
+        ImGui::TextUnformatted("Author: Niwantha Meepage");
         ImGui::Separator();
         ImGui::Text("Version: %s",observatory::build_info::version);
         ImGui::Text("Source commit: %s",observatory::build_info::commit);
