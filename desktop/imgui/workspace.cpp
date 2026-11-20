@@ -312,6 +312,7 @@ bool Workspace::open_trace(const std::string &path, const std::string &decoder) 
         recent(path, decoder, false);
         fit();
         rebuild_event_filter();
+        active_adapter_ = SourceAdapter::Normalized;
         page_ = Page::Timeline;
         return true;
     } catch (const std::exception &e) {
@@ -343,6 +344,7 @@ bool Workspace::open_session(const std::string &path) {
         recent(path, "", true);
         fit();
         rebuild_event_filter();
+        active_adapter_ = SourceAdapter::Normalized;
         page_ = Page::Timeline;
         return true;
     } catch (const std::exception &e) {
@@ -451,7 +453,10 @@ bool Workspace::open_live_file(const std::string &path) {
         live_error_.clear();
         std::snprintf(live_file_path_.data(), live_file_path_.size(), "%s", path.c_str());
         page_ = Page::LiveTrace;
-        return poll_live_file();
+        const bool ok = poll_live_file();
+        if (ok)
+            active_adapter_ = SourceAdapter::Live;
+        return ok;
     } catch (const std::exception &e) {
         live_error_ = e.what();
         live_follow_ = false;
@@ -572,16 +577,11 @@ void Workspace::draw_menus() {
         }
 #endif
         if (ImGui::MenuItem("Open trace..."))
-            pending_open_ = OpenDialog::Trace;
+            request_source(ImportAdapter::NormalizedTrace);
         if (ImGui::MenuItem("Open saved session..."))
-            pending_open_ = OpenDialog::Session;
-        if (ImGui::MenuItem("Open Zephyr CTF folder...")) {
-            page_ = Page::Ctf;
-#ifdef _WIN32
-            if (auto selected = choose_ctf_directory_native())
-                (void)open_ctf_directory(*selected);
-#endif
-        }
+            request_source(ImportAdapter::SavedSession);
+        if (ImGui::MenuItem("Open Zephyr CTF folder..."))
+            request_source(ImportAdapter::ZephyrCtf);
         if (ImGui::MenuItem("Open fault snapshot..."))
             page_ = Page::Faults;
         if (ImGui::MenuItem("Open C/C++/Rust symbol index..."))
@@ -591,7 +591,7 @@ void Workspace::draw_menus() {
         if (ImGui::MenuItem("Open approved snapshot receipt..."))
             page_ = Page::Snapshot;
         if (ImGui::MenuItem("Follow W18 binary trace spool..."))
-            page_ = Page::LiveTrace;
+            request_source(ImportAdapter::BinarySpool);
         if (ImGui::BeginMenu("Recent files", !recents_.empty())) {
             for (std::size_t i = 0; i < recents_.size(); ++i) {
                 ImGui::PushID(static_cast<int>(i));
@@ -620,7 +620,10 @@ void Workspace::draw_menus() {
     if (ImGui::BeginMenu("Settings")) {
         ImGui::MenuItem("Use legacy TSV format", nullptr, &legacy_decoder_);
         ImGui::MenuItem("Compact spacing", nullptr, &compact_spacing_);
-        ImGui::TextDisabled("Display choices reset when the app closes");
+        ImGui::SliderFloat("Text / UI size", &ui_scale_, .85f, 1.8f, "%.2fx");
+        if (ImGui::MenuItem("Reset text size"))
+            ui_scale_ = 1.f;
+        ImGui::TextDisabled("Window resize and display scaling are automatic");
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Window")) {
@@ -683,6 +686,8 @@ void Workspace::draw_menus() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Tools")) {
+        const bool shared_loaded = loaded() ||
+            (active_adapter_ == SourceAdapter::Ctf && ctf_.has_value());
         if (ImGui::MenuItem("Fit full timeline", nullptr, false, loaded())) {
             fit();
             page_ = Page::Timeline;
@@ -696,17 +701,17 @@ void Workspace::draw_menus() {
             page_ = Page::Timeline;
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("CPU and wait analysis", nullptr, false, loaded()))
+        if (ImGui::MenuItem("CPU and wait analysis", nullptr, false, shared_loaded))
             page_ = Page::CpuWaits;
-        if (ImGui::MenuItem("Causal graph studio", nullptr, false, loaded()))
+        if (ImGui::MenuItem("Causal graph studio", nullptr, false, shared_loaded))
             page_ = Page::Graph;
-        if (ImGui::MenuItem("Time-travel replay", nullptr, false, loaded()))
+        if (ImGui::MenuItem("Time-travel replay", nullptr, false, shared_loaded))
             page_ = Page::Replay;
-        if (ImGui::MenuItem("Scheduling diagnostics", nullptr, false, loaded()))
+        if (ImGui::MenuItem("Scheduling diagnostics", nullptr, false, shared_loaded))
             page_ = Page::Diagnostics;
-        if (ImGui::MenuItem("Resources and waits", nullptr, false, loaded()))
+        if (ImGui::MenuItem("Resources and waits", nullptr, false, shared_loaded))
             page_ = Page::Resources;
-        if (ImGui::MenuItem("Causal diagnostics", nullptr, false, loaded()))
+        if (ImGui::MenuItem("Causal diagnostics", nullptr, false, shared_loaded))
             page_ = Page::Causality;
         if (ImGui::MenuItem("Fault & memory snapshots"))
             page_ = Page::Faults;
@@ -718,9 +723,10 @@ void Workspace::draw_menus() {
             page_ = Page::Snapshot;
         if (ImGui::MenuItem("Live trace epochs (binary spool)"))
             page_ = Page::LiveTrace;
-        if (ImGui::MenuItem("Zephyr CTF diagnostics"))
-            page_ = Page::Ctf;
-        if (ImGui::MenuItem("Trace integrity", nullptr, false, loaded()))
+        if (ImGui::MenuItem("CTF resource diagnostics", nullptr, false,
+                            active_adapter_ == SourceAdapter::Ctf))
+            page_ = Page::Resources;
+        if (ImGui::MenuItem("Trace integrity", nullptr, false, shared_loaded))
             page_ = Page::Evidence;
         ImGui::EndMenu();
     }
@@ -797,106 +803,152 @@ void Workspace::draw_dialogs() {
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
+    draw_source_dialog();
 }
+void Workspace::request_source(ImportAdapter adapter) {
+    import_adapter_ = adapter;
+    import_path_.fill(0);
+    const char *previous = "";
+    switch (adapter) {
+    case ImportAdapter::ZephyrCtf: previous = ctf_directory_.data(); break;
+    case ImportAdapter::NormalizedTrace: previous = path_.data(); break;
+    case ImportAdapter::SavedSession: break;
+    case ImportAdapter::BinarySpool: previous = live_file_path_.data(); break;
+    }
+    std::snprintf(import_path_.data(), import_path_.size(), "%s", previous);
+    source_dialog_requested_ = true;
+    error_.clear();
+    ctf_error_.clear();
+}
+
+void Workspace::draw_source_dialog() {
+    if (source_dialog_requested_) {
+        source_dialog_requested_ = false;
+        ImGui::OpenPopup("Connect data source");
+    }
+    const auto *viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowSize(
+        ImVec2(std::clamp(viewport->WorkSize.x * .65f, 380.f, 700.f), 0.f),
+        ImGuiCond_Appearing);
+    if (!ImGui::BeginPopupModal("Connect data source", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+    ImGui::TextColored(ImVec4(.72f, .87f, 1.f, 1.f), "OPEN LOCAL EVIDENCE");
+    ImGui::TextWrapped("Choose an adapter, select a file or folder, then Apply.");
+    const char *options[] = {"Zephyr CTF", "Universal trace", "Saved session",
+                             "Binary spool"};
+    int chosen = static_cast<int>(import_adapter_);
+    ImGui::SetNextItemWidth(-1.f);
+    if (ImGui::Combo("##adapter", &chosen, options, 4)) {
+        import_adapter_ = static_cast<ImportAdapter>(chosen);
+        import_path_.fill(0);
+    }
+    const bool folder = import_adapter_ == ImportAdapter::ZephyrCtf ||
+                        import_adapter_ == ImportAdapter::SavedSession;
+    ImGui::Spacing();
+    if (import_adapter_ == ImportAdapter::ZephyrCtf)
+        ImGui::TextWrapped("Select a folder containing metadata and channel0_0.");
+    else if (import_adapter_ == ImportAdapter::SavedSession)
+        ImGui::TextWrapped("Select a saved Observatory session folder.");
+    else if (import_adapter_ == ImportAdapter::BinarySpool)
+        ImGui::TextWrapped("Select a local .rtob event spool. Raw epochs only.");
+    else
+        ImGui::TextWrapped("Select a supported normalized .trace file.");
+    ImGui::SetNextItemWidth(-1.f);
+    ImGui::InputTextWithHint("##source-path", folder ? "Folder" : "File",
+                             import_path_.data(), import_path_.size());
+#ifdef _WIN32
+    if (ImGui::Button("Browse files...")) {
+        if (auto selected = choose_native_file_or_folder(folder))
+            std::snprintf(import_path_.data(), import_path_.size(), "%s",
+                          selected->c_str());
+    }
+    ImGui::SameLine();
+#endif
+    if (import_adapter_ == ImportAdapter::NormalizedTrace)
+        ImGui::Checkbox("Legacy TSV", &legacy_decoder_);
+    ImGui::Separator();
+    if (ImGui::Button("Apply", ImVec2(115.f, 0.f))) {
+        bool opened = false;
+        const std::string selected(import_path_.data());
+        switch (import_adapter_) {
+        case ImportAdapter::ZephyrCtf: opened = open_ctf_directory(selected); break;
+        case ImportAdapter::NormalizedTrace:
+            opened = open_trace(selected, legacy_decoder_ ? "legacy-tsv" : "universal-v1");
+            break;
+        case ImportAdapter::SavedSession: opened = open_session(selected); break;
+        case ImportAdapter::BinarySpool: opened = open_live_file(selected); break;
+        }
+        if (opened)
+            ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(115.f, 0.f)))
+        ImGui::CloseCurrentPopup();
+    const auto &message = import_adapter_ == ImportAdapter::ZephyrCtf
+                              ? ctf_error_
+                              : import_adapter_ == ImportAdapter::BinarySpool
+                                  ? live_error_ : error_;
+    if (!message.empty()) {
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(1.f, .59f, .44f, 1.f), "Cannot open source");
+        ImGui::TextWrapped("%s", message.c_str());
+    }
+    ImGui::EndPopup();
+}
+
 void Workspace::draw_sidebar() {
     const float footer_height = ImGui::GetTextLineHeightWithSpacing() + 14.f;
-    ImGui::BeginChild("Navigation", ImVec2(ImGui::GetFontSize() * 15.5f, -footer_height),
+    const float width = std::clamp(ImGui::GetContentRegionAvail().x * .22f,
+                                   195.f, 285.f);
+    ImGui::BeginChild("Navigation", ImVec2(width, -footer_height),
                       ImGuiChildFlags_Borders);
-    ImGui::SetWindowFontScale(1.05f);
-    ImGui::TextColored(ImVec4(.77f, .87f, .98f, 1.f), "RTOS OBSERVATORY");
-    ImGui::SetWindowFontScale(1.f);
-    ImGui::TextDisabled("EVIDENCE WORKSPACE");
+    ImGui::TextColored(ImVec4(.75f, .87f, .99f, 1.f), "RTOS OBSERVATORY");
+    ImGui::TextDisabled("One workspace / shared tools");
+    ImGui::SeparatorText("DATA SOURCES");
+    const auto source = [this](ImportAdapter adapter, const char *title,
+                               SourceAdapter active) {
+        ImGui::PushID(static_cast<int>(adapter));
+        if (ImGui::Selectable(title, active_adapter_ == active))
+            request_source(adapter);
+        ImGui::PopID();
+    };
+    source(ImportAdapter::ZephyrCtf, "Zephyr CTF", SourceAdapter::Ctf);
+    source(ImportAdapter::NormalizedTrace, "Universal trace", SourceAdapter::Normalized);
+    source(ImportAdapter::SavedSession, "Saved session", SourceAdapter::Normalized);
+    source(ImportAdapter::BinarySpool, "Binary event spool", SourceAdapter::Live);
     ImGui::Spacing();
-
-    auto nav = [this](Page destination, const char *name) {
-        if (ImGui::Selectable(name, page_ == destination, 0,
-                              ImVec2(0, ImGui::GetFrameHeight() + 4.f)))
+    ImGui::SeparatorText("COMMON TOOLS");
+    const auto nav = [this](Page destination, const char *title) {
+        if (ImGui::Selectable(title, page_ == destination))
             page_ = destination;
     };
-    header("DATA SOURCES");
-    nav(Page::Ctf, "Zephyr CTF  /  W20");
-    if (ctf_) {
-        ImGui::Indent(12.f);
-        const auto ctf_nav = [&](const char* title, int focus) {
-            if (ImGui::Selectable(title, false)) {
-                page_ = Page::Ctf;
-                ctf_tab_request_ = focus;
-            }
-        };
-        ctf_nav("Kernel objects", 0);
-        ctf_nav("Wait timeline", 1);
-        ctf_nav("Threads / ISR", 2);
-        ctf_nav("Raw events", 3);
-        ctf_nav("Before / after", 4);
-        ImGui::Unindent(12.f);
-    }
+    nav(Page::Overview, "Dashboard");
+    nav(Page::Timeline, "Graphical timeline");
+    nav(Page::CpuWaits, "CPU / scheduling");
+    nav(Page::Resources, "Mutex / semaphore / queue");
+    nav(Page::Graph, "Evidence relationships");
+    nav(Page::Diagnostics, "Scheduling / ISR");
+    nav(Page::Events, "Event explorer");
+    nav(Page::Findings, "Findings");
+    nav(Page::Evidence, "Evidence inspector");
+    nav(Page::Replay, "Time-travel / event order");
+    nav(Page::Causality, "Causal diagnostics");
+    nav(Page::Faults, "Fault and memory");
+    nav(Page::SourceGraph, "Source and symbols");
+    nav(Page::DebugBridge, "Debugger lifecycle");
+    nav(Page::Snapshot, "Snapshot receipts");
     nav(Page::LiveTrace, "Live event epochs");
-    ImGui::SetNextItemOpen(false, ImGuiCond_Once);
-    if (ImGui::CollapsingHeader("Open other traces")) {
-        ImGui::TextDisabled("Offline trace or session");
-        ImGui::SetNextItemWidth(-1);
-        ImGui::InputText("##input_path", path_.data(), path_.size());
-        ImGui::Checkbox("Legacy TSV", &legacy_decoder_);
-#ifdef _WIN32
-        if (ImGui::Button("Browse trace...")) {
-            if (auto selected = choose_native_file_or_folder(false))
-                (void)open_trace(*selected, legacy_decoder_ ? "legacy-tsv" : "universal-v1");
-        }
-        if (ImGui::Button("Browse session...")) {
-            if (auto selected = choose_native_file_or_folder(true))
-                (void)open_session(*selected);
-        }
-#endif
-        if (ImGui::Button("Open trace", ImVec2(-1, 0)))
-            (void)open_trace(path_.data(), legacy_decoder_ ? "legacy-tsv" : "universal-v1");
-        if (ImGui::Button("Open saved session", ImVec2(-1, 0)))
-            (void)open_session(path_.data());
+    if (active_adapter_ == SourceAdapter::Ctf && !ctf_active_directory_.empty()) {
+        ImGui::SeparatorText("ACTIVE CAPTURE");
+        const auto name = file_path(ctf_active_directory_).filename().string();
+        ImGui::TextWrapped("%s", name.c_str());
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", ctf_active_directory_.c_str());
     }
-    header("OTHER ANALYSIS TOOLS");
-    ImGui::SetNextItemOpen(false, ImGuiCond_Once);
-    if (ImGui::CollapsingHeader("Normalized trace tools")) {
-        ImGui::TextDisabled("Requires a compatible offline trace.");
-        nav(Page::Overview, "Overview");
-        nav(Page::Timeline, "Execution timeline");
-        nav(Page::CpuWaits, "CPU / Wait analysis");
-        nav(Page::Resources, "Resource contention");
-        nav(Page::Causality, "Causal diagnostics");
-        nav(Page::Graph, "Evidence graph");
-        nav(Page::Diagnostics, "Scheduling");
-        nav(Page::Replay, "Time-travel replay");
-        ImGui::Separator();
-        nav(Page::Events, "Raw events");
-        nav(Page::Findings, "Findings");
-        nav(Page::Evidence, "Evidence details");
-        nav(Page::Faults, "Fault & memory");
-        nav(Page::SourceGraph, "Source/symbol graph");
-        nav(Page::DebugBridge, "Debugger lifecycle");
-        nav(Page::Snapshot, "Snapshot receipts");
-    }
-    if (!recents_.empty() && ImGui::CollapsingHeader("Recent files")) {
-        for (std::size_t i = 0; i < recents_.size(); ++i) {
-            ImGui::PushID(static_cast<int>(i));
-            const auto entry = recents_[i];
-            auto name = std::filesystem::path(entry.path).filename().string();
-            if (name.empty())
-                name = entry.path;
-            if (ImGui::Selectable(name.c_str(), false)) {
-                if (entry.session)
-                    (void)open_session(entry.path);
-                else
-                    (void)open_trace(entry.path, entry.decoder);
-            }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", entry.path.c_str());
-            ImGui::PopID();
-        }
-    }
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::TextDisabled("Local evidence only");
-    ImGui::TextDisabled("No automatic data upload");
     ImGui::EndChild();
 }
+
 void Workspace::draw_overview() {
     if (!controller_.loaded()) {
         ImGui::TextDisabled("Open a trace or a saved session to start your investigation.");
@@ -2547,10 +2599,13 @@ bool Workspace::open_ctf_directory(const std::string &path) {
         ctf_error_.clear();
         std::snprintf(ctf_directory_.data(), ctf_directory_.size(), "%s",
                       ctf_active_directory_.c_str());
-        page_ = Page::Ctf;
+        active_adapter_ = SourceAdapter::Ctf;
+        page_ = Page::Overview;
         return true;
     } catch (const std::exception &e) {
         ctf_error_ = e.what();
+        if (active_adapter_ == SourceAdapter::Ctf)
+            active_adapter_ = SourceAdapter::None;
         ctf_follow_ = false;
         ctf_.reset(); // Fail closed instead of displaying stale data under a new path.
         ctf_analysis_.reset();
