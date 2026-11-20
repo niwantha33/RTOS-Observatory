@@ -80,14 +80,15 @@ std::string setup_fonts(GLFWwindow *window) {
         const std::string filename = path.string();
         return fonts->AddFontFromFileTTF(filename.c_str(), 18.f) != nullptr;
     };
-    if (const char *custom = std::getenv("OBSERVATORY_UI_FONT"); custom && *custom) {
-        if (add_font(std::filesystem::path(custom), "Custom"))
+#ifdef _WIN32
+    if (const auto custom =
+            observatory::desktop::windows_environment_path(L"OBSERVATORY_UI_FONT")) {
+        if (add_font(*custom, "Custom"))
             return "Custom";
     }
-#ifdef _WIN32
     const std::filesystem::path fonts_dir = [] {
-        if (const char *win = std::getenv("WINDIR"); win && *win)
-            return std::filesystem::path(win) / "Fonts";
+        if (const auto win = observatory::desktop::windows_environment_path(L"WINDIR"))
+            return *win / "Fonts";
         return std::filesystem::path("C:/Windows/Fonts");
     }();
     if (add_font(fonts_dir / "Inter-Regular.ttf", "Inter"))
@@ -95,6 +96,10 @@ std::string setup_fonts(GLFWwindow *window) {
     if (add_font(fonts_dir / "segoeui.ttf", "Segoe UI"))
         return "Segoe UI";
 #else
+    if (const char *custom = std::getenv("OBSERVATORY_UI_FONT"); custom && *custom) {
+        if (add_font(std::filesystem::path(custom), "Custom"))
+            return "Custom";
+    }
     const std::array<std::pair<const char *, const char *>, 6> candidates{
         {{"/usr/share/fonts/truetype/inter/Inter-Regular.ttf", "Inter"},
          {"/usr/share/fonts/opentype/inter/Inter-Regular.otf", "Inter"},
