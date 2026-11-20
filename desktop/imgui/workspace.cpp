@@ -709,90 +709,6 @@ void Workspace::draw_menus() {
         if (ImGui::MenuItem("Evidence inspector")) navigate(Page::Evidence);
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("Settings")) {
-        ImGui::MenuItem("Use legacy TSV format", nullptr, &legacy_decoder_);
-        ImGui::MenuItem("Compact spacing", nullptr, &compact_spacing_);
-        ImGui::SeparatorText("ACCESSIBILITY / FONT");
-        ImGui::SliderFloat("Text + controls", &ui_scale_, 0.75f, 2.2f, "%.2fx");
-        if (ImGui::MenuItem("Compact text (75%)")) ui_scale_ = .75f;
-        if (ImGui::MenuItem("Small text (85%)")) ui_scale_ = .85f;
-        if (ImGui::MenuItem("Normal text (100%)")) ui_scale_ = 1.f;
-        ImGui::Separator();
-        if (ImGui::MenuItem("Comfortable text (120%)"))
-            ui_scale_ = 1.2f;
-        if (ImGui::MenuItem("Large text (150%)"))
-            ui_scale_ = 1.5f;
-        if (ImGui::MenuItem("Very large text (180%)"))
-            ui_scale_ = 1.8f;
-        if (ImGui::MenuItem("Reset text size (100%)"))
-            ui_scale_ = 1.f;
-        ImGui::TextDisabled("Use Ctrl+Plus / Ctrl+Minus to zoom.");
-        ImGui::TextDisabled("Window resize and display scaling are automatic");
-        ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Window")) {
-        ImGui::MenuItem("Show navigation", nullptr, &show_sidebar_);
-        const bool can_detach = page_ != Page::Ctf && detached_analysis_pages_.size() < 6;
-        if (ImGui::MenuItem("Detach current analysis", nullptr, false, can_detach)) {
-            if (std::find(detached_analysis_pages_.begin(), detached_analysis_pages_.end(),
-                          page_) == detached_analysis_pages_.end())
-                detached_analysis_pages_.push_back(page_);
-        }
-        ImGui::TextDisabled("Drag detached windows outside to another monitor.");
-        ImGui::Separator();
-        ImGui::SeparatorText("Detachable common tools");
-        const bool has_evidence = unified_.adapter != AdapterKind::None;
-        if (ImGui::MenuItem("Detach resource explorer", nullptr,
-                            &ctf_explorer_detached_, has_evidence))
-            page_ = Page::Resources;
-        if (ImGui::MenuItem("Detach evidence inspector", nullptr,
-                            &ctf_inspector_detached_, has_evidence))
-            page_ = Page::Evidence;
-        if (ImGui::MenuItem("Detach scheduling timeline", nullptr,
-                            &ctf_scheduler_detached_, has_evidence))
-            page_ = Page::Timeline;
-        if (ImGui::MenuItem("Close detached common tools", nullptr, false,
-                            ctf_explorer_detached_ || ctf_inspector_detached_ ||
-                            ctf_scheduler_detached_)) {
-            ctf_explorer_detached_ = false;
-            ctf_inspector_detached_ = false;
-            ctf_scheduler_detached_ = false;
-        }
-        ImGui::Separator();
-        if (ImGui::BeginMenu("Go to panel")) {
-            constexpr const char *names[] = {"Overview",
-                                             "Execution timeline",
-                                             "CPU and waits",
-                                             "Causal graph",
-                                             "Time-travel replay",
-                                             "Scheduling diagnostics",
-                                             "Resources and waits",
-                                             "Causal diagnostics",
-                                             "Fault & memory",
-                                             "Source/symbol graph",
-                                             "Debugger lifecycle",
-                                             "Approved snapshot receipts",
-                                             "Live trace epochs",
-                                             "Events",
-                                             "Findings",
-                                             "Evidence details"};
-            for (int i = 0; i < 16; ++i)
-                if (ImGui::MenuItem(names[i], nullptr, static_cast<int>(page_) == i))
-                    page_ = static_cast<Page>(i);
-            ImGui::EndMenu();
-        }
-        if (ImGui::MenuItem("Reset layout")) {
-            detached_analysis_pages_.clear();
-            ctf_explorer_detached_ = false;
-            ctf_inspector_detached_ = false;
-            ctf_scheduler_detached_ = false;
-            show_sidebar_ = true;
-            page_ = Page::Overview;
-            if (loaded())
-                fit();
-        }
-        ImGui::EndMenu();
-    }
     if (ImGui::BeginMenu("Analyze")) {
         const bool evidence_ready = unified_.adapter != AdapterKind::None;
         if (ImGui::BeginMenu("Execution", evidence_ready)) {
@@ -835,6 +751,70 @@ void Workspace::draw_menus() {
             zoom(false);
             navigate(Page::Timeline);
         }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Window")) {
+        ImGui::MenuItem("Show navigation", nullptr, &show_sidebar_);
+        const bool can_detach = page_ != Page::Ctf && detached_analysis_pages_.size() < 6;
+        if (ImGui::MenuItem("Detach current analysis", nullptr, false, can_detach)) {
+            if (std::find(detached_analysis_pages_.begin(), detached_analysis_pages_.end(),
+                          page_) == detached_analysis_pages_.end())
+                detached_analysis_pages_.push_back(page_);
+        }
+        ImGui::TextDisabled("Drag detached windows outside to another monitor.");
+        ImGui::Separator();
+        ImGui::SeparatorText("Detachable common tools");
+        const bool has_evidence = unified_.adapter != AdapterKind::None;
+        if (ImGui::MenuItem("Detach resource explorer", nullptr,
+                            &ctf_explorer_detached_, has_evidence))
+            page_ = Page::Resources;
+        if (ImGui::MenuItem("Detach evidence inspector", nullptr,
+                            &ctf_inspector_detached_, has_evidence))
+            page_ = Page::Evidence;
+        if (ImGui::MenuItem("Detach scheduling timeline", nullptr,
+                            &ctf_scheduler_detached_, has_evidence))
+            page_ = Page::Timeline;
+        if (ImGui::MenuItem("Close detached common tools", nullptr, false,
+                            ctf_explorer_detached_ || ctf_inspector_detached_ ||
+                            ctf_scheduler_detached_)) {
+            ctf_explorer_detached_ = false;
+            ctf_inspector_detached_ = false;
+            ctf_scheduler_detached_ = false;
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Reset layout")) {
+            detached_analysis_pages_.clear();
+            ctf_explorer_detached_ = false;
+            ctf_inspector_detached_ = false;
+            ctf_scheduler_detached_ = false;
+            show_sidebar_ = true;
+            page_ = Page::Overview;
+            workspace_tab_ = WorkspaceTab::Analysis;
+            select_analysis_tab_ = true;
+            if (loaded())
+                fit();
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Settings")) {
+        ImGui::MenuItem("Use legacy TSV format", nullptr, &legacy_decoder_);
+        ImGui::MenuItem("Compact spacing", nullptr, &compact_spacing_);
+        ImGui::SeparatorText("ACCESSIBILITY / FONT");
+        ImGui::SliderFloat("Text + controls", &ui_scale_, 0.75f, 2.2f, "%.2fx");
+        if (ImGui::MenuItem("Compact text (75%)")) ui_scale_ = .75f;
+        if (ImGui::MenuItem("Small text (85%)")) ui_scale_ = .85f;
+        if (ImGui::MenuItem("Normal text (100%)")) ui_scale_ = 1.f;
+        ImGui::Separator();
+        if (ImGui::MenuItem("Comfortable text (120%)"))
+            ui_scale_ = 1.2f;
+        if (ImGui::MenuItem("Large text (150%)"))
+            ui_scale_ = 1.5f;
+        if (ImGui::MenuItem("Very large text (180%)"))
+            ui_scale_ = 1.8f;
+        if (ImGui::MenuItem("Reset text size (100%)"))
+            ui_scale_ = 1.f;
+        ImGui::TextDisabled("Use Ctrl+Plus / Ctrl+Minus to zoom.");
+        ImGui::TextDisabled("Window resize and display scaling are automatic");
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Help")) {
