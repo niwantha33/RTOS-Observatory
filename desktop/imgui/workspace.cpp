@@ -686,6 +686,7 @@ void Workspace::draw_sidebar() {
     header("DATA SOURCES");
     nav(Page::Ctf,"Zephyr CTF  /  W20");
     nav(Page::LiveTrace,"Live event epochs");
+    ImGui::SetNextItemOpen(false, ImGuiCond_Once);
     if(ImGui::CollapsingHeader("Open other traces")) {
         ImGui::TextDisabled("Offline trace or session");
         ImGui::SetNextItemWidth(-1);
@@ -715,6 +716,7 @@ void Workspace::draw_sidebar() {
     nav(Page::Graph,"Evidence graph");
     nav(Page::Diagnostics,"Scheduling");
     nav(Page::Replay,"Time-travel replay");
+    ImGui::SetNextItemOpen(false, ImGuiCond_Once);
     if(ImGui::CollapsingHeader("Advanced tools")) {
         nav(Page::Events,"Raw events");
         nav(Page::Findings,"Findings");
@@ -2169,7 +2171,8 @@ bool Workspace::open_ctf_directory(const std::string& path) {
         ctf_active_directory_.assign(utf8.begin(),utf8.end());
         ctf_last_size_=total;
         ctf_selected_finding_=0;
-        ctf_selected_event_=0;
+        ctf_selected_event_=ctf_->findings.empty() || ctf_->findings.front().evidence.empty()
+            ? 0 : ctf_->findings.front().evidence.front();
         ctf_error_.clear();
         std::snprintf(ctf_directory_.data(),ctf_directory_.size(),"%s",ctf_active_directory_.c_str());
         page_=Page::Ctf;
