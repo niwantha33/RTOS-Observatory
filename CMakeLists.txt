@@ -315,6 +315,16 @@ if(OBSERVATORY_BUILD_DESKTOP)
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/dsf-status.tsv)
     add_test(NAME observatory_desktop_snapshot_smoke COMMAND rtos-observatory-desktop --smoke-snapshot
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/approved-snapshot.tsv)
+    if(Python3_Interpreter_FOUND)
+      add_test(NAME observatory_w20_create_ctf_fixture COMMAND
+        ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/generate_w20_fixture.py
+        ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
+      set_tests_properties(observatory_w20_create_ctf_fixture PROPERTIES FIXTURES_SETUP w20_ctf_fixture)
+      add_test(NAME observatory_desktop_w20_ctf_smoke COMMAND rtos-observatory-desktop --smoke-ctf
+        ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
+      set_tests_properties(observatory_desktop_w20_ctf_smoke PROPERTIES
+        FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
+    endif()
     add_test(NAME observatory_desktop_live_smoke COMMAND rtos-observatory-desktop --smoke-live
       ${CMAKE_CURRENT_BINARY_DIR}/w18-synthetic.rtob)
     set_tests_properties(observatory_desktop_live_smoke PROPERTIES
@@ -340,6 +350,13 @@ if(OBSERVATORY_BUILD_DESKTOP)
     if(UNIX AND NOT APPLE)
       find_program(OBSERVATORY_XVFB_RUN xvfb-run)
       if(OBSERVATORY_XVFB_RUN)
+        if(Python3_Interpreter_FOUND)
+          add_test(NAME observatory_imgui_w20_ctf_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
+            $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-ctf
+            ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
+          set_tests_properties(observatory_imgui_w20_ctf_ui_smoke PROPERTIES
+            FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
+        endif()
         add_test(NAME observatory_imgui_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
           $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui
           ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)
