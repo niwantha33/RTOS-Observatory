@@ -41,6 +41,13 @@ add_executable(rtos-observatory src/main.cpp)
 target_link_libraries(rtos-observatory PRIVATE observatory_core)
 if(OBSERVATORY_BUILD_TESTS)
   enable_testing()
+  add_executable(observatory_shared_adapter_tests tests/test_shared_adapter_view.cpp)
+  target_link_libraries(observatory_shared_adapter_tests PRIVATE
+    observatory_core observatory_target_wire)
+  target_include_directories(observatory_shared_adapter_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/firmware)
+  target_compile_features(observatory_shared_adapter_tests PRIVATE cxx_std_20)
+  add_test(NAME observatory_shared_adapter_and_layout COMMAND observatory_shared_adapter_tests)
   add_executable(observatory_ctf_analysis_tests tests/test_ctf_analysis.cpp)
   target_link_libraries(observatory_ctf_analysis_tests PRIVATE observatory_core)
   add_test(NAME observatory_w20_ctf_cross_analysis COMMAND observatory_ctf_analysis_tests)
@@ -145,7 +152,7 @@ if(OBSERVATORY_BUILD_TESTS)
 endif()
 
 if(OBSERVATORY_BUILD_TESTS)
-  foreach(test_target observatory_ctf_analysis_tests observatory_ctf_tests observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_fault_tests observatory_source_tests observatory_bridge_tests observatory_snapshot_policy_tests observatory_snapshot_receipt_tests observatory_ring_tests observatory_recorder_tests observatory_recorder_concurrency_tests observatory_wire_tests observatory_transport_tests observatory_live_session_tests)
+  foreach(test_target observatory_shared_adapter_tests observatory_ctf_analysis_tests observatory_ctf_tests observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_fault_tests observatory_source_tests observatory_bridge_tests observatory_snapshot_policy_tests observatory_snapshot_receipt_tests observatory_ring_tests observatory_recorder_tests observatory_recorder_concurrency_tests observatory_wire_tests observatory_transport_tests observatory_live_session_tests)
     if(MSVC)
       target_compile_options(${test_target} PRIVATE /UNDEBUG)
     else()
@@ -272,6 +279,7 @@ if(OBSERVATORY_BUILD_DESKTOP)
   add_executable(rtos-observatory-desktop
     desktop/imgui/main.cpp
     desktop/imgui/workspace.cpp
+    desktop/imgui/workspace_shared.cpp
     desktop/imgui/workspace.hpp)
   target_include_directories(rtos-observatory-desktop PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -368,6 +376,15 @@ if(OBSERVATORY_BUILD_DESKTOP)
             ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
           set_tests_properties(observatory_imgui_w20_ctf_ui_smoke PROPERTIES
             FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
+          foreach(mode timeline resources graph)
+            add_test(NAME observatory_imgui_shared_ctf_${mode}_smoke COMMAND
+              ${OBSERVATORY_XVFB_RUN} -a
+              $<TARGET_FILE:rtos-observatory-desktop>
+              --smoke-ui-ctf-${mode}
+              ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
+            set_tests_properties(observatory_imgui_shared_ctf_${mode}_smoke PROPERTIES
+              FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
+          endforeach()
           add_test(NAME observatory_imgui_w20_detached_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
             $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-ctf-docking
             ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)

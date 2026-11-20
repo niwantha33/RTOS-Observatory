@@ -313,7 +313,8 @@ bool Workspace::open_trace(const std::string &path, const std::string &decoder) 
         fit();
         rebuild_event_filter();
         active_adapter_ = SourceAdapter::Normalized;
-        page_ = Page::Timeline;
+        refresh_unified_view();
+        page_ = Page::Overview;
         return true;
     } catch (const std::exception &e) {
         error_ = e.what();
@@ -345,7 +346,8 @@ bool Workspace::open_session(const std::string &path) {
         fit();
         rebuild_event_filter();
         active_adapter_ = SourceAdapter::Normalized;
-        page_ = Page::Timeline;
+        refresh_unified_view();
+        page_ = Page::Overview;
         return true;
     } catch (const std::exception &e) {
         error_ = e.what();
@@ -454,13 +456,27 @@ bool Workspace::open_live_file(const std::string &path) {
         std::snprintf(live_file_path_.data(), live_file_path_.size(), "%s", path.c_str());
         page_ = Page::LiveTrace;
         const bool ok = poll_live_file();
-        if (ok)
+        if (ok) {
             active_adapter_ = SourceAdapter::Live;
+            refresh_unified_view();
+            page_ = Page::Overview;
+        } else {
+            live_session_.reset();
+            live_follow_ = false;
+            if (active_adapter_ == SourceAdapter::Live) {
+                active_adapter_ = SourceAdapter::None;
+                unified_ = ToolSummary{}; // no stale evidence after failed replacement
+            }
+        }
         return ok;
     } catch (const std::exception &e) {
         live_error_ = e.what();
         live_follow_ = false;
         live_session_.reset();
+        if (active_adapter_ == SourceAdapter::Live) {
+            active_adapter_ = SourceAdapter::None;
+            unified_ = ToolSummary{};
+        }
         return false;
     }
 }
@@ -493,6 +509,8 @@ bool Workspace::poll_live_file() {
             throw Error("W18 spool changed during bounded read");
         live_session_->feed(buffer.data(), static_cast<std::size_t>(received));
         live_file_offset_ += static_cast<std::uint64_t>(received);
+        if (active_adapter_ == SourceAdapter::Live)
+            refresh_unified_view(true);
         return true;
     } catch (const std::exception &e) {
         live_error_ = e.what();
@@ -562,6 +580,49 @@ void Workspace::zoom(bool in) {
     end_us_ = start + next;
     update_timeline();
 }
+void Workspace::refresh_unified_view(bool preserve_selection) {
+    // All adapters project into a single read-only GUI contract. Original
+    // time units are retained, and no unsupported capability is asserted.
+    switch (active_adapter_) {
+    case SourceAdapter::Normalized:
+        if (controller_.loaded()) {
+            const auto &decoded = controller_.trace();
+            const auto &report = controller_.report();
+            const bool qualified = timeline_ && timeline_->evidence_complete &&
+                                   report.complete &&
+                                   decoded.evidence.sequence_available &&
+                                   decoded.evidence.missing_events == 0 &&
+                                   decoded.evidence.declared_drops == 0;
+            unified_ = project_normalized(decoded.capture, report,
+                          timeline_ ? &*timeline_ : nullptr, qualified,
+                          resources_ ? &*resources_ : nullptr);
+        } else unified_ = ToolSummary{};
+        break;
+    case SourceAdapter::Ctf:
+        unified_ = ctf_ ? project_ctf(*ctf_,
+                 ctf_analysis_ ? &*ctf_analysis_ : nullptr,
+                 file_path(ctf_active_directory_).filename().string()) : ToolSummary{};
+        break;
+    case SourceAdapter::Live:
+        unified_ = live_session_ ? project_spool(*live_session_) : ToolSummary{};
+        break;
+    case SourceAdapter::None:
+        unified_ = ToolSummary{};
+        break;
+    }
+    if (!preserve_selection) {
+        shared_selected_event_.reset();
+        shared_selected_case_.reset();
+    } else {
+        if (shared_selected_event_ && *shared_selected_event_ >= unified_.events.size())
+            shared_selected_event_.reset();
+        if (shared_selected_case_ && *shared_selected_case_ >= unified_.cases.size())
+            shared_selected_case_.reset();
+    }
+    shared_cached_filter_ = "\x01"; // force refresh even if query is empty
+    shared_filtered_events_.clear();
+}
+
 void Workspace::draw_menus() {
     if (!ImGui::BeginMenuBar())
         return;
@@ -617,9 +678,17 @@ void Workspace::draw_menus() {
     if (ImGui::BeginMenu("Settings")) {
         ImGui::MenuItem("Use legacy TSV format", nullptr, &legacy_decoder_);
         ImGui::MenuItem("Compact spacing", nullptr, &compact_spacing_);
-        ImGui::SliderFloat("Text / UI size", &ui_scale_, .85f, 1.8f, "%.2fx");
-        if (ImGui::MenuItem("Reset text size"))
+        ImGui::SeparatorText("ACCESSIBILITY / FONT");
+        ImGui::SliderFloat("Text + controls", &ui_scale_, 1.0f, 2.2f, "%.2fx");
+        if (ImGui::MenuItem("Comfortable text (120%)"))
+            ui_scale_ = 1.2f;
+        if (ImGui::MenuItem("Large text (150%)"))
+            ui_scale_ = 1.5f;
+        if (ImGui::MenuItem("Very large text (180%)"))
+            ui_scale_ = 1.8f;
+        if (ImGui::MenuItem("Default text size (100%)"))
             ui_scale_ = 1.f;
+        ImGui::TextDisabled("Use Ctrl+Plus / Ctrl+Minus to zoom.");
         ImGui::TextDisabled("Window resize and display scaling are automatic");
         ImGui::EndMenu();
     }
@@ -633,19 +702,23 @@ void Workspace::draw_menus() {
         }
         ImGui::TextDisabled("Drag detached windows outside to another monitor.");
         ImGui::Separator();
-        ImGui::SeparatorText("CTF linked analysis windows");
-        if (ImGui::MenuItem("Detach resource explorer", nullptr, &ctf_explorer_detached_, ctf_.has_value()))
-            page_ = Page::Ctf;
-        if (ImGui::MenuItem("Detach evidence inspector", nullptr, &ctf_inspector_detached_, ctf_.has_value()))
-            page_ = Page::Ctf;
-        if (ImGui::MenuItem("Show scheduling / ISR analysis", nullptr, &ctf_scheduler_detached_, ctf_.has_value()))
-            page_ = Page::Ctf;
-        if (ImGui::MenuItem("Restore embedded CTF panels", nullptr, false,
-                            ctf_explorer_detached_ || ctf_inspector_detached_ || ctf_scheduler_detached_)) {
+        ImGui::SeparatorText("Detachable common tools");
+        const bool has_evidence = unified_.adapter != AdapterKind::None;
+        if (ImGui::MenuItem("Detach resource explorer", nullptr,
+                            &ctf_explorer_detached_, has_evidence))
+            page_ = Page::Resources;
+        if (ImGui::MenuItem("Detach evidence inspector", nullptr,
+                            &ctf_inspector_detached_, has_evidence))
+            page_ = Page::Evidence;
+        if (ImGui::MenuItem("Detach scheduling timeline", nullptr,
+                            &ctf_scheduler_detached_, has_evidence))
+            page_ = Page::Timeline;
+        if (ImGui::MenuItem("Close detached common tools", nullptr, false,
+                            ctf_explorer_detached_ || ctf_inspector_detached_ ||
+                            ctf_scheduler_detached_)) {
             ctf_explorer_detached_ = false;
             ctf_inspector_detached_ = false;
             ctf_scheduler_detached_ = false;
-            page_ = Page::Ctf;
         }
         ImGui::Separator();
         if (ImGui::BeginMenu("Go to panel")) {
@@ -896,8 +969,8 @@ void Workspace::draw_source_dialog() {
 
 void Workspace::draw_sidebar() {
     const float footer_height = ImGui::GetTextLineHeightWithSpacing() + 14.f;
-    const float width = std::clamp(ImGui::GetContentRegionAvail().x * .22f,
-                                   195.f, 285.f);
+    const float width = plan_layout(ImGui::GetContentRegionAvail().x,
+                                    ImGui::GetFontSize()).sidebar_width;
     ImGui::BeginChild("Navigation", ImVec2(width, -footer_height),
                       ImGuiChildFlags_Borders);
     ImGui::TextColored(ImVec4(.75f, .87f, .99f, 1.f), "RTOS OBSERVATORY");
@@ -2597,12 +2670,15 @@ bool Workspace::open_ctf_directory(const std::string &path) {
         std::snprintf(ctf_directory_.data(), ctf_directory_.size(), "%s",
                       ctf_active_directory_.c_str());
         active_adapter_ = SourceAdapter::Ctf;
+        refresh_unified_view();
         page_ = Page::Overview;
         return true;
     } catch (const std::exception &e) {
         ctf_error_ = e.what();
-        if (active_adapter_ == SourceAdapter::Ctf)
+        if (active_adapter_ == SourceAdapter::Ctf) {
             active_adapter_ = SourceAdapter::None;
+            unified_ = ToolSummary{};
+        }
         ctf_follow_ = false;
         ctf_.reset(); // Fail closed instead of displaying stale data under a new path.
         ctf_analysis_.reset();
@@ -2648,6 +2724,7 @@ void Workspace::follow_ctf() {
         auto index = ctf::build_analysis_index(updated);
         ctf_ = std::move(updated);
         ctf_analysis_ = std::move(index);
+        refresh_unified_view(true);
         ctf_last_size_ = size;
         ctf_selected_event_ = std::min(ctf_selected_event_, ctf_->events.size() - 1);
         if (!ctf_->findings.empty())
@@ -3007,40 +3084,42 @@ void Workspace::draw_ctf_scheduler() {
 }
 
 void Workspace::draw_ctf_floating() {
-    if (!ctf_) return;
+    // Detached tools follow the active source: no duplicate connections or
+    // CTF-only rendering semantics after selecting a different adapter.
+    if (unified_.adapter == AdapterKind::None) return;
     if (ctf_explorer_detached_) {
         ImGui::SetNextWindowSize(ImVec2(780.f, 560.f), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("CTF Resource Explorer##w20-floating-explorer",
+        if (ImGui::Begin("Resource Explorer##w20-floating-explorer",
                           &ctf_explorer_detached_)) {
             if (ImGui::SmallButton("Return to workspace"))
                 ctf_explorer_detached_ = false;
             ImGui::Separator();
             if (ctf_explorer_detached_)
-                draw_ctf_explorer();
+                draw_shared_resources();
         }
         ImGui::End();
     }
     if (ctf_inspector_detached_) {
         ImGui::SetNextWindowSize(ImVec2(570.f, 650.f), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("CTF Evidence Inspector##w20-floating-evidence",
+        if (ImGui::Begin("Evidence Inspector##w20-floating-evidence",
                           &ctf_inspector_detached_)) {
             if (ImGui::SmallButton("Return to workspace"))
                 ctf_inspector_detached_ = false;
             ImGui::Separator();
             if (ctf_inspector_detached_)
-                draw_ctf_inspector();
+                draw_shared_evidence();
         }
         ImGui::End();
     }
     if (ctf_scheduler_detached_) {
         ImGui::SetNextWindowSize(ImVec2(820.f, 550.f), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("CTF Scheduling and ISR##w20-floating-scheduling",
+        if (ImGui::Begin("Scheduling Timeline##w20-floating-scheduling",
                           &ctf_scheduler_detached_)) {
             if (ImGui::SmallButton("Close analysis window"))
                 ctf_scheduler_detached_ = false;
             ImGui::Separator();
             if (ctf_scheduler_detached_)
-                draw_ctf_scheduler();
+                draw_shared_timeline();
         }
         ImGui::End();
     }
@@ -3592,18 +3671,33 @@ void Workspace::draw_ctf_tool(Page page) {
 }
 
 void Workspace::draw_page(Page page) {
-    if (active_adapter_ == SourceAdapter::Ctf && ctf_ && page != Page::Ctf) {
-        draw_ctf_tool(page);
+    // Every adapter uses the SAME dashboard/timeline/resources/event/inspector
+    // renderer. The source projection owns evidence and capability semantics.
+    switch (page) {
+    case Page::Overview:
+    case Page::Timeline:
+    case Page::CpuWaits:
+    case Page::Diagnostics:
+    case Page::Resources:
+    case Page::Events:
+    case Page::Findings:
+    case Page::Evidence:
+    case Page::Graph:
+    case Page::Ctf:
+        draw_shared_tool(page);
+        return;
+    default: break;
+    }
+    if (active_adapter_ != SourceAdapter::Normalized &&
+        (page == Page::Replay || page == Page::Causality)) {
+        draw_shared_tool(page); // recorded event order / observed links only
         return;
     }
-    if (active_adapter_ == SourceAdapter::Live && page != Page::LiveTrace &&
-        page != Page::Faults && page != Page::DebugBridge &&
-        page != Page::Snapshot && page != Page::SourceGraph) {
-        ImGui::TextDisabled("This binary spool supplies event epochs, not a normalized RTOS trace.");
-        if (ImGui::Button("Open event epochs"))
-            page_ = Page::LiveTrace;
-        if (ImGui::Button("Import a different source"))
-            request_source(ImportAdapter::NormalizedTrace);
+    if (active_adapter_ != SourceAdapter::Normalized &&
+        page == Page::LiveTrace && active_adapter_ != SourceAdapter::Live) {
+        ImGui::TextDisabled("No binary event-spool source is active.");
+        if (ImGui::Button("Import binary spool"))
+            request_source(ImportAdapter::BinarySpool);
         return;
     }
     switch (page) {
@@ -3691,9 +3785,9 @@ void Workspace::draw_detached_analysis() {
 }
 
 void Workspace::draw() {
-    if (live_follow_ && live_session_)
+    if (active_adapter_ == SourceAdapter::Live && live_follow_ && live_session_)
         (void)poll_live_file();
-    if (ctf_follow_) {
+    if (active_adapter_ == SourceAdapter::Ctf && ctf_follow_) {
         const auto now = std::chrono::steady_clock::now();
         if (now - ctf_last_poll_ > std::chrono::milliseconds(500)) {
             ctf_last_poll_ = now;
@@ -3716,8 +3810,8 @@ void Workspace::draw() {
     ImGui::Begin("RTOS Observatory", nullptr, flags);
     draw_menus();
     const float workspace_width = ImGui::GetContentRegionAvail().x;
-    const bool sidebar_fits = show_sidebar_ &&
-        workspace_width >= std::max(680.f, 680.f * ui_scale_);
+    const bool sidebar_fits =
+        plan_layout(workspace_width, ImGui::GetFontSize(), show_sidebar_).show_sidebar;
     if (sidebar_fits) {
         draw_sidebar();
         ImGui::SameLine();
@@ -3728,7 +3822,8 @@ void Workspace::draw() {
             request_source(active_adapter_ == SourceAdapter::Ctf
                            ? ImportAdapter::ZephyrCtf
                            : ImportAdapter::NormalizedTrace);
-        ImGui::SameLine();
+        if (workspace_width >= 35.f * ImGui::GetFontSize())
+            ImGui::SameLine();
         constexpr const char *compact_pages[] = {
             "Dashboard", "Timeline", "CPU / scheduling", "Evidence relationships",
             "Time-travel / order", "Scheduling / ISR", "Resource objects",
@@ -3736,7 +3831,7 @@ void Workspace::draw() {
             "Debugger lifecycle", "Snapshot receipts", "Live event epochs",
             "Events", "Findings", "Evidence inspector", "CTF explorer"
         };
-        ImGui::SetNextItemWidth(std::max(140.f, ImGui::GetContentRegionAvail().x));
+        ImGui::SetNextItemWidth(-1.f);
         if (ImGui::BeginCombo("##compact-tool", compact_pages[static_cast<int>(page_)])) {
             for (int k = 0; k < 16; ++k) {
                 if (ImGui::Selectable(compact_pages[k], static_cast<int>(page_) == k))

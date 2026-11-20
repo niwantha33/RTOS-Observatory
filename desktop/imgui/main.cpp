@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -77,7 +78,7 @@ std::string setup_fonts(GLFWwindow *window) {
         if (path.empty() || !std::filesystem::is_regular_file(path, ec))
             return false;
         const std::string filename = path.string();
-        return fonts->AddFontFromFileTTF(filename.c_str(), 17.f * scale) != nullptr;
+        return fonts->AddFontFromFileTTF(filename.c_str(), 18.f) != nullptr;
     };
     if (const char *custom = std::getenv("OBSERVATORY_UI_FONT"); custom && *custom) {
         if (add_font(std::filesystem::path(custom), "Custom"))
@@ -106,9 +107,9 @@ std::string setup_fonts(GLFWwindow *window) {
             return name;
 #endif
     ImFontConfig fallback;
-    fallback.SizePixels = 17.f * scale;
+    fallback.SizePixels = 18.f;
     fonts->AddFontDefault(&fallback);
-    return "Built-in (17px)";
+    return "Built-in (18px)";
 }
 } // namespace
 int main(int argc, char **argv) {
@@ -126,6 +127,9 @@ int main(int argc, char **argv) {
     bool smoke_live = false;
     bool smoke_ctf = false;
     bool smoke_ctf_detached = false;
+    bool smoke_ctf_timeline = false;
+    bool smoke_ctf_resources = false;
+    bool smoke_ctf_graph = false;
     std::string ctf_directory_path;
     std::string live_binary_path;
     std::string snapshot_path;
@@ -301,11 +305,16 @@ int main(int argc, char **argv) {
     }
     if (argc >= 3 &&
         (std::string_view(argv[1]) == "--ctf" || std::string_view(argv[1]) == "--smoke-ui-ctf" ||
-         std::string_view(argv[1]) == "--smoke-ui-ctf-docking")) {
+         std::string_view(argv[1]) == "--smoke-ui-ctf-docking" ||
+         std::string_view(argv[1]) == "--smoke-ui-ctf-timeline" ||
+         std::string_view(argv[1]) == "--smoke-ui-ctf-resources" ||
+         std::string_view(argv[1]) == "--smoke-ui-ctf-graph")) {
         ctf_directory_path = argv[2];
-        smoke_ctf = std::string_view(argv[1]) == "--smoke-ui-ctf" ||
-                    std::string_view(argv[1]) == "--smoke-ui-ctf-docking";
+        smoke_ctf = std::string_view(argv[1]).starts_with("--smoke-ui-ctf");
         smoke_ctf_detached = std::string_view(argv[1]) == "--smoke-ui-ctf-docking";
+        smoke_ctf_timeline = std::string_view(argv[1]) == "--smoke-ui-ctf-timeline";
+        smoke_ctf_resources = std::string_view(argv[1]) == "--smoke-ui-ctf-resources";
+        smoke_ctf_graph = std::string_view(argv[1]) == "--smoke-ui-ctf-graph";
         smoke_ui = smoke_ctf;
     } else if (argc >= 3 && (std::string_view(argv[1]) == "--live" ||
                              std::string_view(argv[1]) == "--smoke-ui-live")) {
@@ -405,6 +414,12 @@ int main(int argc, char **argv) {
         workspace.show_live_trace();
     if (smoke_ctf)
         workspace.show_ctf();
+    if (smoke_ctf_timeline)
+        workspace.show_timeline();
+    if (smoke_ctf_resources)
+        workspace.show_resources();
+    if (smoke_ctf_graph)
+        workspace.show_graph();
     if (smoke_ctf_detached)
         workspace.show_ctf_detached_smoke();
     if (smoke_bridge)
@@ -439,6 +454,10 @@ int main(int argc, char **argv) {
     // Official ImGui docking release: panels can dock, float and move to
     // independent OS windows (GLFW multi-viewport backend).
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
+    // Dear ImGui 1.92 viewport DPI scaling: each detached platform window
+    // receives its monitor font scale, independently of the main window.
+    io.ConfigDpiScaleFonts = true;
+    io.ConfigDpiScaleViewports = true;
     io.IniFilename = nullptr; // No user profile or trace identity persisted without consent.
     dark_style();
     const std::string font_name = setup_fonts(window);
@@ -475,17 +494,40 @@ int main(int argc, char **argv) {
         float dpi_x = 1.f, dpi_y = 1.f;
         glfwGetWindowContentScale(window, &dpi_x, &dpi_y);
         const float dpi_factor = std::max(.5f, std::max(dpi_x, dpi_y)) / original_dpi;
+        // 4K/ultrawide displays at 100% OS scaling need a little more
+        // typography than a 1280-pixel window, without sudden size jumps.
+        int logical_width = 1280, logical_height = 800;
+        glfwGetWindowSize(window, &logical_width, &logical_height);
+        const float screen_factor = std::clamp(
+            1.f + .14f * std::log2(std::max(1280, logical_width) / 1280.f),
+            1.f, 1.30f);
         const float requested_scale = std::clamp(
-            dpi_factor * workspace.ui_scale(), .75f, 2.5f);
+            dpi_factor * workspace.ui_scale() * screen_factor, .75f, 3.2f);
         if (std::abs(requested_scale - applied_scale) > .01f) {
+            // Style size/padding follows the main window's monitor scale.
+            // FontScaleDpi is managed by ImGui per viewport; do not apply
+            // dpi_factor again to FontScaleMain (would double-scale text).
+            const float font_dpi = ImGui::GetStyle().FontScaleDpi;
             ImGui::GetStyle() = initial_style;
             ImGui::GetStyle().ScaleAllSizes(requested_scale);
-            ImGui::GetStyle().FontScaleMain = requested_scale;
+            ImGui::GetStyle().FontScaleMain =
+                workspace.ui_scale() * screen_factor;
+            ImGui::GetStyle().FontScaleDpi = font_dpi;
             applied_scale = requested_scale;
         }
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        // Ctrl+Plus / Ctrl+Minus work without opening Settings. Do not
+        // intercept shortcuts while the user is entering a capture path.
+        if (io.KeyCtrl && !io.WantTextInput) {
+            if (ImGui::IsKeyPressed(ImGuiKey_Equal) ||
+                ImGui::IsKeyPressed(ImGuiKey_KeypadAdd))
+                workspace.set_ui_scale(workspace.ui_scale() + .10f);
+            if (ImGui::IsKeyPressed(ImGuiKey_Minus) ||
+                ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract))
+                workspace.set_ui_scale(workspace.ui_scale() - .10f);
+        }
         // Host a single shared dockspace. All CTF and normalized analyses
         // retain one source/session and can be rearranged independently.
         // No redundant "RTOS Observatory" dock tab when it is the only
