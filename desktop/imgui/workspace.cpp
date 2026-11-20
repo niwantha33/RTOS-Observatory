@@ -17,6 +17,9 @@
 #include <system_error>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <objbase.h>
 #include <shobjidl.h>
@@ -2128,7 +2131,8 @@ bool Workspace::open_ctf_directory(const std::string& path) {
         auto candidate=ctf::open(root,true);
         const auto total=std::filesystem::file_size(root/"channel0_0");
         ctf_=std::move(candidate);
-        ctf_active_directory_=root.string();
+        const auto utf8=root.u8string();
+        ctf_active_directory_.assign(utf8.begin(),utf8.end());
         ctf_last_size_=total;
         ctf_selected_finding_=0;
         ctf_selected_event_=0;
@@ -2147,7 +2151,7 @@ bool Workspace::open_ctf_comparison(const std::string& path) {
         if(!ctf_)throw Error("Open the main CTF capture first");
         if(std::filesystem::equivalent(file_path(path),file_path(ctf_active_directory_)))
             throw Error("Before/after must use two independent captures");
-        auto candidate=ctf::open(file_path(path));
+        auto candidate=ctf::open(resolve_ctf_root(file_path(path)));
         ctf_compare_=std::move(candidate);
         ctf_error_.clear();
         return true;
