@@ -122,6 +122,11 @@ if(OBSERVATORY_BUILD_TESTS)
   find_package(Python3 COMPONENTS Interpreter QUIET)
   if(Python3_Interpreter_FOUND)
     add_test(NAME observatory_zew_adapter COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_zew_adapter.py)
+    # W19 hardware qualification intentionally requires external, independent
+    # board evidence. This is a synthetic policy/provenance gate, NOT target pass.
+    add_test(NAME observatory_w19_evidence_safety COMMAND
+      ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_w19_qualification.py)
+    set_tests_properties(observatory_w19_evidence_safety PROPERTIES TIMEOUT 30)
   endif()
   add_test(NAME observatory_cli_demo COMMAND rtos-observatory --input ${CMAKE_CURRENT_SOURCE_DIR}/examples/inversion.trace --output ${CMAKE_CURRENT_BINARY_DIR}/inversion-report.json)
 endif()

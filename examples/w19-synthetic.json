@@ -1,0 +1,38 @@
+{
+  "schema": "rtos-observatory-w19-v1",
+  "sample_origin": "synthetic",
+  "run_id": "W19-SYNTHETIC-DEMO",
+  "board": "lp_mspm0g3507",
+  "board_revision": "unknown",
+  "silicon": "MSPM0G3507",
+  "probe": "XDS110",
+  "probe_firmware": "unverified",
+  "debug_server": "TI-OpenOCD-unverified",
+  "rtos": "Zephyr",
+  "rtos_version": "unverified",
+  "firmware_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "transport": "UART",
+  "single_debugger_owner": false,
+  "no_unapproved_debug_actions": false,
+  "measurement": {
+    "cpu_hz": 32000000,
+    "baseline_cycles": [
+      100,
+      110,
+      120
+    ],
+    "instrumented_cycles": [
+      130,
+      150,
+      165
+    ],
+    "observed_events": 50,
+    "elapsed_ms": 1000,
+    "wire_bytes": 2400,
+    "full_drops": 3,
+    "busy_drops": 2,
+    "ram_bytes": 512,
+    "flash_bytes": 4096
+  },
+  "attachments": []
+}
