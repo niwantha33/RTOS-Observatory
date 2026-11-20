@@ -625,6 +625,14 @@ void Workspace::draw_menus() {
     }
     if (ImGui::BeginMenu("Window")) {
         ImGui::MenuItem("Show navigation", nullptr, &show_sidebar_);
+        const bool can_detach = page_ != Page::Ctf && detached_analysis_pages_.size() < 6;
+        if (ImGui::MenuItem("Detach current analysis", nullptr, false, can_detach)) {
+            if (std::find(detached_analysis_pages_.begin(), detached_analysis_pages_.end(),
+                          page_) == detached_analysis_pages_.end())
+                detached_analysis_pages_.push_back(page_);
+        }
+        ImGui::TextDisabled("Drag detached windows outside to another monitor.");
+        ImGui::Separator();
         ImGui::SeparatorText("CTF linked analysis windows");
         if (ImGui::MenuItem("Detach resource explorer", nullptr, &ctf_explorer_detached_, ctf_.has_value()))
             page_ = Page::Ctf;
@@ -663,6 +671,7 @@ void Workspace::draw_menus() {
             ImGui::EndMenu();
         }
         if (ImGui::MenuItem("Reset layout")) {
+            detached_analysis_pages_.clear();
             ctf_explorer_detached_ = false;
             ctf_inspector_detached_ = false;
             ctf_scheduler_detached_ = false;
