@@ -3209,14 +3209,19 @@ void Workspace::draw() {
         }
     }
     const auto *viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
+    if (dockspace_id_ != 0) {
+        ImGui::SetNextWindowDockID(dockspace_id_, ImGuiCond_FirstUseEver);
+    } else {
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+    }
     if (compact_spacing_)
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.f, 4.f));
-    ImGui::Begin("RTOS Observatory", nullptr,
-                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-                     ImGuiWindowFlags_MenuBar);
+    auto flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
+    if (dockspace_id_ == 0)
+        flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
+    ImGui::Begin("RTOS Observatory", nullptr, flags);
     draw_menus();
     if (show_sidebar_) {
         draw_sidebar();
