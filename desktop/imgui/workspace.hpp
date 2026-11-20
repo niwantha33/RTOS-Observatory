@@ -186,6 +186,8 @@ class Workspace final {
     std::optional<std::size_t> shared_selected_event_;
     std::optional<std::size_t> shared_selected_case_;
     std::array<char, 128> shared_filter_{};
+    std::string shared_cached_filter_;
+    std::vector<std::size_t> shared_filtered_events_;
     std::optional<ctf::AnalysisIndex> ctf_analysis_;
     bool ctf_explorer_detached_{};
     bool ctf_inspector_detached_{};
