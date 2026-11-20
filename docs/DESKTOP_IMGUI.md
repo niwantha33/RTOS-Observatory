@@ -76,8 +76,19 @@ and Xvfb for headless UI tests:
   lanes with zoom/fit, exact microsecond window and hover details.
 - CPU / waits shows separate per-core running/ISR/idle/unknown durations,
   gated CPU percentages and completed wait summaries.
-- No queue-depth reconstruction, inferred ready or sleeping state, debug
-  probe access, network listener or raw native Zephyr CTF decoder.
+- Native Zephyr CTF has a separate evidence-first adapter with original raw-tick
+  timeline bars, resource callback intervals and source-event inspection.
+  It does **not** claim clock-calibrated CPU utilization, ownership or causal
+  inference, loss-free capture, live probe access or queue-depth reconstruction.
+
+## Responsive adapter-first workspace
+
+Data sources now open a **Connect data source** import dialog. Zephyr CTF,
+universal trace, saved sessions and binary event spools share a single menu of
+analysis tools. The active source determines which conclusions are supported.
+The user can change text/UI scale from Settings; the window layout switches
+from sidebar to a tool selector on narrow displays. Details and manual
+acceptance checks are in [UI_ADAPTER_WORKBENCH.md](UI_ADAPTER_WORKBENCH.md).
 
 ## Validation
 

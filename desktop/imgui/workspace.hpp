@@ -39,12 +39,12 @@ class Workspace final {
     bool open_ctf_directory(const std::string &path);
     bool open_ctf_comparison(const std::string &path);
     const ctf::Session *ctf_session() const noexcept { return ctf_ ? &*ctf_ : nullptr; }
-    void show_ctf() noexcept { page_ = Page::Ctf; }
+    void show_ctf() noexcept { page_ = Page::Overview; }
     const ctf::AnalysisIndex* ctf_analysis() const noexcept {
         return ctf_analysis_ ? &*ctf_analysis_ : nullptr;
     }
     void show_ctf_detached_smoke() noexcept {
-        page_ = Page::Ctf;
+        page_ = Page::Overview;
         ctf_explorer_detached_ = true;
         ctf_inspector_detached_ = true;
         ctf_scheduler_detached_ = true;
@@ -54,6 +54,7 @@ class Workspace final {
     void accept_drop(const std::string &path);
     void set_dockspace_id(std::uint32_t id) noexcept { dockspace_id_ = id; }
     void draw();
+    float ui_scale() const noexcept { return ui_scale_; }
     bool exit_requested() const noexcept { return exit_requested_; }
     bool loaded() const noexcept { return controller_.loaded(); }
     const GraphView *graph() const noexcept { return graph_ ? &*graph_ : nullptr; }
@@ -110,6 +111,15 @@ class Workspace final {
         Ctf
     };
     enum class OpenDialog { None, Trace, Session };
+    enum class SourceAdapter { None, Normalized, Ctf, Live };
+    enum class ImportAdapter { ZephyrCtf, NormalizedTrace, SavedSession, BinarySpool };
+    void request_source(ImportAdapter adapter);
+    void draw_source_dialog();
+    void draw_ctf_tool(Page page);
+    void draw_ctf_overview();
+    void draw_ctf_timeline();
+    void draw_ctf_resources();
+    void draw_ctf_events();
     void draw_menus();
     void draw_dialogs();
     void update_timeline();
@@ -221,6 +231,11 @@ class Workspace final {
     bool legacy_decoder_{};
     bool show_sidebar_{true};
     bool compact_spacing_{};
+    float ui_scale_{1.0f};
+    SourceAdapter active_adapter_{SourceAdapter::None};
+    ImportAdapter import_adapter_{ImportAdapter::ZephyrCtf};
+    bool source_dialog_requested_{};
+    std::array<char, 2048> import_path_{};
     bool exit_requested_{};
     bool show_about_{};
     bool export_dialog_requested_{};
