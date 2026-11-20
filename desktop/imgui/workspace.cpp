@@ -518,7 +518,13 @@ void Workspace::draw_menus() {
 #endif
         if(ImGui::MenuItem("Open trace...")) pending_open_=OpenDialog::Trace;
         if(ImGui::MenuItem("Open saved session...")) pending_open_=OpenDialog::Session;
-        if(ImGui::MenuItem("Open Zephyr CTF folder...")) page_=Page::Ctf;
+        if(ImGui::MenuItem("Open Zephyr CTF folder...")) {
+            page_=Page::Ctf;
+#ifdef _WIN32
+            if(auto selected=choose_ctf_directory_native())
+                (void)open_ctf_directory(*selected);
+#endif
+        }
         if(ImGui::MenuItem("Open fault snapshot...")) page_=Page::Faults;
         if(ImGui::MenuItem("Open C/C++/Rust symbol index...")) page_=Page::SourceGraph;
         if(ImGui::MenuItem("Inspect Eclipse DSF bridge status...")) page_=Page::DebugBridge;
