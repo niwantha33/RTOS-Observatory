@@ -29,7 +29,7 @@ inline LayoutPolicy plan_layout(float available_width, float font_pixels,
     out.sidebar_width = out.show_sidebar
         ? std::clamp(em * 15.0f, em * 12.f, width * .31f) : 0.f;
     out.content_width = std::max(0.f, width - out.sidebar_width - em);
-    out.show_two_columns = out.content_width >= 53.f * em;
+    out.show_two_columns = out.content_width >= 43.f * em;
     out.metric_columns = out.content_width >= 65.f * em ? 4 :
                          out.content_width >= 32.f * em ? 2 : 1;
     return out;
