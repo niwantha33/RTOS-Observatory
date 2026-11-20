@@ -29,7 +29,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
   target_compile_options(observatory_target_wire PUBLIC
     "$<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>")
 endif()
-add_library(observatory_core src/engine.cpp src/session.cpp src/timeline.cpp)
+add_library(observatory_core src/engine.cpp src/session.cpp src/timeline.cpp src/zephyr_ctf.cpp)
 target_include_directories(observatory_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(observatory_core PUBLIC cxx_std_20)
 if(MSVC)
@@ -41,6 +41,9 @@ add_executable(rtos-observatory src/main.cpp)
 target_link_libraries(rtos-observatory PRIVATE observatory_core)
 if(OBSERVATORY_BUILD_TESTS)
   enable_testing()
+  add_executable(observatory_ctf_tests tests/test_zephyr_ctf.cpp)
+  target_link_libraries(observatory_ctf_tests PRIVATE observatory_core)
+  add_test(NAME observatory_w20_ctf_evidence COMMAND observatory_ctf_tests ${CMAKE_CURRENT_BINARY_DIR})
   add_executable(observatory_ring_tests tests/test_ring.c)
   target_link_libraries(observatory_ring_tests PRIVATE observatory_target_ring)
   add_test(NAME observatory_ring_tests COMMAND observatory_ring_tests)
@@ -139,7 +142,7 @@ if(OBSERVATORY_BUILD_TESTS)
 endif()
 
 if(OBSERVATORY_BUILD_TESTS)
-  foreach(test_target observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_fault_tests observatory_source_tests observatory_bridge_tests observatory_snapshot_policy_tests observatory_snapshot_receipt_tests observatory_ring_tests observatory_recorder_tests observatory_recorder_concurrency_tests observatory_wire_tests observatory_transport_tests observatory_live_session_tests)
+  foreach(test_target observatory_ctf_tests observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_fault_tests observatory_source_tests observatory_bridge_tests observatory_snapshot_policy_tests observatory_snapshot_receipt_tests observatory_ring_tests observatory_recorder_tests observatory_recorder_concurrency_tests observatory_wire_tests observatory_transport_tests observatory_live_session_tests)
     if(MSVC)
       target_compile_options(${test_target} PRIVATE /UNDEBUG)
     else()
@@ -272,6 +275,10 @@ if(OBSERVATORY_BUILD_DESKTOP)
   target_link_libraries(rtos-observatory-desktop PRIVATE
     observatory_desktop_model observatory_imgui observatory_target_wire)
   target_compile_features(rtos-observatory-desktop PRIVATE cxx_std_20)
+  if(WIN32)
+    # Native Windows folder picker used by the W20 CTF capture screen.
+    target_link_libraries(rtos-observatory-desktop PRIVATE ole32 uuid user32)
+  endif()
   install(TARGETS rtos-observatory-desktop RUNTIME DESTINATION bin)
   # Explicit redistributable third-party notices for source/binary packaging.
   install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE
@@ -312,6 +319,21 @@ if(OBSERVATORY_BUILD_DESKTOP)
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/dsf-status.tsv)
     add_test(NAME observatory_desktop_snapshot_smoke COMMAND rtos-observatory-desktop --smoke-snapshot
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/approved-snapshot.tsv)
+    if(Python3_Interpreter_FOUND)
+      add_test(NAME observatory_w20_create_ctf_fixture COMMAND
+        ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/generate_w20_fixture.py
+        ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
+      set_tests_properties(observatory_w20_create_ctf_fixture PROPERTIES FIXTURES_SETUP w20_ctf_fixture)
+      add_test(NAME observatory_desktop_w20_ctf_smoke COMMAND rtos-observatory-desktop --smoke-ctf
+        ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
+      set_tests_properties(observatory_desktop_w20_ctf_smoke PROPERTIES
+        FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
+      add_test(NAME observatory_desktop_w20_nested_ctf_smoke COMMAND
+        rtos-observatory-desktop --smoke-ctf
+        ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf/wrapped)
+      set_tests_properties(observatory_desktop_w20_nested_ctf_smoke PROPERTIES
+        FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
+    endif()
     add_test(NAME observatory_desktop_live_smoke COMMAND rtos-observatory-desktop --smoke-live
       ${CMAKE_CURRENT_BINARY_DIR}/w18-synthetic.rtob)
     set_tests_properties(observatory_desktop_live_smoke PROPERTIES
@@ -337,6 +359,13 @@ if(OBSERVATORY_BUILD_DESKTOP)
     if(UNIX AND NOT APPLE)
       find_program(OBSERVATORY_XVFB_RUN xvfb-run)
       if(OBSERVATORY_XVFB_RUN)
+        if(Python3_Interpreter_FOUND)
+          add_test(NAME observatory_imgui_w20_ctf_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
+            $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-ctf
+            ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
+          set_tests_properties(observatory_imgui_w20_ctf_ui_smoke PROPERTIES
+            FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
+        endif()
         add_test(NAME observatory_imgui_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
           $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui
           ${CMAKE_CURRENT_SOURCE_DIR}/examples/timeline.trace)

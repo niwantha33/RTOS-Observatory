@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
-#include "observatory/desktop/session_controller.hpp"
-#include "observatory/timeline.hpp"
-#include "observatory/graph.hpp"
-#include "observatory/replay.hpp"
-#include "observatory/diagnostics.hpp"
-#include "observatory/resource_analysis.hpp"
 #include "observatory/causal_diagnostics.hpp"
-#include "observatory/fault_evidence.hpp"
-#include "observatory/source_index.hpp"
 #include "observatory/debug_bridge.hpp"
-#include "observatory/snapshot_receipt.hpp"
+#include "observatory/desktop/session_controller.hpp"
+#include "observatory/diagnostics.hpp"
+#include "observatory/fault_evidence.hpp"
+#include "observatory/graph.hpp"
 #include "observatory/live_session.hpp"
+#include "observatory/replay.hpp"
+#include "observatory/resource_analysis.hpp"
+#include "observatory/snapshot_receipt.hpp"
+#include "observatory/source_index.hpp"
+#include "observatory/timeline.hpp"
+#include "observatory/zephyr_ctf.hpp"
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -22,48 +24,80 @@
 
 namespace observatory::desktop {
 class Workspace final {
-public:
+  public:
     Workspace();
     // Safe to call without graphics initialization, including headless smoke tests.
-    bool open_trace(const std::string& path, const std::string& decoder = "universal-v1");
-    bool open_session(const std::string& path);
-    bool open_fault_snapshot(const std::string& path);
-    bool open_source_index(const std::string& manifest,const std::string& elf,const std::string& source_root);
-    bool open_bridge_status(const std::string& path);
-    bool open_snapshot_receipt(const std::string& path);
-    bool open_live_file(const std::string& path);
+    bool open_trace(const std::string &path, const std::string &decoder = "universal-v1");
+    bool open_session(const std::string &path);
+    bool open_fault_snapshot(const std::string &path);
+    bool open_source_index(const std::string &manifest, const std::string &elf,
+                           const std::string &source_root);
+    bool open_bridge_status(const std::string &path);
+    bool open_snapshot_receipt(const std::string &path);
+    bool open_live_file(const std::string &path);
+    bool open_ctf_directory(const std::string &path);
+    bool open_ctf_comparison(const std::string &path);
+    const ctf::Session *ctf_session() const noexcept { return ctf_ ? &*ctf_ : nullptr; }
+    void show_ctf() noexcept { page_ = Page::Ctf; }
     bool poll_live_file();
-    bool export_report(const std::string& path);
-    void accept_drop(const std::string& path);
+    bool export_report(const std::string &path);
+    void accept_drop(const std::string &path);
     void draw();
     bool exit_requested() const noexcept { return exit_requested_; }
     bool loaded() const noexcept { return controller_.loaded(); }
-    const GraphView* graph() const noexcept { return graph_ ? &*graph_ : nullptr; }
+    const GraphView *graph() const noexcept { return graph_ ? &*graph_ : nullptr; }
     void show_graph() noexcept { page_ = Page::Graph; }
     void show_replay() noexcept { page_ = Page::Replay; }
     void show_diagnostics() noexcept { page_ = Page::Diagnostics; }
-    const DiagnosticsView* diagnostics() const noexcept { return diagnostics_ ? &*diagnostics_ : nullptr; }
-    const ResourceView* resources() const noexcept { return resources_ ? &*resources_ : nullptr; }
+    const DiagnosticsView *diagnostics() const noexcept {
+        return diagnostics_ ? &*diagnostics_ : nullptr;
+    }
+    const ResourceView *resources() const noexcept { return resources_ ? &*resources_ : nullptr; }
     void show_resources() noexcept { page_ = Page::Resources; }
-    const CausalView* causality() const noexcept { return causality_ ? &*causality_ : nullptr; }
+    const CausalView *causality() const noexcept { return causality_ ? &*causality_ : nullptr; }
     void show_causality() noexcept { page_ = Page::Causality; }
     void show_faults() noexcept { page_ = Page::Faults; }
     void show_source_graph() noexcept { page_ = Page::SourceGraph; }
-    const SourceIndex* symbols() const noexcept { return symbols_ ? &*symbols_ : nullptr; }
-    const BridgeObservation* bridge_observation() const noexcept { return bridge_observation_ ? &*bridge_observation_ : nullptr; }
+    const SourceIndex *symbols() const noexcept { return symbols_ ? &*symbols_ : nullptr; }
+    const BridgeObservation *bridge_observation() const noexcept {
+        return bridge_observation_ ? &*bridge_observation_ : nullptr;
+    }
     void show_debug_bridge() noexcept { page_ = Page::DebugBridge; }
     void show_snapshot_receipt() noexcept { page_ = Page::Snapshot; }
     void show_live_trace() noexcept { page_ = Page::LiveTrace; }
-    const LiveSession* live_session() const noexcept { return live_session_ ? &*live_session_ : nullptr; }
-    const SnapshotCapture* snapshot_receipt() const noexcept { return snapshot_receipt_ ? &*snapshot_receipt_ : nullptr; }
-    const SymbolVerification& symbol_verification() const noexcept { return symbol_verification_; }
-    const FaultView* fault_view() const noexcept { return fault_view_ ? &*fault_view_ : nullptr; }
-    const ReplaySnapshot* replay() const noexcept { return replay_ ? &*replay_ : nullptr; }
-    const std::string& error() const noexcept { return error_; }
-    const SessionController& controller() const noexcept { return controller_; }
-    const TimelineView* timeline() const noexcept { return timeline_ ? &*timeline_ : nullptr; }
-private:
-    enum class Page { Overview, Timeline, CpuWaits, Graph, Replay, Diagnostics, Resources, Causality, Faults, SourceGraph, DebugBridge, Snapshot, LiveTrace, Events, Findings, Evidence };
+    const LiveSession *live_session() const noexcept {
+        return live_session_ ? &*live_session_ : nullptr;
+    }
+    const SnapshotCapture *snapshot_receipt() const noexcept {
+        return snapshot_receipt_ ? &*snapshot_receipt_ : nullptr;
+    }
+    const SymbolVerification &symbol_verification() const noexcept { return symbol_verification_; }
+    const FaultView *fault_view() const noexcept { return fault_view_ ? &*fault_view_ : nullptr; }
+    const ReplaySnapshot *replay() const noexcept { return replay_ ? &*replay_ : nullptr; }
+    const std::string &error() const noexcept { return error_; }
+    const SessionController &controller() const noexcept { return controller_; }
+    const TimelineView *timeline() const noexcept { return timeline_ ? &*timeline_ : nullptr; }
+
+  private:
+    enum class Page {
+        Overview,
+        Timeline,
+        CpuWaits,
+        Graph,
+        Replay,
+        Diagnostics,
+        Resources,
+        Causality,
+        Faults,
+        SourceGraph,
+        DebugBridge,
+        Snapshot,
+        LiveTrace,
+        Events,
+        Findings,
+        Evidence,
+        Ctf
+    };
     enum class OpenDialog { None, Trace, Session };
     void draw_menus();
     void draw_dialogs();
@@ -88,10 +122,12 @@ private:
     void draw_debug_bridge();
     void draw_snapshot_receipt();
     void draw_live_trace();
+    void draw_ctf();
+    void follow_ctf();
     void draw_events();
     void draw_findings();
     void draw_evidence();
-    void recent(const std::string& path, const std::string& decoder, bool session);
+    void recent(const std::string &path, const std::string &decoder, bool session);
     void fit();
     void zoom(bool in);
     SessionController controller_;
@@ -104,34 +140,47 @@ private:
     std::optional<FaultSnapshot> fault_snapshot_;
     std::optional<FaultView> fault_view_;
     std::optional<LiveSession> live_session_;
-    std::array<char,2048> live_file_path_{};
+    std::optional<ctf::Session> ctf_;
+    std::optional<ctf::Session> ctf_compare_;
+    std::array<char, 2048> ctf_directory_{};
+    std::array<char, 2048> ctf_comparison_{};
+    std::array<char, 128> ctf_filter_{};
+    std::string ctf_active_directory_;
+    std::string ctf_error_;
+    std::size_t ctf_kind_filter_{}; // 0=all, 1=mutex, 2=semaphore, 3=queue
+    std::size_t ctf_selected_finding_{};
+    std::size_t ctf_selected_event_{};
+    std::uintmax_t ctf_last_size_{};
+    bool ctf_follow_{};
+    std::chrono::steady_clock::time_point ctf_last_poll_{};
+    std::array<char, 2048> live_file_path_{};
     std::uint64_t live_file_offset_{};
     std::string live_active_file_;
     std::uint32_t live_ticks_per_second_{1000000u}; // UI suggestion only, not automatically applied
     std::string live_error_;
     bool live_follow_{false};
     std::optional<SnapshotCapture> snapshot_receipt_;
-    std::array<char,2048> snapshot_receipt_path_{};
+    std::array<char, 2048> snapshot_receipt_path_{};
     BridgeMonitor bridge_monitor_;
     std::optional<BridgeObservation> bridge_observation_;
-    std::array<char,2048> bridge_file_path_{};
+    std::array<char, 2048> bridge_file_path_{};
     std::optional<SourceIndex> symbols_;
     SymbolVerification symbol_verification_;
     std::optional<SourceExcerpt> source_excerpt_;
     std::size_t selected_symbol_{};
     std::uint64_t address_lookup_{};
-    std::array<char,2048> symbol_manifest_path_{};
-    std::array<char,2048> symbol_elf_path_{};
-    std::array<char,2048> symbol_source_root_{};
+    std::array<char, 2048> symbol_manifest_path_{};
+    std::array<char, 2048> symbol_elf_path_{};
+    std::array<char, 2048> symbol_source_root_{};
     std::string fault_origin_;
     std::size_t fault_selected_finding_{};
-    std::array<char,2048> fault_path_{};
+    std::array<char, 2048> fault_path_{};
     std::uint64_t long_mutex_wait_threshold_us_{0};
     std::size_t selected_causal_finding_{};
     std::string resource_selected_;
-    std::array<char,96> resource_filter_{};
-    std::map<std::string,std::uint64_t> relative_deadlines_;
-    std::array<char,96> deadline_task_{};
+    std::array<char, 96> resource_filter_{};
+    std::map<std::string, std::uint64_t> relative_deadlines_;
+    std::array<char, 96> deadline_task_{};
     std::uint64_t deadline_value_us_{1000};
     std::optional<std::size_t> graph_event_boundary_;
     std::uint64_t replay_cursor_{};
@@ -157,7 +206,11 @@ private:
     std::array<char, 160> filter_{};
     std::array<char, 96> graph_filter_{};
     std::vector<std::size_t> filtered_;
-    struct Recent { std::string path; std::string decoder; bool session{}; };
+    struct Recent {
+        std::string path;
+        std::string decoder;
+        bool session{};
+    };
     std::vector<Recent> recents_;
     std::uint64_t begin_us_{};
     std::uint64_t end_us_{};
