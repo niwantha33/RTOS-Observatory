@@ -29,3 +29,17 @@ On multi-config CMake generators the executable may instead be inside `build-w20
 Raw ticks are **not microseconds**, CPU utilization is unknown, and no total event-loss guarantee is available. Causal relationships are investigation hypotheses, **not proof** of an RTOS bug or priority inheritance. This decoder refuses CTF packet/context layouts outside the supported subset. No physical hardware, UART/RTT/GDB ownership, cross-core clock calibration or production real-time qualification is claimed.
 
 Do not upload a real CTF capture or reports to public GitHub issues, PRs or CI logs. Run them privately on the workstation.
+
+
+## W20 two-column investigation UI
+
+The **left explorer** has four tabs: Cases (filter All / Mutex / Semaphore / Queue),
+Timeline (non-overlapping raw-tick tracks), Events (bounded searchable event list),
+and Compare (second independent local capture). Selecting a case or event updates
+the **persistent right evidence inspector**, which displays callback assessment,
+linked records, raw ticks, byte offsets and recorded field values.
+
+For narrower windows the explorer and inspector stack vertically. The main
+navigation groups normalized-trace tools separately so those offline views
+cannot be mistaken for CTF findings. The native file picker does not upload
+the capture; the UI makes no unverified CPU load or causal claims.
