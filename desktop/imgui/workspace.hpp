@@ -128,7 +128,7 @@ class Workspace final {
     void draw_shared_events();
     void draw_shared_evidence();
     void draw_shared_findings();
-    void refresh_unified_view();
+    void refresh_unified_view(bool preserve_selection = false);
     void draw_ctf_overview();
     void draw_ctf_timeline();
     void draw_ctf_resources();
