@@ -695,19 +695,23 @@ void Workspace::draw_menus() {
         }
         ImGui::TextDisabled("Drag detached windows outside to another monitor.");
         ImGui::Separator();
-        ImGui::SeparatorText("CTF linked analysis windows");
-        if (ImGui::MenuItem("Detach resource explorer", nullptr, &ctf_explorer_detached_, ctf_.has_value() && active_adapter_ == SourceAdapter::Ctf))
-            page_ = Page::Ctf;
-        if (ImGui::MenuItem("Detach evidence inspector", nullptr, &ctf_inspector_detached_, ctf_.has_value() && active_adapter_ == SourceAdapter::Ctf))
-            page_ = Page::Ctf;
-        if (ImGui::MenuItem("Show scheduling / ISR analysis", nullptr, &ctf_scheduler_detached_, ctf_.has_value() && active_adapter_ == SourceAdapter::Ctf))
-            page_ = Page::Ctf;
-        if (ImGui::MenuItem("Restore embedded CTF panels", nullptr, false,
-                            ctf_explorer_detached_ || ctf_inspector_detached_ || ctf_scheduler_detached_)) {
+        ImGui::SeparatorText("Detachable common tools");
+        const bool has_evidence = unified_.adapter != AdapterKind::None;
+        if (ImGui::MenuItem("Detach resource explorer", nullptr,
+                            &ctf_explorer_detached_, has_evidence))
+            page_ = Page::Resources;
+        if (ImGui::MenuItem("Detach evidence inspector", nullptr,
+                            &ctf_inspector_detached_, has_evidence))
+            page_ = Page::Evidence;
+        if (ImGui::MenuItem("Detach scheduling timeline", nullptr,
+                            &ctf_scheduler_detached_, has_evidence))
+            page_ = Page::Timeline;
+        if (ImGui::MenuItem("Close detached common tools", nullptr, false,
+                            ctf_explorer_detached_ || ctf_inspector_detached_ ||
+                            ctf_scheduler_detached_)) {
             ctf_explorer_detached_ = false;
             ctf_inspector_detached_ = false;
             ctf_scheduler_detached_ = false;
-            page_ = Page::Ctf;
         }
         ImGui::Separator();
         if (ImGui::BeginMenu("Go to panel")) {
