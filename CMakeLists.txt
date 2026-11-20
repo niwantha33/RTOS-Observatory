@@ -277,7 +277,7 @@ if(OBSERVATORY_BUILD_DESKTOP)
   target_compile_features(rtos-observatory-desktop PRIVATE cxx_std_20)
   if(WIN32)
     # Native Windows folder picker used by the W20 CTF capture screen.
-    target_link_libraries(rtos-observatory-desktop PRIVATE ole32 uuid)
+    target_link_libraries(rtos-observatory-desktop PRIVATE ole32 uuid user32)
   endif()
   install(TARGETS rtos-observatory-desktop RUNTIME DESTINATION bin)
   # Explicit redistributable third-party notices for source/binary packaging.
