@@ -567,14 +567,10 @@ void Workspace::draw_menus() {
         return;
     if (ImGui::BeginMenu("File")) {
 #ifdef _WIN32
-        if (ImGui::MenuItem("Browse trace file...")) {
-            if (auto path = choose_native_file_or_folder(false))
-                (void)open_trace(*path, legacy_decoder_ ? "legacy-tsv" : "universal-v1");
-        }
-        if (ImGui::MenuItem("Browse saved session...")) {
-            if (auto path = choose_native_file_or_folder(true))
-                (void)open_session(*path);
-        }
+        if (ImGui::MenuItem("Import trace file..."))
+            request_source(ImportAdapter::NormalizedTrace);
+        if (ImGui::MenuItem("Import saved session..."))
+            request_source(ImportAdapter::SavedSession);
 #endif
         if (ImGui::MenuItem("Open trace..."))
             request_source(ImportAdapter::NormalizedTrace);
@@ -610,7 +606,8 @@ void Workspace::draw_menus() {
             ImGui::EndMenu();
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Export report...", nullptr, false, loaded()))
+        if (ImGui::MenuItem("Export report...", nullptr, false,
+                            active_adapter_ == SourceAdapter::Normalized && loaded()))
             export_dialog_requested_ = true;
         ImGui::Separator();
         if (ImGui::MenuItem("Exit"))
@@ -688,15 +685,15 @@ void Workspace::draw_menus() {
     if (ImGui::BeginMenu("Tools")) {
         const bool shared_loaded = loaded() ||
             (active_adapter_ == SourceAdapter::Ctf && ctf_.has_value());
-        if (ImGui::MenuItem("Fit full timeline", nullptr, false, loaded())) {
+        if (ImGui::MenuItem("Fit full timeline", nullptr, false, active_adapter_ == SourceAdapter::Normalized && loaded())) {
             fit();
             page_ = Page::Timeline;
         }
-        if (ImGui::MenuItem("Zoom in", nullptr, false, loaded())) {
+        if (ImGui::MenuItem("Zoom in", nullptr, false, active_adapter_ == SourceAdapter::Normalized && loaded())) {
             zoom(true);
             page_ = Page::Timeline;
         }
-        if (ImGui::MenuItem("Zoom out", nullptr, false, loaded())) {
+        if (ImGui::MenuItem("Zoom out", nullptr, false, active_adapter_ == SourceAdapter::Normalized && loaded())) {
             zoom(false);
             page_ = Page::Timeline;
         }
@@ -858,7 +855,7 @@ void Workspace::draw_source_dialog() {
     ImGui::InputTextWithHint("##source-path", folder ? "Folder" : "File",
                              import_path_.data(), import_path_.size());
 #ifdef _WIN32
-    if (ImGui::Button("Browse files...")) {
+    if (ImGui::Button(folder ? "Browse folder..." : "Browse file...")) {
         if (auto selected = choose_native_file_or_folder(folder))
             std::snprintf(import_path_.data(), import_path_.size(), "%s",
                           selected->c_str());
@@ -3555,7 +3552,9 @@ void Workspace::draw_ctf_tool(Page page) {
     if (!ctf_error_.empty())
         ImGui::TextWrapped("%s", ctf_error_.c_str());
     const auto name = file_path(ctf_active_directory_).filename().string();
-    ImGui::TextDisabled("Zephyr CTF / %s", name.c_str());
+    ImGui::TextDisabled("Active adapter: Zephyr CTF");
+    ImGui::SameLine();
+    ImGui::TextDisabled("(%s)", name.substr(0, 32).c_str());
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("%s", ctf_active_directory_.c_str());
     ImGui::Separator();
