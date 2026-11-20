@@ -628,6 +628,11 @@ void Workspace::draw_shared_tool(Page page) {
         if (ImGui::Button("Refresh capture"))
             follow_ctf();
     }
+    if (active_adapter_ == SourceAdapter::Live && !live_error_.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, .58f, .48f, 1.f));
+        ImGui::TextWrapped("Capture stopped: %s", live_error_.c_str());
+        ImGui::PopStyleColor();
+    }
     if (!unified_.evidence_warning.empty()) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.98f, .77f, .48f, 1.f));
         ImGui::TextWrapped("%s", unified_.evidence_warning.c_str());
