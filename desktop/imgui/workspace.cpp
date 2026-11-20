@@ -2162,6 +2162,7 @@ bool Workspace::open_ctf_directory(const std::string& path) {
         auto candidate=ctf::open(root,true);
         const auto total=std::filesystem::file_size(root/"channel0_0");
         ctf_=std::move(candidate);
+        ctf_compare_.reset(); // Comparison belongs to one specific primary capture.
         const auto utf8=root.u8string();
         ctf_active_directory_.assign(utf8.begin(),utf8.end());
         ctf_last_size_=total;
@@ -2174,6 +2175,10 @@ bool Workspace::open_ctf_directory(const std::string& path) {
     } catch(const std::exception& e) {
         ctf_error_=e.what();
         ctf_follow_=false;
+        ctf_.reset(); // Fail closed instead of displaying stale data under a new path.
+        ctf_compare_.reset();
+        ctf_active_directory_.clear();
+        ctf_last_size_=0;
         return false;
     }
 }
