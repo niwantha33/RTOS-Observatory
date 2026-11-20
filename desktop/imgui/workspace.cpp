@@ -33,7 +33,7 @@ std::filesystem::path file_path(const std::string& text) {
 }
 
 #ifdef _WIN32
-std::optional<std::string> choose_ctf_directory_native() {
+std::optional<std::string> choose_native_file_or_folder(bool folder) {
     const auto init=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
     if(FAILED(init) && init!=RPC_E_CHANGED_MODE) return std::nullopt;
     IFileOpenDialog* dlg=nullptr;
@@ -41,9 +41,12 @@ std::optional<std::string> choose_ctf_directory_native() {
     if(SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,
                                   IID_PPV_ARGS(&dlg))) && dlg) {
         DWORD flags{};
-        if(SUCCEEDED(dlg->GetOptions(&flags)))
-            (void)dlg->SetOptions(flags|FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST);
-        (void)dlg->SetTitle(L"Select Zephyr CTF capture folder");
+        if(SUCCEEDED(dlg->GetOptions(&flags))) {
+            const DWORD selection=folder ? FOS_PICKFOLDERS : FOS_FILEMUSTEXIST;
+            (void)dlg->SetOptions(flags|selection|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST);
+        }
+        (void)dlg->SetTitle(folder ? L"Select RTOS Observatory evidence folder" :
+                                      L"Select RTOS Observatory trace file");
         if(SUCCEEDED(dlg->Show(GetForegroundWindow()))) {
             IShellItem* item=nullptr;
             if(SUCCEEDED(dlg->GetResult(&item)) && item) {
@@ -68,6 +71,9 @@ std::optional<std::string> choose_ctf_directory_native() {
     }
     if(SUCCEEDED(init)) CoUninitialize();
     return result;
+}
+std::optional<std::string> choose_ctf_directory_native() {
+    return choose_native_file_or_folder(true);
 }
 #endif
 
@@ -501,6 +507,15 @@ void Workspace::zoom(bool in) {
 void Workspace::draw_menus() {
     if(!ImGui::BeginMenuBar()) return;
     if(ImGui::BeginMenu("File")) {
+#ifdef _WIN32
+        if(ImGui::MenuItem("Browse trace file...")) {
+            if(auto path=choose_native_file_or_folder(false))
+                (void)open_trace(*path,legacy_decoder_?"legacy-tsv":"universal-v1");
+        }
+        if(ImGui::MenuItem("Browse saved session...")) {
+            if(auto path=choose_native_file_or_folder(true))(void)open_session(*path);
+        }
+#endif
         if(ImGui::MenuItem("Open trace...")) pending_open_=OpenDialog::Trace;
         if(ImGui::MenuItem("Open saved session...")) pending_open_=OpenDialog::Session;
         if(ImGui::MenuItem("Open Zephyr CTF folder...")) page_=Page::Ctf;
@@ -668,6 +683,16 @@ void Workspace::draw_sidebar() {
         ImGui::SetNextItemWidth(-1);
         ImGui::InputText("##input_path",path_.data(),path_.size());
         ImGui::Checkbox("Legacy TSV",&legacy_decoder_);
+#ifdef _WIN32
+        if(ImGui::Button("Browse trace...")) {
+            if(auto selected=choose_native_file_or_folder(false))
+                (void)open_trace(*selected,legacy_decoder_?"legacy-tsv":"universal-v1");
+        }
+        if(ImGui::Button("Browse session...")) {
+            if(auto selected=choose_native_file_or_folder(true))
+                (void)open_session(*selected);
+        }
+#endif
         if(ImGui::Button("Open trace",ImVec2(-1,0)))
             (void)open_trace(path_.data(),legacy_decoder_?"legacy-tsv":"universal-v1");
         if(ImGui::Button("Open saved session",ImVec2(-1,0)))
