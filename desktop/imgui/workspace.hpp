@@ -119,6 +119,7 @@ private:
     std::array<char,128> ctf_filter_{};
     std::string ctf_active_directory_;
     std::string ctf_error_;
+    std::size_t ctf_kind_filter_{}; // 0=all, 1=mutex, 2=semaphore, 3=queue
     std::size_t ctf_selected_finding_{};
     std::size_t ctf_selected_event_{};
     std::uintmax_t ctf_last_size_{};
