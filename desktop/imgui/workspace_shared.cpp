@@ -131,12 +131,11 @@ void Workspace::draw_shared_timeline() {
     }
     std::uint64_t first = data.spans.front().start;
     std::uint64_t last = data.spans.front().end;
-    std::map<std::string, std::vector<const ToolSpan *>> lanes;
+    const auto &lanes = data.lane_index; // indexed once when capture loads
     for (const auto &span : data.spans) {
         if (span.end < span.start) continue;
         first = std::min(first, span.start);
         last = std::max(last, span.end);
-        lanes[span.lane].push_back(&span);
     }
     if (lanes.empty()) {
         ImGui::TextDisabled("No valid intervals.");
@@ -184,7 +183,8 @@ void Workspace::draw_shared_timeline() {
                 const auto offset = tick >= first ? tick - first : 0;
                 return p0.x + static_cast<float>(static_cast<double>(offset) / range) * width;
             };
-            for (const auto *s : segments) {
+            for (const auto index : segments) {
+                const auto *s = &data.spans[index];
                 const auto left = x_position(s->start);
                 const auto right = std::min(p1.x, std::max(left + 3.f, x_position(s->end)));
                 draw->AddRectFilled(ImVec2(left, p0.y + 6.f),
@@ -319,14 +319,7 @@ void Workspace::draw_shared_events() {
         ImGui::TextDisabled("No recorded events available.");
         return;
     }
-    std::map<std::string, std::size_t> frequency;
-    for (const auto &event : data.events)
-        ++frequency[event.title];
-    std::vector<std::pair<std::string, std::size_t>> sorted(
-        frequency.begin(), frequency.end());
-    std::sort(sorted.begin(), sorted.end(), [](const auto &a, const auto &b) {
-        return a.second > b.second;
-    });
+    const auto &sorted = data.event_distribution;
     if (!sorted.empty()) {
         ImGui::SeparatorText("Recorded event categories");
         const auto peak = sorted.front().second;
@@ -342,10 +335,15 @@ void Workspace::draw_shared_events() {
     ImGui::InputTextWithHint("##unified-event-query", "Filter callback names",
                              shared_filter_.data(), shared_filter_.size());
     const auto query = ascii_lower(shared_filter_.data());
-    std::vector<std::size_t> matches;
-    for (std::size_t i = 0; i < data.events.size(); ++i)
-        if (query.empty() || ascii_lower(data.events[i].title).find(query) != std::string::npos)
-            matches.push_back(i);
+    if (query != shared_cached_filter_) {
+        shared_cached_filter_ = query;
+        shared_filtered_events_.clear();
+        for (std::size_t i = 0; i < data.events.size(); ++i)
+            if (query.empty() ||
+                ascii_lower(data.events[i].title).find(query) != std::string::npos)
+                shared_filtered_events_.push_back(i);
+    }
+    const auto &matches = shared_filtered_events_;
     if (ImGui::BeginTable("unified-event-browser", 3,
             ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable |
             ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersInnerV,
