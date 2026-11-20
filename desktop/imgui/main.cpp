@@ -127,6 +127,9 @@ int main(int argc, char **argv) {
     bool smoke_live = false;
     bool smoke_ctf = false;
     bool smoke_ctf_detached = false;
+    bool smoke_ctf_timeline = false;
+    bool smoke_ctf_resources = false;
+    bool smoke_ctf_graph = false;
     std::string ctf_directory_path;
     std::string live_binary_path;
     std::string snapshot_path;
@@ -302,11 +305,16 @@ int main(int argc, char **argv) {
     }
     if (argc >= 3 &&
         (std::string_view(argv[1]) == "--ctf" || std::string_view(argv[1]) == "--smoke-ui-ctf" ||
-         std::string_view(argv[1]) == "--smoke-ui-ctf-docking")) {
+         std::string_view(argv[1]) == "--smoke-ui-ctf-docking" ||
+         std::string_view(argv[1]) == "--smoke-ui-ctf-timeline" ||
+         std::string_view(argv[1]) == "--smoke-ui-ctf-resources" ||
+         std::string_view(argv[1]) == "--smoke-ui-ctf-graph")) {
         ctf_directory_path = argv[2];
-        smoke_ctf = std::string_view(argv[1]) == "--smoke-ui-ctf" ||
-                    std::string_view(argv[1]) == "--smoke-ui-ctf-docking";
+        smoke_ctf = std::string_view(argv[1]).starts_with("--smoke-ui-ctf");
         smoke_ctf_detached = std::string_view(argv[1]) == "--smoke-ui-ctf-docking";
+        smoke_ctf_timeline = std::string_view(argv[1]) == "--smoke-ui-ctf-timeline";
+        smoke_ctf_resources = std::string_view(argv[1]) == "--smoke-ui-ctf-resources";
+        smoke_ctf_graph = std::string_view(argv[1]) == "--smoke-ui-ctf-graph";
         smoke_ui = smoke_ctf;
     } else if (argc >= 3 && (std::string_view(argv[1]) == "--live" ||
                              std::string_view(argv[1]) == "--smoke-ui-live")) {
@@ -406,6 +414,12 @@ int main(int argc, char **argv) {
         workspace.show_live_trace();
     if (smoke_ctf)
         workspace.show_ctf();
+    if (smoke_ctf_timeline)
+        workspace.show_timeline();
+    if (smoke_ctf_resources)
+        workspace.show_resources();
+    if (smoke_ctf_graph)
+        workspace.show_graph();
     if (smoke_ctf_detached)
         workspace.show_ctf_detached_smoke();
     if (smoke_bridge)
