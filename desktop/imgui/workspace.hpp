@@ -14,6 +14,8 @@
 #include "observatory/timeline.hpp"
 #include "observatory/zephyr_ctf.hpp"
 #include "observatory/ctf_analysis.hpp"
+#include "observatory/desktop/unified_view.hpp"
+#include "observatory/desktop/ui_layout.hpp"
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -116,6 +118,14 @@ class Workspace final {
     void request_source(ImportAdapter adapter);
     void draw_source_dialog();
     void draw_ctf_tool(Page page);
+    void draw_shared_tool(Page page);
+    void draw_shared_dashboard();
+    void draw_shared_timeline();
+    void draw_shared_resources();
+    void draw_shared_events();
+    void draw_shared_evidence();
+    void draw_shared_findings();
+    void refresh_unified_view();
     void draw_ctf_overview();
     void draw_ctf_timeline();
     void draw_ctf_resources();
@@ -171,6 +181,9 @@ class Workspace final {
     std::optional<FaultView> fault_view_;
     std::optional<LiveSession> live_session_;
     std::optional<ctf::Session> ctf_;
+    ToolSummary unified_;
+    std::optional<std::size_t> shared_selected_event_;
+    std::optional<std::size_t> shared_selected_case_;
     std::optional<ctf::AnalysisIndex> ctf_analysis_;
     bool ctf_explorer_detached_{};
     bool ctf_inspector_detached_{};
@@ -231,7 +244,7 @@ class Workspace final {
     bool legacy_decoder_{};
     bool show_sidebar_{true};
     bool compact_spacing_{};
-    float ui_scale_{1.0f};
+    float ui_scale_{1.2f}; // accessible by default, DPI applied by GLFW host
     SourceAdapter active_adapter_{SourceAdapter::None};
     ImportAdapter import_adapter_{ImportAdapter::ZephyrCtf};
     bool source_dialog_requested_{};
