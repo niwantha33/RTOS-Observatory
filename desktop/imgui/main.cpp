@@ -442,6 +442,11 @@ int main(int argc, char **argv) {
     io.IniFilename = nullptr; // No user profile or trace identity persisted without consent.
     dark_style();
     const std::string font_name = setup_fonts(window);
+    const ImGuiStyle initial_style = ImGui::GetStyle();
+    float original_dpi_x = 1.f, original_dpi_y = 1.f;
+    glfwGetWindowContentScale(window, &original_dpi_x, &original_dpi_y);
+    const float original_dpi = std::max(.5f, std::max(original_dpi_x, original_dpi_y));
+    float applied_scale = 1.f;
     if (!ImGui_ImplGlfw_InitForOpenGL(window, true)) {
         std::fputs("ImGui GLFW backend initialization failed\n", stderr);
         ImGui::DestroyContext();
@@ -463,6 +468,20 @@ int main(int argc, char **argv) {
         if (!smoke_ui && glfwGetWindowAttrib(window, GLFW_ICONIFIED)) {
             glfwWaitEventsTimeout(.05);
             continue;
+        }
+        // Keep font, padding and interaction targets in step with DPI and the
+        // user's accessibility scale. Recompute from the pristine style to
+        // avoid cumulative scaling during resize or monitor changes.
+        float dpi_x = 1.f, dpi_y = 1.f;
+        glfwGetWindowContentScale(window, &dpi_x, &dpi_y);
+        const float dpi_factor = std::max(.5f, std::max(dpi_x, dpi_y)) / original_dpi;
+        const float requested_scale = std::clamp(
+            dpi_factor * workspace.ui_scale(), .75f, 2.5f);
+        if (std::abs(requested_scale - applied_scale) > .01f) {
+            ImGui::GetStyle() = initial_style;
+            ImGui::GetStyle().ScaleAllSizes(requested_scale);
+            io.FontGlobalScale = requested_scale;
+            applied_scale = requested_scale;
         }
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
