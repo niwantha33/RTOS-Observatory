@@ -116,6 +116,7 @@ class Workspace final {
     };
     enum class OpenDialog { None, Trace, Session };
     enum class SourceAdapter { None, Normalized, Ctf, Live };
+    enum class WorkspaceTab { Analysis, Adapters };
     enum class ImportAdapter { ZephyrCtf, NormalizedTrace, SavedSession, BinarySpool };
     void request_source(ImportAdapter adapter);
     void draw_source_dialog();
@@ -143,6 +144,7 @@ class Workspace final {
     void update_causality();
     void rebuild_event_filter();
     void draw_sidebar();
+    void draw_adapters_tab();
     void draw_overview();
     void draw_timeline();
     void draw_cpu();
@@ -250,7 +252,10 @@ class Workspace final {
     bool legacy_decoder_{};
     bool show_sidebar_{true};
     bool compact_spacing_{};
-    float ui_scale_{1.2f}; // accessible by default, DPI applied by GLFW host
+    float ui_scale_{1.0f}; // 75%-220%, DPI applied by GLFW host
+    WorkspaceTab workspace_tab_{WorkspaceTab::Analysis};
+    bool select_adapters_tab_{};
+    bool select_analysis_tab_{};
     SourceAdapter active_adapter_{SourceAdapter::None};
     ImportAdapter import_adapter_{ImportAdapter::ZephyrCtf};
     bool source_dialog_requested_{};
