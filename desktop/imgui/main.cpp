@@ -480,7 +480,7 @@ int main(int argc, char **argv) {
         if (std::abs(requested_scale - applied_scale) > .01f) {
             ImGui::GetStyle() = initial_style;
             ImGui::GetStyle().ScaleAllSizes(requested_scale);
-            io.FontGlobalScale = requested_scale;
+            ImGui::GetStyle().FontScaleMain = requested_scale;
             applied_scale = requested_scale;
         }
         ImGui_ImplOpenGL3_NewFrame();
