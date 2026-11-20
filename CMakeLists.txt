@@ -275,6 +275,10 @@ if(OBSERVATORY_BUILD_DESKTOP)
   target_link_libraries(rtos-observatory-desktop PRIVATE
     observatory_desktop_model observatory_imgui observatory_target_wire)
   target_compile_features(rtos-observatory-desktop PRIVATE cxx_std_20)
+  if(WIN32)
+    # Native Windows folder picker used by the W20 CTF capture screen.
+    target_link_libraries(rtos-observatory-desktop PRIVATE ole32 uuid)
+  endif()
   install(TARGETS rtos-observatory-desktop RUNTIME DESTINATION bin)
   # Explicit redistributable third-party notices for source/binary packaging.
   install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE
