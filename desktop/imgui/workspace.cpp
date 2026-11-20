@@ -2491,7 +2491,9 @@ bool Workspace::open_ctf_directory(const std::string &path) {
         const auto root = resolve_ctf_root(file_path(path));
         auto candidate = ctf::open(root, true);
         const auto total = std::filesystem::file_size(root / "channel0_0");
+        auto index = ctf::build_analysis_index(candidate);
         ctf_ = std::move(candidate);
+        ctf_analysis_ = std::move(index);
         ctf_compare_.reset(); // Comparison belongs to one specific primary capture.
         const auto utf8 = root.u8string();
         ctf_active_directory_.assign(utf8.begin(), utf8.end());
@@ -2509,6 +2511,7 @@ bool Workspace::open_ctf_directory(const std::string &path) {
         ctf_error_ = e.what();
         ctf_follow_ = false;
         ctf_.reset(); // Fail closed instead of displaying stale data under a new path.
+        ctf_analysis_.reset();
         ctf_compare_.reset();
         ctf_active_directory_.clear();
         ctf_last_size_ = 0;
@@ -2548,7 +2551,9 @@ void Workspace::follow_ctf() {
         if (updated.events.size() < ctf_->events.size())
             throw Error("CTF event history changed; stopped following");
         // This is a local growing-file poll, not a probe/transport connection.
+        auto index = ctf::build_analysis_index(updated);
         ctf_ = std::move(updated);
+        ctf_analysis_ = std::move(index);
         ctf_last_size_ = size;
         ctf_selected_event_ = std::min(ctf_selected_event_, ctf_->events.size() - 1);
         if (!ctf_->findings.empty())
