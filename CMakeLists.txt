@@ -41,6 +41,13 @@ add_executable(rtos-observatory src/main.cpp)
 target_link_libraries(rtos-observatory PRIVATE observatory_core)
 if(OBSERVATORY_BUILD_TESTS)
   enable_testing()
+  add_executable(observatory_shared_adapter_tests tests/test_shared_adapter_view.cpp)
+  target_link_libraries(observatory_shared_adapter_tests PRIVATE
+    observatory_core observatory_target_wire)
+  target_include_directories(observatory_shared_adapter_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/firmware)
+  target_compile_features(observatory_shared_adapter_tests PRIVATE cxx_std_20)
+  add_test(NAME observatory_shared_adapter_and_layout COMMAND observatory_shared_adapter_tests)
   add_executable(observatory_ctf_analysis_tests tests/test_ctf_analysis.cpp)
   target_link_libraries(observatory_ctf_analysis_tests PRIVATE observatory_core)
   add_test(NAME observatory_w20_ctf_cross_analysis COMMAND observatory_ctf_analysis_tests)
