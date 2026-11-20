@@ -243,7 +243,7 @@ void Workspace::draw_shared_graph() {
             ImGui::TextWrapped("%s: %s", item.kind.c_str(), item.title.c_str());
             ImGui::ProgressBar(1.f, ImVec2(-1.f, em * 1.1f),
                                (std::to_string(item.end - item.start) +
-                                " observed ticks / units").c_str());
+                                " " + clock_unit(data.unit)).c_str());
             if (ImGui::Button("Inspect interval")) {
                 shared_selected_case_ = i;
                 page_ = Page::Resources;
@@ -651,6 +651,20 @@ void Workspace::draw_shared_tool(Page page) {
         draw_shared_timeline();
         break;
     case Page::Resources: draw_shared_resources(); break;
+    case Page::Graph:
+        draw_shared_graph();
+        if (active_adapter_ == SourceAdapter::Normalized &&
+            ImGui::CollapsingHeader("Advanced normalized causal graph"))
+            draw_graph();
+        break;
+    case Page::Replay:
+        ImGui::TextDisabled("Recorded event order only. No missing RTOS state inferred.");
+        draw_shared_evidence();
+        break;
+    case Page::Causality:
+        ImGui::TextDisabled("Correlation does not prove causality or deadlock.");
+        draw_shared_graph();
+        break;
     case Page::Events: draw_shared_events(); break;
     case Page::Findings: draw_shared_findings(); break;
     case Page::Evidence: draw_shared_evidence(); break;
