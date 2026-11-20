@@ -251,6 +251,43 @@ void find_resources(Session& s) {
                 finding.assessment+=" Blocked-to-ready "+std::to_string(r.tick-block.tick)+
                     " ticks, ready-to-completion "+std::to_string(v[*finish].tick-r.tick)+" ticks.";
         }
+        // W20: Only complete, same-actor callback pairs within the candidate
+        // holder interval may establish a bounded temporal overlap. This never
+        // establishes CPU residency, priority inheritance, or causal identity.
+        if(kind=="Mutex" && owner && associated && ready && finish &&
+           v[*ready].tick>=block.tick && v[*associated].tick>=block.tick) {
+            std::optional<std::size_t> busy_begin;
+            std::vector<std::size_t> callbacks;
+            bool ambiguous=false;
+            std::uint64_t overlap=0;
+            const auto deadline=v[*ready].tick;
+            for(std::size_t j=*owner+1;j<*associated;++j) {
+                if(!same_actor(v[j],v[*owner]))continue;
+                if(v[j].name=="thread_busy_wait_enter") {
+                    if(busy_begin){ambiguous=true;break;}
+                    busy_begin=j;
+                }else if(v[j].name=="thread_busy_wait_exit") {
+                    if(!busy_begin || v[j].tick<v[*busy_begin].tick){ambiguous=true;break;}
+                    const auto left=std::max(v[*busy_begin].tick,block.tick);
+                    const auto right=std::min(v[j].tick,deadline);
+                    if(right>left){
+                        overlap+=right-left;
+                        callbacks.push_back(*busy_begin);
+                        callbacks.push_back(j);
+                    }
+                    busy_begin.reset();
+                }
+            }
+            if(busy_begin)ambiguous=true;
+            if(!ambiguous && overlap>0 && overlap<=deadline-block.tick) {
+                finding.assessment+=" Candidate holder busy-wait callback overlap: "+
+                    std::to_string(overlap)+" / "+std::to_string(deadline-block.tick)+
+                    " raw ticks within waiter blocked-to-ready; NOT CPU load or proven cause.";
+                finding.evidence.insert(finding.evidence.end(),callbacks.begin(),callbacks.end());
+                std::sort(finding.evidence.begin(),finding.evidence.end());
+                finding.evidence.erase(std::unique(finding.evidence.begin(),finding.evidence.end()),finding.evidence.end());
+            }
+        }
         s.findings.push_back(std::move(finding));
         if(s.findings.size()>10000)throw std::runtime_error("W20 resource finding limit");
     }
