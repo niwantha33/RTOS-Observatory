@@ -657,9 +657,17 @@ void Workspace::draw_menus() {
     if (ImGui::BeginMenu("Settings")) {
         ImGui::MenuItem("Use legacy TSV format", nullptr, &legacy_decoder_);
         ImGui::MenuItem("Compact spacing", nullptr, &compact_spacing_);
-        ImGui::SliderFloat("Text / UI size", &ui_scale_, .85f, 1.8f, "%.2fx");
-        if (ImGui::MenuItem("Reset text size"))
+        ImGui::SeparatorText("ACCESSIBILITY / FONT");
+        ImGui::SliderFloat("Text + controls", &ui_scale_, 1.0f, 2.2f, "%.2fx");
+        if (ImGui::MenuItem("Comfortable text (120%)"))
+            ui_scale_ = 1.2f;
+        if (ImGui::MenuItem("Large text (150%)"))
+            ui_scale_ = 1.5f;
+        if (ImGui::MenuItem("Very large text (180%)"))
+            ui_scale_ = 1.8f;
+        if (ImGui::MenuItem("Default text size (100%)"))
             ui_scale_ = 1.f;
+        ImGui::TextDisabled("Use Ctrl+Plus / Ctrl+Minus to zoom.");
         ImGui::TextDisabled("Window resize and display scaling are automatic");
         ImGui::EndMenu();
     }
@@ -936,8 +944,8 @@ void Workspace::draw_source_dialog() {
 
 void Workspace::draw_sidebar() {
     const float footer_height = ImGui::GetTextLineHeightWithSpacing() + 14.f;
-    const float width = std::clamp(ImGui::GetContentRegionAvail().x * .22f,
-                                   195.f, 285.f);
+    const float width = plan_layout(ImGui::GetContentRegionAvail().x,
+                                    ImGui::GetFontSize()).sidebar_width;
     ImGui::BeginChild("Navigation", ImVec2(width, -footer_height),
                       ImGuiChildFlags_Borders);
     ImGui::TextColored(ImVec4(.75f, .87f, .99f, 1.f), "RTOS OBSERVATORY");
@@ -3784,8 +3792,8 @@ void Workspace::draw() {
     ImGui::Begin("RTOS Observatory", nullptr, flags);
     draw_menus();
     const float workspace_width = ImGui::GetContentRegionAvail().x;
-    const bool sidebar_fits = show_sidebar_ &&
-        workspace_width >= std::max(680.f, 680.f * ui_scale_);
+    const bool sidebar_fits =
+        plan_layout(workspace_width, ImGui::GetFontSize(), show_sidebar_).show_sidebar;
     if (sidebar_fits) {
         draw_sidebar();
         ImGui::SameLine();
@@ -3796,7 +3804,8 @@ void Workspace::draw() {
             request_source(active_adapter_ == SourceAdapter::Ctf
                            ? ImportAdapter::ZephyrCtf
                            : ImportAdapter::NormalizedTrace);
-        ImGui::SameLine();
+        if (workspace_width >= 35.f * ImGui::GetFontSize())
+            ImGui::SameLine();
         constexpr const char *compact_pages[] = {
             "Dashboard", "Timeline", "CPU / scheduling", "Evidence relationships",
             "Time-travel / order", "Scheduling / ISR", "Resource objects",
@@ -3804,7 +3813,7 @@ void Workspace::draw() {
             "Debugger lifecycle", "Snapshot receipts", "Live event epochs",
             "Events", "Findings", "Evidence inspector", "CTF explorer"
         };
-        ImGui::SetNextItemWidth(std::max(140.f, ImGui::GetContentRegionAvail().x));
+        ImGui::SetNextItemWidth(-1.f);
         if (ImGui::BeginCombo("##compact-tool", compact_pages[static_cast<int>(page_)])) {
             for (int k = 0; k < 16; ++k) {
                 if (ImGui::Selectable(compact_pages[k], static_cast<int>(page_) == k))
