@@ -19,7 +19,11 @@ int main() {
     assert(plan_layout(800.f, 25.f).content_width >= 0.f);
     assert(plan_layout(800.f, 25.f, false).sidebar_width == 0.f);
     assert(clamp_text_zoom(100.f) == 2.2f);
-    assert(clamp_text_zoom(-10.f) == 1.f);
+    assert(clamp_text_zoom(-10.f) == 0.75f);
+    assert(clamp_text_zoom(.75f) == .75f);
+    assert(clamp_text_zoom(.9f) == .9f);
+    assert(clamp_text_zoom(1.0f) == 1.f);
+    assert(clamp_text_zoom(NAN) == 1.f);
 
     Capture capture;
     capture.session = "normalized";
