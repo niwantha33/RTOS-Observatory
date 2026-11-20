@@ -184,6 +184,7 @@ class Workspace final {
     ToolSummary unified_;
     std::optional<std::size_t> shared_selected_event_;
     std::optional<std::size_t> shared_selected_case_;
+    std::array<char, 128> shared_filter_{};
     std::optional<ctf::AnalysisIndex> ctf_analysis_;
     bool ctf_explorer_detached_{};
     bool ctf_inspector_detached_{};
