@@ -1013,7 +1013,7 @@ void Workspace::draw_sidebar() {
     nav(Page::Events, "Events");
     nav(Page::Findings, "Findings");
     nav(Page::Evidence, "Evidence inspector");
-    if (ImGui::CollapsingHeader("Advanced", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Advanced")) {
         ImGui::Indent();
         nav(Page::Causality, "Causal diagnostics");
         nav(Page::Replay, "Replay / event order");
@@ -3899,7 +3899,11 @@ void Workspace::draw() {
     select_analysis_tab_ = false;
     select_adapters_tab_ = false;
     if (workspace_tab_ == WorkspaceTab::Adapters) {
+        const float footer = ImGui::GetTextLineHeightWithSpacing() + 14.f;
+        ImGui::BeginChild("Adapter catalogue scroll", ImVec2(0.f, -footer),
+                          ImGuiChildFlags_None);
         draw_adapters_tab();
+        ImGui::EndChild();
     } else {
     const float workspace_width = ImGui::GetContentRegionAvail().x;
     const bool sidebar_fits =
