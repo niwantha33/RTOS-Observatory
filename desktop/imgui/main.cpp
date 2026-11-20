@@ -27,8 +27,8 @@ void dark_style() {
     ImGui::StyleColorsDark();
     auto& style=ImGui::GetStyle();
     style.WindowPadding=ImVec2(16.f,14.f);
-    style.FramePadding=ImVec2(10.f,7.f);
-    style.ItemSpacing=ImVec2(10.f,9.f);
+    style.FramePadding=ImVec2(9.f,6.f);
+    style.ItemSpacing=ImVec2(9.f,7.f);
     style.ItemInnerSpacing=ImVec2(8.f,6.f);
     style.WindowRounding=9.f;
     style.ChildRounding=9.f;
@@ -52,9 +52,9 @@ void dark_style() {
     c[ImGuiCol_Header]=ImVec4(.16f,.34f,.54f,.70f);
     c[ImGuiCol_HeaderHovered]=ImVec4(.20f,.41f,.64f,.86f);
     c[ImGuiCol_HeaderActive]=ImVec4(.22f,.45f,.69f,.93f);
-    c[ImGuiCol_Button]=ImVec4(.16f,.36f,.60f,1.f);
-    c[ImGuiCol_ButtonHovered]=ImVec4(.22f,.45f,.71f,1.f);
-    c[ImGuiCol_ButtonActive]=ImVec4(.16f,.36f,.61f,1.f);
+    c[ImGuiCol_Button]=ImVec4(.16f,.28f,.42f,1.f);
+    c[ImGuiCol_ButtonHovered]=ImVec4(.22f,.39f,.57f,1.f);
+    c[ImGuiCol_ButtonActive]=ImVec4(.24f,.44f,.64f,1.f);
     c[ImGuiCol_TitleBgActive]=ImVec4(.075f,.11f,.16f,1.f);
     c[ImGuiCol_TableRowBgAlt]=ImVec4(.12f,.16f,.21f,.35f);
     c[ImGuiCol_Separator]=ImVec4(.24f,.31f,.40f,.70f);
