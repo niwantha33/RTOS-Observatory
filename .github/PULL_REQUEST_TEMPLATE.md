@@ -8,6 +8,12 @@ Bug issue(s) (if any): #
 
 Describe the source/config changes and explicitly list out-of-scope features.
 
+## Public repository privacy check
+
+- [ ] Only material explicitly approved for public release is included.
+- [ ] No confidential product concepts, non-public research, credentials, personal/customer data, source dumps, or unredacted logs are included in commits, PR text or attachments.
+- [ ] Synthetic or sanitised fixtures are used; no private files staged or force-added despite `.gitignore`.
+
 ## Validation
 
 - [ ] Native build and CTest on supported host(s) (include OS/compiler/result)
