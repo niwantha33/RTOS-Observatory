@@ -2,6 +2,7 @@
 #pragma once
 #include "observatory/desktop/timeline_navigation.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -38,11 +39,15 @@ struct TimelineCursorPoint {
     std::optional<std::size_t> event_index;
     bool snapped{};
 };
+// A1/A2 and B1/B2 form independent measurement pairs.
+inline constexpr std::array<const char *, 4> timeline_cursor_labels{
+    "A1", "A2", "B1", "B2"
+};
 struct TimelineMeasurement {
     bool enabled{};
     bool snap{true};
-    int selected{}; // 0 = A; 1 = B
-    std::optional<TimelineCursorPoint> a, b;
+    int selected{}; // 0=A1, 1=A2, 2=B1, 3=B2
+    std::array<std::optional<TimelineCursorPoint>, 4> points{};
 };
 inline std::uint64_t timeline_tick_at_fraction(const TimelineViewport &view,
                                                 double fraction) noexcept {
@@ -65,10 +70,50 @@ inline std::uint64_t timeline_tick_distance(std::uint64_t a,
     return a >= b ? a - b : b - a;
 }
 inline std::optional<std::uint64_t> timeline_cursor_delta(
-    const TimelineMeasurement &measurement) noexcept {
-    if (!measurement.a || !measurement.b)
+    const TimelineMeasurement &measurement, int pair = 0) noexcept {
+    if (pair < 0 || pair > 1)
         return std::nullopt;
-    return timeline_tick_distance(measurement.a->tick, measurement.b->tick);
+    const auto &first = measurement.points[static_cast<std::size_t>(pair * 2)];
+    const auto &last = measurement.points[static_cast<std::size_t>(pair * 2 + 1)];
+    if (!first || !last)
+        return std::nullopt;
+    return timeline_tick_distance(first->tick, last->tick);
+}
+
+// Exact, non-overlapping active spans for an observed digital activity waveform.
+// Missing time between spans is NOT evidence of Ready/Sleeping/Idle state.
+struct TimelineWaveInterval {
+    std::uint64_t start{};
+    std::uint64_t end{};
+};
+inline std::vector<TimelineWaveInterval> timeline_waveform_intervals(
+    const std::vector<TimelineWaveInterval> &observed,
+    std::uint64_t visible_start, std::uint64_t visible_end) {
+    std::vector<TimelineWaveInterval> result;
+    if (visible_end <= visible_start)
+        return result;
+    result.reserve(observed.size());
+    for (const auto &span : observed) {
+        if (span.end <= span.start || span.end <= visible_start ||
+            span.start >= visible_end)
+            continue;
+        result.push_back({std::max(span.start, visible_start),
+                          std::min(span.end, visible_end)});
+    }
+    std::sort(result.begin(), result.end(),
+              [](const auto &a, const auto &b) {
+                  return a.start < b.start ||
+                         (a.start == b.start && a.end < b.end);
+              });
+    std::size_t merged = 0;
+    for (const auto &span : result) {
+        if (merged && span.start <= result[merged - 1].end)
+            result[merged - 1].end = std::max(result[merged - 1].end, span.end);
+        else
+            result[merged++] = span;
+    }
+    result.resize(merged);
+    return result;
 }
 
 // Source/event indices are sorted once at import; hover/drag is logarithmic.
@@ -115,16 +160,22 @@ inline TimelineCursorPoint timeline_snap_tick(
 }
 inline void timeline_set_cursor(TimelineMeasurement &measurement, int which,
                                 TimelineCursorPoint value) noexcept {
-    if (which == 0) {
-        measurement.a = value;
-        if (!measurement.b) measurement.selected = 1;
-    } else {
-        measurement.b = value;
+    if (which < 0 || which >= static_cast<int>(measurement.points.size()))
+        return;
+    measurement.points[static_cast<std::size_t>(which)] = value;
+    // Cycle to the next unset handle; retain the selected handle when dragging.
+    if (measurement.selected == which) {
+        for (int step = 1; step <= 4; ++step) {
+            const int next = (which + step) % 4;
+            if (!measurement.points[static_cast<std::size_t>(next)]) {
+                measurement.selected = next;
+                break;
+            }
+        }
     }
 }
 inline void timeline_clear_cursors(TimelineMeasurement &measurement) noexcept {
-    measurement.a.reset();
-    measurement.b.reset();
+    measurement.points.fill(std::nullopt);
     measurement.selected = 0;
 }
 } // namespace observatory::desktop
