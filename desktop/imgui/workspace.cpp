@@ -1114,7 +1114,11 @@ void Workspace::draw_sidebar() {
 
 void Workspace::draw_adapters_tab() {
     ImGui::TextColored(ImVec4(.75f, .87f, .99f, 1.f), "DATA ADAPTERS");
-    ImGui::TextWrapped("Choose an existing source format, browse a local file or folder, then Apply.");
+    ImGui::TextWrapped("Select an adapter to connect, import or change the current source.");
+    const char *active_name = active_adapter_ == SourceAdapter::Ctf ? "Zephyr CTF"
+        : active_adapter_ == SourceAdapter::Normalized ? "Universal trace / session"
+        : active_adapter_ == SourceAdapter::Live ? "Binary spool" : "None";
+    ImGui::TextDisabled("Active source: %s", active_name);
     ImGui::Spacing();
     const int columns = ImGui::GetContentRegionAvail().x >= ImGui::GetFontSize() * 54.f ? 2 : 1;
     const auto card = [this](ImportAdapter adapter, const char *name,
@@ -3943,13 +3947,9 @@ void Workspace::draw_analysis_controls() {
         : active_adapter_ == SourceAdapter::Normalized ? "Universal trace"
         : active_adapter_ == SourceAdapter::Live ? "Binary spool"
         : "No source";
+    // Keep the inspector focused on graphical controls. Source selection and
+    // imports belong solely to the Adapters workspace.
     ImGui::TextDisabled("Source: %s", source);
-    if (ImGui::Button("Open / change source", ImVec2(-1.f, 0.f)))
-        request_source(import_adapter_);
-    if (ImGui::Button("Browse adapters", ImVec2(-1.f, 0.f))) {
-        workspace_tab_ = WorkspaceTab::Adapters;
-        select_adapters_tab_ = true;
-    }
 
     if (page_ == Page::Timeline && unified_.adapter != AdapterKind::None) {
         ImGui::SeparatorText("TIME & MEASUREMENT");
