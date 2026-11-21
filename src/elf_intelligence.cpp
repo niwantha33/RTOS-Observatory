@@ -45,7 +45,7 @@ struct Reader {
 
 struct Section {
     std::uint32_t name{}, type{}, link{};
-    std::uint64_t offset{}, size{}, entry_size{};
+    std::uint64_t offset{}, size{}, entry_size{}, flags{};
 };
 std::string text_at(const Reader& r, const Section& table,
                     std::uint64_t offset, std::size_t max_name) {
@@ -181,6 +181,7 @@ ElfImage parse_elf_image(const std::vector<std::uint8_t>& bytes, ElfLimits limit
         Section sec;
         sec.name = r.u32(at);
         sec.type = r.u32(at + 4);
+        sec.flags = is64 ? r.u64(at + 8) : r.u32(at + 8);
         sec.offset = is64 ? r.u64(at + 24) : r.u32(at + 16);
         sec.size = is64 ? r.u64(at + 32) : r.u32(at + 20);
         sec.link = r.u32(at + (is64 ? 40 : 24));
@@ -225,7 +226,12 @@ ElfImage parse_elf_image(const std::vector<std::uint8_t>& bytes, ElfLimits limit
             const auto type = info & 0x0fu;
             const auto shndx = r.u16(at + (is64 ? 6 : 14));
             if ((type != STT_FUNC && type != STT_GNU_IFUNC) ||
-                shndx == SHN_UNDEF || name == 0)
+                shndx == SHN_UNDEF || name == 0 || shndx >= 0xff00u)
+                continue;
+            if (shndx >= sections.size())
+                throw Error("ELF: function has invalid section index");
+            // STT_FUNC is a declaration, not proof of executable section residency.
+            if ((sections[shndx].flags & 0x4u) == 0)
                 continue;
             const auto address = is64 ? r.u64(at + 8) : r.u32(at + 4);
             const auto size = is64 ? r.u64(at + 16) : r.u32(at + 8);
