@@ -550,9 +550,12 @@ void Workspace::draw_shared_timeline() {
             for (const auto index : segments) {
                 if (index >= data.spans.size()) continue;
                 const auto &span = data.spans[index];
-                if (span.end <= span.start || span.start < first || span.end < first)
+                if (span.end < span.start || span.start < first || span.end < first)
                     continue;
-                if (digital) digital_spans.push_back({span.start, span.end});
+                // Keep instantaneous source markers visible, but never draw
+                // a nonzero digital activity interval for a zero-duration span.
+                if (digital && span.end > span.start)
+                    digital_spans.push_back({span.start, span.end});
                 const double a = static_cast<double>(span.start - first);
                 const double b = static_cast<double>(span.end - first);
                 if (b < display_start || a > display_end) continue;
