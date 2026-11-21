@@ -172,7 +172,7 @@ void Workspace::draw_shared_timeline() {
         };
         ImGui::SetNextItemWidth(205.f);
         ImGui::Combo("Timestamp source", &timeline_clock_source_,
-                     clock_sources, static_cast<int>(std::size(clock_sources)));
+                     clock_sources, IM_ARRAYSIZE(clock_sources));
         ImGui::Checkbox("Apply manual clock frequency", &timeline_manual_clock_enabled_);
         if (timeline_manual_clock_enabled_) {
             ImGui::SetNextItemWidth(205.f);
@@ -884,6 +884,20 @@ void Workspace::draw_shared_evidence() {
                        "Clock calibrated: %s   |   Loss qualified: %s",
                        data.clock_calibrated ? "yes" : "no",
                        data.loss_qualified ? "yes" : "no");
+    if (data.unit == ClockUnit::RawCtfTicks) {
+        const bool clock_set =
+            timeline_clock_hz_valid(timeline_clock_source_, timeline_manual_clock_enabled_,
+                                    timeline_manual_clock_hz_);
+        if (clock_set)
+            ImGui::TextColored(ImVec4(.99f, .78f, .46f, 1.f),
+                               "Manual clock: %s @ %llu Hz; display estimate only.",
+                               timeline_clock_source_label(static_cast<TimelineClockSource>(
+                                   timeline_clock_source_)),
+                               static_cast<unsigned long long>(timeline_manual_clock_hz_));
+        else
+            ImGui::TextDisabled("No timestamp frequency configured; raw ticks only.");
+        ImGui::TextDisabled("A/B measurements use raw ticks; no cross-capture sync assumed.");
+    }
     ImGui::Spacing();
     ImGui::SeparatorText("Recorded source event");
     if (data.events.empty()) {
