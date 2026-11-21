@@ -34,6 +34,7 @@ struct ElfImage {
     std::string build_id;     // GNU note (if present); not a signature
     bool has_dwarf_sections{}; // Presence only, NOT parsed debug info
     bool is_relocatable{};   // Addresses are section-relative, not runtime PCs
+    bool requires_load_bias{}; // ET_DYN addresses require a proven runtime image base
     std::vector<ElfFunction> functions;
 };
 
