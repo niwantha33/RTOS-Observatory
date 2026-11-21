@@ -615,6 +615,9 @@ void Workspace::refresh_unified_view(bool preserve_selection) {
         shared_selected_event_.reset();
         shared_selected_case_.reset();
         timeline_viewport_.initialized = false;
+        timeline_measurement_ = TimelineMeasurement{};
+        timeline_drag_cursor_ = -1;
+        timeline_clock_source_ = 0;
         timeline_unit_preference_ = 0;
         timeline_manual_clock_enabled_ = false;
         timeline_manual_clock_hz_ = 0;
