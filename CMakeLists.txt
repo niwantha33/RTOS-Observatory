@@ -104,6 +104,11 @@ if(OBSERVATORY_BUILD_TESTS)
   add_executable(observatory_fault_tests tests/test_fault_evidence.cpp)
   target_link_libraries(observatory_fault_tests PRIVATE observatory_core)
   add_test(NAME observatory_fault_evidence COMMAND observatory_fault_tests)
+  # On ELF hosts, also prove we can inspect a real linked application binary.
+  if(UNIX AND NOT APPLE)
+    add_test(NAME observatory_elf_real_linked_smoke COMMAND
+      rtos-observatory --elf-inspect $<TARGET_FILE:rtos-observatory>)
+  endif()
   add_executable(observatory_elf_tests tests/test_elf_intelligence.cpp)
   target_link_libraries(observatory_elf_tests PRIVATE observatory_core)
   add_test(NAME observatory_elf_native_symbols COMMAND observatory_elf_tests
