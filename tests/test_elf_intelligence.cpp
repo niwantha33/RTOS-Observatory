@@ -143,6 +143,10 @@ int main(int argc, char** argv) {
     assert(lookup_elf_pc(arm, 0x08001235).thumb_normalized);
     assert(!lookup_elf_pc(arm, 0x08001244).index);
 
+    auto dyn = fixture;
+    put(dyn, 16, 3, 2); // ET_DYN: symbol addresses need an observed load base.
+    const auto pie = parse_elf_image(dyn);
+    assert(pie.requires_load_bias && !lookup_elf_pc(pie, 0x1002).index);
     auto bad = fixture;
     bad[5] = 2;
     assert(rejects(bad)); // Unsupported big-endian.
