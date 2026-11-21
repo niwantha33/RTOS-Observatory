@@ -183,3 +183,37 @@ evidence rules. This is a readability iteration, not W07/W08 or live debugging.
 - The standalone C++ test covers long timestamps, zoom, pan, focus, growth
   retention and clock conversions. Mixed-DPI interactions still need manual
   verification on Windows/Linux hardware.
+
+
+## Clock setup and A/B measurement cursors
+
+- Timeline -> Clock configuration displays source type and effective timestamp
+  frequency. A Zephyr CTF capture starts with UNKNOWN frequency. Supported
+  manual source labels: CPU cycle counter, hardware timer, RTOS timer tick,
+  external clock, other known counter. Only enable converted time when the
+  actual timestamp counter and effective rate (after prescalers) are known.
+  CPU MHz must never be assumed identical to trace tick Hz.
+- Explicit manual frequency (1 to 10 billion Hz) is per capture, reset on
+  source change and never silently persisted. Conversion is display-only,
+  with a prominent MANUAL / UNVERIFIED warning; raw ticks and evidence remain
+  unchanged. Current CTF ingestion does not qualify a metadata clock frequency.
+  No multi-device clock synchronization or drift correction is claimed.
+- Timeline -> Enable A/B cursors: click ruler or lanes to place A then B.
+  Select Place A or Place B to reposition; drag an existing marker to adjust.
+  Optional event/interval-edge snap uses bounded sorted timestamp indexes.
+  Visible lines span every lane; the interval between markers is shaded.
+  Results include A and B in raw ticks, exact unsigned absolute delta,
+  and optional estimated microseconds/milliseconds/seconds. Copy measurement,
+  swap, clear, and Fit A-B are provided.
+- If a marker snaps to an original event, Inspect A/B event opens the shared
+  evidence inspector with that exact source event. All cursor state is
+  reset when a new capture is opened. Display spans/lane caps remain explicit.
+- Synthetic regression: observatory_timeline_measurement verifies 64-bit
+  exact raw ticks, cursor placement, nearest source event snapping, delta,
+  and invalid clock rejection. Xvfb hidden measurement GUI smoke covers
+  rendering on Linux. Hardware clock verification is still deferred.
+
+Reference design: SEGGER SystemView specifies timestamp frequency at
+SEGGER_SYSVIEW_Init (not necessarily CPU clock), Percepio Tracealyzer uses
+the timestamp hardware timer frequency, and Trace Compass synchronizes
+time-axis views and allows trace time-offset adjustments.
