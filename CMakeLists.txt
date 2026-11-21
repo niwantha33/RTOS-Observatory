@@ -310,6 +310,16 @@ if(OBSERVATORY_BUILD_DESKTOP)
       target_compile_options(observatory_layout_persistence_tests PRIVATE -UNDEBUG)
     endif()
     add_test(NAME observatory_layout_persistence COMMAND observatory_layout_persistence_tests)
+    add_executable(observatory_timeline_measurement_tests desktop/tests/test_timeline_measurement.cpp)
+    target_include_directories(observatory_timeline_measurement_tests PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(observatory_timeline_measurement_tests PRIVATE cxx_std_20)
+    if(MSVC)
+      target_compile_options(observatory_timeline_measurement_tests PRIVATE /UNDEBUG)
+    else()
+      target_compile_options(observatory_timeline_measurement_tests PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME observatory_timeline_measurement COMMAND observatory_timeline_measurement_tests)
     add_executable(observatory_timeline_navigation_tests desktop/tests/test_timeline_navigation.cpp)
     target_include_directories(observatory_timeline_navigation_tests PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -405,6 +415,12 @@ if(OBSERVATORY_BUILD_DESKTOP)
             set_tests_properties(observatory_imgui_shared_ctf_${mode}_smoke PROPERTIES
               FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
           endforeach()
+          add_test(NAME observatory_imgui_ctf_measurement_ui_smoke COMMAND
+            ${OBSERVATORY_XVFB_RUN} -a
+            $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-ctf-measurement
+            ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)
+          set_tests_properties(observatory_imgui_ctf_measurement_ui_smoke PROPERTIES
+            FIXTURES_REQUIRED w20_ctf_fixture TIMEOUT 30)
           add_test(NAME observatory_imgui_w20_detached_ui_smoke COMMAND ${OBSERVATORY_XVFB_RUN} -a
             $<TARGET_FILE:rtos-observatory-desktop> --smoke-ui-ctf-docking
             ${CMAKE_CURRENT_BINARY_DIR}/w20-synthetic-ctf)

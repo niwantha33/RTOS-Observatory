@@ -68,6 +68,8 @@ struct ToolSummary {
     bool clock_calibrated{false};
     bool records_limited{false};
     std::map<std::string, std::vector<std::size_t>> lane_index;
+    std::vector<std::uint64_t> timeline_edges; // sorted, for fast cursor snapping
+    std::vector<std::pair<std::uint64_t, std::size_t>> timeline_events; // ticks + projection index
     std::vector<std::pair<std::string, std::size_t>> event_distribution;
     std::vector<ToolEvent> events;
     std::vector<ToolSpan> spans;
@@ -86,8 +88,23 @@ inline std::uint32_t caps(std::initializer_list<ToolCapability> list) {
 // Build presentation indices once per import/refresh, not on every frame.
 // This limits UI rendering to already bounded and source-proven observations.
 inline void finish_projection(ToolSummary& view) {
-    for (std::size_t i = 0; i < view.spans.size(); ++i)
-        view.lane_index[view.spans[i].lane].push_back(i);
+    view.timeline_edges.reserve(view.spans.size() * 2);
+    for (std::size_t i = 0; i < view.spans.size(); ++i) {
+        const auto &span = view.spans[i];
+        view.lane_index[span.lane].push_back(i);
+        if (span.end >= span.start) {
+            view.timeline_edges.push_back(span.start);
+            view.timeline_edges.push_back(span.end);
+        }
+    }
+    std::sort(view.timeline_edges.begin(), view.timeline_edges.end());
+    view.timeline_edges.erase(
+        std::unique(view.timeline_edges.begin(), view.timeline_edges.end()),
+        view.timeline_edges.end());
+    view.timeline_events.reserve(view.events.size());
+    for (std::size_t i = 0; i < view.events.size(); ++i)
+        view.timeline_events.emplace_back(view.events[i].tick, i);
+    std::sort(view.timeline_events.begin(), view.timeline_events.end());
     std::map<std::string, std::size_t> frequencies;
     for (const auto& event : view.events)
         ++frequencies[event.title];

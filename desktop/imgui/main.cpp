@@ -132,6 +132,7 @@ int main(int argc, char **argv) {
     bool smoke_live = false;
     bool smoke_ctf = false;
     bool smoke_ctf_detached = false;
+    bool smoke_ctf_measurement = false;
     bool smoke_ctf_timeline = false;
     bool smoke_ctf_resources = false;
     bool smoke_ctf_graph = false;
@@ -317,12 +318,15 @@ int main(int argc, char **argv) {
         (std::string_view(argv[1]) == "--ctf" || std::string_view(argv[1]) == "--smoke-ui-ctf" ||
          std::string_view(argv[1]) == "--smoke-ui-ctf-docking" ||
          std::string_view(argv[1]) == "--smoke-ui-ctf-timeline" ||
+         std::string_view(argv[1]) == "--smoke-ui-ctf-measurement" ||
          std::string_view(argv[1]) == "--smoke-ui-ctf-resources" ||
          std::string_view(argv[1]) == "--smoke-ui-ctf-graph")) {
         ctf_directory_path = argv[2];
         smoke_ctf = std::string_view(argv[1]).starts_with("--smoke-ui-ctf");
         smoke_ctf_detached = std::string_view(argv[1]) == "--smoke-ui-ctf-docking";
         smoke_ctf_timeline = std::string_view(argv[1]) == "--smoke-ui-ctf-timeline";
+        smoke_ctf_measurement =
+            std::string_view(argv[1]) == "--smoke-ui-ctf-measurement";
         smoke_ctf_resources = std::string_view(argv[1]) == "--smoke-ui-ctf-resources";
         smoke_ctf_graph = std::string_view(argv[1]) == "--smoke-ui-ctf-graph";
         smoke_ui = smoke_ctf;
@@ -428,6 +432,8 @@ int main(int argc, char **argv) {
         workspace.show_ctf();
     if (smoke_ctf_timeline)
         workspace.show_timeline();
+    if (smoke_ctf_measurement)
+        workspace.show_ctf_measurement_smoke();
     if (smoke_ctf_resources)
         workspace.show_resources();
     if (smoke_ctf_graph)
