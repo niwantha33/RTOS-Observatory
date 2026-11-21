@@ -2278,9 +2278,10 @@ void Workspace::draw_source_graph() {
         if (!image.build_id.empty())
             ImGui::TextWrapped("GNU build-id: %s (not an authenticated trace link)",
                                image.build_id.c_str());
-        if (image.is_relocatable)
-            ImGui::TextDisabled(
-                "Relocatable ELF: addresses are not linked runtime PC addresses.");
+        if (image.is_relocatable || image.requires_load_bias)
+            ImGui::TextDisabled(image.is_relocatable
+                ? "Relocatable ELF: addresses are not linked runtime PC addresses."
+                : "Shared/PIE ELF: runtime load base required before PC lookup.");
         ImGui::SetNextItemWidth(200.f);
         ImGui::InputScalar("Code PC (decimal)", ImGuiDataType_U64, &elf_pc_);
         ImGui::SameLine();
@@ -2291,7 +2292,7 @@ void Workspace::draw_source_graph() {
                 error_.clear();
             } else {
                 error_ = resolved.ambiguous ? "Overlapping ELF function address ranges"
-                    : "No unique ELF symbol for that PC (or relocatable ELF)";
+                    : "No unique ELF symbol for that PC (or relocation/base required)";
             }
         }
         if (image.functions.empty()) {
