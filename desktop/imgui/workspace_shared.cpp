@@ -482,8 +482,41 @@ void Workspace::draw_shared_timeline() {
         interact(ruler_start.x, ruler_width);
         draw_cursors(draw, ruler_start, ruler_end, true);
 
+        // Scheduling tracks first, followed by ISR and synchronization lanes.
+        const auto lane_rank = [](const std::string &name) {
+            if (name.rfind("Thread /", 0) == 0 ||
+                name.rfind("Task /", 0) == 0) return 0;
+            if (name.rfind("ISR /", 0) == 0) return 1;
+            return 2;
+        };
+        std::vector<std::pair<const std::string *,
+                              const std::vector<std::size_t> *>> ordered_lanes;
+        ordered_lanes.reserve(data.lane_index.size());
+        for (const auto &[name, segments] : data.lane_index)
+            ordered_lanes.emplace_back(&name, &segments);
+        std::stable_sort(ordered_lanes.begin(), ordered_lanes.end(),
+            [&](const auto &a, const auto &b) {
+                return lane_rank(*a.first) < lane_rank(*b.first);
+            });
         std::size_t count = 0;
-        for (const auto &[name, segments] : data.lane_index) {
+        int last_rank = -1;
+        for (const auto &[name_ptr, segments_ptr] : ordered_lanes) {
+            const auto &name = *name_ptr;
+            const auto &segments = *segments_ptr;
+            const int rank = lane_rank(name);
+            const bool digital = rank < 2;
+            if (rank != last_rank) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("%s", rank == 0 ? "TASK ACTIVITY" :
+                                     rank == 1 ? "INTERRUPTS" :
+                                                 "SYNCHRONIZATION");
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("%s", rank < 2 ?
+                    "High = observed activity; gaps unknown" :
+                    "Observed resource intervals");
+                last_rank = rank;
+            }
             if (++count > 80) break;
             ImGui::PushID(static_cast<int>(count));
             ImGui::TableNextRow();
