@@ -3935,7 +3935,10 @@ void Workspace::draw_detached_analysis() {
 }
 
 void Workspace::draw_analysis_controls() {
-    ImGui::TextColored(ImVec4(.73f, .87f, 1.f, 1.f), "CONTROL CENTER");
+    ImGui::TextColored(ImVec4(.73f, .87f, 1.f, 1.f), "CONFIGURATION");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Collapse >>##config-pane"))
+        show_controls_ = false;
     const char *source = active_adapter_ == SourceAdapter::Ctf ? "Zephyr CTF"
         : active_adapter_ == SourceAdapter::Normalized ? "Universal trace"
         : active_adapter_ == SourceAdapter::Live ? "Binary spool"
@@ -4054,8 +4057,11 @@ void Workspace::draw() {
             ImGui::EndCombo();
         }
         ImGui::SameLine();
-        if (ImGui::SmallButton(show_controls_ ? "Hide controls" : "Show controls"))
+        if (ImGui::SmallButton(show_controls_ ? "Full-width graph <<" : "Open configuration >>"))
             show_controls_ = !show_controls_;
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+            ImGui::SetTooltip(show_controls_ ? "Close right configuration pane to expand the graph" :
+                                           "Restore the right configuration pane");
         ImGui::Separator();
 
         const auto draw_canvas = [this, &page_labels]() {
