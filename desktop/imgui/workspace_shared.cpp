@@ -282,7 +282,7 @@ void Workspace::draw_shared_timeline() {
                 const std::string clipboard =
                     "A=" + std::to_string(measure.a->tick) +
                     " B=" + std::to_string(measure.b->tick) +
-                    " delta=" + std::to_string(difference) + " source ticks; " +
+                    " delta=" + std::to_string(difference) + " " + clock_unit(data.unit) + "; " +
                     value + (hz ? "; MANUAL CLOCK / UNVERIFIED" : "");
                 ImGui::SetClipboardText(clipboard.c_str());
             }
@@ -322,8 +322,8 @@ void Workspace::draw_shared_timeline() {
         if (const auto difference = timeline_cursor_delta(measure)) {
             const auto value = timeline_format(
                 static_cast<double>(*difference), unit, native_us, hz);
-            ImGui::Text("Delta (absolute): %llu source ticks | %s%s",
-                        static_cast<unsigned long long>(*difference),
+            ImGui::Text("Delta (absolute): %llu %s | %s%s",
+                        static_cast<unsigned long long>(*difference), clock_unit(data.unit),
                         value.c_str(), hz ? " [manual estimate]" : "");
         }
     }
