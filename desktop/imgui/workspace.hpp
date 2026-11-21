@@ -52,6 +52,17 @@ class Workspace final {
     const ctf::AnalysisIndex* ctf_analysis() const noexcept {
         return ctf_analysis_ ? &*ctf_analysis_ : nullptr;
     }
+    void show_ctf_measurement_smoke() noexcept {
+        page_ = Page::Timeline;
+        timeline_measurement_.enabled = true;
+        timeline_clock_source_ = 2;
+        timeline_manual_clock_enabled_ = true;
+        timeline_manual_clock_hz_ = 1'000'000;
+        if (!unified_.spans.empty()) {
+            timeline_measurement_.a = TimelineCursorPoint{unified_.spans.front().start};
+            timeline_measurement_.b = TimelineCursorPoint{unified_.spans.front().end};
+        }
+    }
     void show_ctf_detached_smoke() noexcept {
         page_ = Page::Overview;
         ctf_explorer_detached_ = true;
