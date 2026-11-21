@@ -144,6 +144,8 @@ class Workspace final {
     void draw_shared_tool(Page page);
     void draw_shared_dashboard();
     void draw_shared_timeline();
+    void draw_shared_timeline_controls();
+    void draw_analysis_controls();
     void draw_shared_graph();
     void draw_shared_resources();
     void draw_shared_events();
@@ -278,7 +280,8 @@ class Workspace final {
     std::string notice_;
     Page page_{Page::Overview};
     bool legacy_decoder_{};
-    bool show_sidebar_{true};
+    bool show_sidebar_{false};
+    bool show_controls_{true};
     bool compact_spacing_{true};
     float ui_scale_{0.85f}; // compact default; 75%-220%, DPI applied by GLFW host
     bool layout_restore_requested_{};

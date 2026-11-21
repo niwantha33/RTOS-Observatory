@@ -24,6 +24,7 @@ struct SavedWorkspaceLayout {
     float text_zoom{0.85f};
     bool compact_spacing{true};
     bool show_navigation{true};
+    bool show_controls{true};
     bool detach_resources{};
     bool detach_evidence{};
     bool detach_timeline{};
@@ -149,10 +150,11 @@ inline bool save_workspace_layout(const std::filesystem::path &destination,
     }
     const auto geometry = safe_imgui_geometry(layout.imgui_geometry);
     std::ostringstream output;
-    output << "RTOS_OBSERVATORY_LAYOUT_V1\n"
+    output << "RTOS_OBSERVATORY_LAYOUT_V2\n"
            << "zoom=" << clamp_text_zoom(layout.text_zoom) << "\n"
            << "compact=" << (layout.compact_spacing ? 1 : 0) << "\n"
            << "navigation=" << (layout.show_navigation ? 1 : 0) << "\n"
+           << "controls=" << (layout.show_controls ? 1 : 0) << "\n"
            << "resources=" << (layout.detach_resources ? 1 : 0) << "\n"
            << "evidence=" << (layout.detach_evidence ? 1 : 0) << "\n"
            << "timeline=" << (layout.detach_timeline ? 1 : 0) << "\n"
@@ -235,18 +237,21 @@ inline std::optional<SavedWorkspaceLayout> load_workspace_layout(
             return std::nullopt;
         return line.substr(name.size());
     };
-    if (!std::getline(input, line) || line != "RTOS_OBSERVATORY_LAYOUT_V1") {
+    if (!std::getline(input, line) ||
+        (line != "RTOS_OBSERVATORY_LAYOUT_V1" && line != "RTOS_OBSERVATORY_LAYOUT_V2")) {
         error = "Unrecognized workspace layout version.";
         return std::nullopt;
     }
+    const bool v2 = line == "RTOS_OBSERVATORY_LAYOUT_V2";
     const auto zoom = field("zoom=");
     const auto compact = field("compact=");
     const auto nav = field("navigation=");
+    const auto controls = v2 ? field("controls=") : std::optional<std::string>{"1"};
     const auto resources = field("resources=");
     const auto evidence = field("evidence=");
     const auto timeline = field("timeline=");
     const auto pages = field("pages=");
-    if (!zoom || !compact || !nav || !resources || !evidence || !timeline || !pages ||
+    if (!zoom || !compact || !nav || !controls || !resources || !evidence || !timeline || !pages ||
         !std::getline(input, line) || line != "--IMGUI--") {
         error = "Incomplete workspace layout.";
         return std::nullopt;
@@ -267,6 +272,7 @@ inline std::optional<SavedWorkspaceLayout> load_workspace_layout(
     };
     if (!binary(*compact, layout.compact_spacing) ||
         !binary(*nav, layout.show_navigation) ||
+        !binary(*controls, layout.show_controls) ||
         !binary(*resources, layout.detach_resources) ||
         !binary(*evidence, layout.detach_evidence) ||
         !binary(*timeline, layout.detach_timeline)) {
