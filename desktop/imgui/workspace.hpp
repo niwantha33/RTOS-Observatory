@@ -17,6 +17,7 @@
 #include "observatory/desktop/unified_view.hpp"
 #include "observatory/desktop/ui_layout.hpp"
 #include "observatory/desktop/timeline_navigation.hpp"
+#include "observatory/desktop/timeline_measurement.hpp"
 #include "observatory/desktop/layout_persistence.hpp"
 #include <array>
 #include <chrono>
@@ -197,6 +198,9 @@ class Workspace final {
     std::optional<ctf::Session> ctf_;
     ToolSummary unified_;
     TimelineViewport timeline_viewport_;
+    TimelineMeasurement timeline_measurement_;
+    int timeline_clock_source_{}; // explicit source; unknown is never converted
+    int timeline_drag_cursor_{-1}; // 0=A, 1=B; held while pointer is active
     int timeline_unit_preference_{}; // 0=auto, 1=source, 2=us, 3=ms, 4=s
     bool timeline_manual_clock_enabled_{};
     std::uint64_t timeline_manual_clock_hz_{}; // user supplied, never clock-qualified
