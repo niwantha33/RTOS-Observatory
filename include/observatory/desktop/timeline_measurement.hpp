@@ -44,7 +44,7 @@ inline constexpr std::array<const char *, 4> timeline_cursor_labels{
     "A1", "A2", "B1", "B2"
 };
 struct TimelineMeasurement {
-    bool enabled{};
+    bool enabled{true};
     bool snap{true};
     int selected{}; // 0=A1, 1=A2, 2=B1, 3=B2
     std::array<std::optional<TimelineCursorPoint>, 4> points{};
