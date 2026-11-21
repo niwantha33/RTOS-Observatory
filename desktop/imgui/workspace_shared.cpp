@@ -160,44 +160,42 @@ void Workspace::draw_shared_timeline() {
         }
     }
 
-    // The timestamp source is not necessarily the CPU clock. Require the
-    // effective rate of the actual recorder counter, not an inferred MHz.
-    ImGui::SeparatorText("Clock configuration");
+    // Keep the time-base summary visible, but make the detailed settings collapsible.
     if (raw_ctf) {
-        ImGui::TextDisabled("Capture: Zephyr CTF 32-bit timestamp counter (unwrapped)");
-        ImGui::TextDisabled("CTF decoder has no verified counter frequency.");
-        constexpr const char *clock_sources[] = {
-            "Unknown", "CPU cycle counter", "Hardware timer",
-            "RTOS timer tick", "External clock", "Other known counter"
-        };
-        ImGui::SetNextItemWidth(205.f);
-        ImGui::Combo("Timestamp source", &timeline_clock_source_,
-                     clock_sources, IM_ARRAYSIZE(clock_sources));
-        ImGui::Checkbox("Apply manual clock frequency", &timeline_manual_clock_enabled_);
-        if (timeline_manual_clock_enabled_) {
+        const bool known = timeline_clock_hz_valid(timeline_clock_source_,
+            timeline_manual_clock_enabled_, timeline_manual_clock_hz_);
+        if (known)
+            ImGui::TextColored(ImVec4(.99f, .77f, .48f, 1.f),
+                "Time base: manual %s @ %llu Hz (UNVERIFIED estimate)",
+                timeline_clock_source_label(static_cast<TimelineClockSource>(
+                    timeline_clock_source_)),
+                static_cast<unsigned long long>(timeline_manual_clock_hz_));
+        else
+            ImGui::TextColored(ImVec4(.99f, .77f, .48f, 1.f),
+                "Time base: raw CTF ticks; no verified counter frequency");
+        if (ImGui::CollapsingHeader("Clock configuration (counter and frequency)")) {
+            ImGui::TextDisabled("Zephyr CTF 32-bit counter (unwrapped).");
+            constexpr const char *clock_sources[] = {
+                "Unknown", "CPU cycle counter", "Hardware timer",
+                "RTOS timer tick", "External clock", "Other known counter"
+            };
             ImGui::SetNextItemWidth(205.f);
-            ImGui::InputScalar("Effective timestamp Hz", ImGuiDataType_U64,
-                               &timeline_manual_clock_hz_, nullptr, nullptr, "%llu");
+            ImGui::Combo("Timestamp source", &timeline_clock_source_,
+                         clock_sources, IM_ARRAYSIZE(clock_sources));
+            ImGui::Checkbox("Apply manual clock frequency",
+                            &timeline_manual_clock_enabled_);
+            if (timeline_manual_clock_enabled_) {
+                ImGui::SetNextItemWidth(205.f);
+                ImGui::InputScalar("Effective timestamp Hz", ImGuiDataType_U64,
+                    &timeline_manual_clock_hz_, nullptr, nullptr, "%llu");
+            }
+            ImGui::TextDisabled("Enter effective counter Hz after prescaler, NOT CPU MHz."
+                                " This does not calibrate the trace.");
         }
-        if (!timeline_clock_hz_valid(timeline_clock_source_,
-                                     timeline_manual_clock_enabled_,
-                                     timeline_manual_clock_hz_)) {
-            ImGui::TextColored(ImVec4(.98f, .77f, .48f, 1.f),
-                               "UNVERIFIED / raw ticks. Select counter and enter"
-                               " effective Hz to show estimated time.");
-        } else {
-            ImGui::TextColored(ImVec4(.98f, .77f, .48f, 1.f),
-                               "MANUAL ESTIMATE: %s @ %llu Hz (not independently verified).",
-                               timeline_clock_source_label(static_cast<TimelineClockSource>(
-                                   timeline_clock_source_)),
-                               static_cast<unsigned long long>(timeline_manual_clock_hz_));
-        }
-        ImGui::TextDisabled("Frequency must be counter Hz, after any prescaler;"
-                            " CPU MHz may be different.");
     } else if (native_us) {
-        ImGui::TextDisabled("Source unit: normalized microseconds (declared in trace).");
-        ImGui::TextDisabled("Not proof of hardware clock calibration.");
+        ImGui::TextDisabled("Time base: source-declared microseconds (not calibrated).");
     }
+
     const bool valid_manual_hz =
         timeline_clock_hz_valid(timeline_clock_source_, timeline_manual_clock_enabled_,
                                 timeline_manual_clock_hz_);
@@ -249,87 +247,107 @@ void Workspace::draw_shared_timeline() {
         ImGui::TextColored(ImVec4(.99f, .77f, .48f, 1.f),
                            "Raw ticks only: source clock Hz is not verified or supplied.");
 
-    ImGui::SeparatorText("Time measurement");
+    ImGui::SeparatorText("Measurement cursors");
     auto &measure = timeline_measurement_;
-    ImGui::Checkbox("Enable A/B cursors", &measure.enabled);
+    ImGui::Checkbox("Enable four cursors", &measure.enabled);
     if (measure.enabled) {
         ImGui::SameLine();
-        if (ImGui::RadioButton("Place A", measure.selected == 0))
-            measure.selected = 0;
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Place B", measure.selected == 1))
-            measure.selected = 1;
-        ImGui::SameLine();
         ImGui::Checkbox("Snap to event / edge", &measure.snap);
-        ImGui::TextDisabled("Click or drag on ruler / lanes; A = amber, B = cyan.");
-        if (ImGui::SmallButton("Clear cursors"))
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Clear all"))
             timeline_clear_cursors(measure);
-        if (measure.a && measure.b) {
+
+        const std::array<ImVec4, 4> colors{{
+            ImVec4(1.f, .76f, .31f, 1.f), ImVec4(1.f, .53f, .30f, 1.f),
+            ImVec4(.33f, .87f, 1.f, 1.f), ImVec4(.45f, .63f, 1.f, 1.f)
+        }};
+        for (int i = 0; i < 4; ++i) {
+            if (i) ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Text, colors[static_cast<std::size_t>(i)]);
+            if (ImGui::RadioButton(timeline_cursor_labels[static_cast<std::size_t>(i)],
+                                   measure.selected == i))
+                measure.selected = i;
+            ImGui::PopStyleColor();
+        }
+        ImGui::TextDisabled("Click ruler or track to place; drag marker to move."
+                            " A1-A2 and B1-B2 are independent pairs.");
+
+        const int columns = ImGui::GetContentRegionAvail().x < 650.f ? 2 : 4;
+        if (ImGui::BeginTable("cursor-readouts", columns,
+                ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_RowBg)) {
+            for (int i = 0; i < 4; ++i) {
+                ImGui::TableNextColumn();
+                const auto &point = measure.points[static_cast<std::size_t>(i)];
+                ImGui::PushStyleColor(ImGuiCol_Text, colors[static_cast<std::size_t>(i)]);
+                if (point) {
+                    const auto offset = point->tick >= first ? point->tick - first : 0;
+                    const auto value = timeline_format(
+                        static_cast<double>(offset), unit, native_us, hz);
+                    ImGui::Text("%s  +%s", timeline_cursor_labels[static_cast<std::size_t>(i)],
+                                value.c_str());
+                    ImGui::TextDisabled("%llu ticks",
+                         static_cast<unsigned long long>(point->tick));
+                } else {
+                    ImGui::Text("%s  --", timeline_cursor_labels[static_cast<std::size_t>(i)]);
+                    ImGui::TextDisabled("Not placed");
+                }
+                ImGui::PopStyleColor();
+                if (point && point->event_index &&
+                    *point->event_index < data.events.size()) {
+                    ImGui::PushID(i);
+                    if (ImGui::SmallButton("Inspect event")) {
+                        shared_selected_event_ = *point->event_index;
+                        page_ = Page::Evidence;
+                    }
+                    ImGui::PopID();
+                }
+            }
+            ImGui::EndTable();
+        }
+        for (int pair = 0; pair < 2; ++pair) {
+            const auto delta = timeline_cursor_delta(measure, pair);
+            if (!delta) continue;
+            const auto formatted = timeline_format(
+                static_cast<double>(*delta), unit, native_us, hz);
+            ImGui::PushID(pair);
+            ImGui::TextColored(colors[static_cast<std::size_t>(pair * 2)],
+                "%s delta: %s  (%llu %s)%s", pair ? "B1-B2" : "A1-A2",
+                formatted.c_str(), static_cast<unsigned long long>(*delta),
+                clock_unit(data.unit), hz ? " [manual estimate]" : "");
             ImGui::SameLine();
-            if (ImGui::SmallButton("Swap A/B"))
-                std::swap(measure.a, measure.b);
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Fit A-B")) {
+            if (ImGui::SmallButton("Fit pair"))
                 timeline_focus(timeline_viewport_,
-                               std::min(measure.a->tick, measure.b->tick),
-                               std::max(measure.a->tick, measure.b->tick));
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Copy measurement")) {
-                const auto difference = *timeline_cursor_delta(measure);
-                const auto value = timeline_format(
-                    static_cast<double>(difference), unit, native_us, hz);
-                const std::string clipboard =
-                    "A=" + std::to_string(measure.a->tick) +
-                    " B=" + std::to_string(measure.b->tick) +
-                    " delta=" + std::to_string(difference) + " " + clock_unit(data.unit) + "; " +
-                    value + (hz ? "; MANUAL CLOCK / UNVERIFIED" : "");
-                ImGui::SetClipboardText(clipboard.c_str());
-            }
+                    std::min(measure.points[static_cast<std::size_t>(pair * 2)]->tick,
+                             measure.points[static_cast<std::size_t>(pair * 2 + 1)]->tick),
+                    std::max(measure.points[static_cast<std::size_t>(pair * 2)]->tick,
+                             measure.points[static_cast<std::size_t>(pair * 2 + 1)]->tick));
+            ImGui::PopID();
         }
-        if (measure.a) {
-            const auto value = timeline_format(
-                static_cast<double>(measure.a->tick - first), unit, native_us, hz);
-            ImGui::TextColored(ImVec4(1.f, .76f, .31f, 1.f),
-                               "A  +%s    raw: %llu",
-                               value.c_str(),
-                               static_cast<unsigned long long>(measure.a->tick));
-            if (measure.a->event_index &&
-                *measure.a->event_index < data.events.size()) {
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Inspect A event")) {
-                    shared_selected_event_ = *measure.a->event_index;
-                    page_ = Page::Evidence;
+        if (ImGui::SmallButton("Copy measurements")) {
+            std::string result;
+            for (int pair = 0; pair < 2; ++pair) {
+                if (!result.empty()) result += "\n";
+                const int index = pair * 2;
+                const auto &a = measure.points[static_cast<std::size_t>(index)];
+                const auto &b = measure.points[static_cast<std::size_t>(index + 1)];
+                result += pair ? "B1-B2" : "A1-A2";
+                if (a && b) {
+                    const auto delta = *timeline_cursor_delta(measure, pair);
+                    result += ": " + std::to_string(a->tick) + " -> " +
+                        std::to_string(b->tick) + " = " + std::to_string(delta) +
+                        " " + clock_unit(data.unit) + " (" +
+                        timeline_format(static_cast<double>(delta),
+                                        unit, native_us, hz) + ")";
+                } else {
+                    result += ": incomplete";
                 }
             }
-        }
-        if (measure.b) {
-            const auto value = timeline_format(
-                static_cast<double>(measure.b->tick - first), unit, native_us, hz);
-            ImGui::TextColored(ImVec4(.33f, .87f, 1.f, 1.f),
-                               "B  +%s    raw: %llu",
-                               value.c_str(),
-                               static_cast<unsigned long long>(measure.b->tick));
-            if (measure.b->event_index &&
-                *measure.b->event_index < data.events.size()) {
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Inspect B event")) {
-                    shared_selected_event_ = *measure.b->event_index;
-                    page_ = Page::Evidence;
-                }
-            }
-        }
-        if (const auto difference = timeline_cursor_delta(measure)) {
-            const auto value = timeline_format(
-                static_cast<double>(*difference), unit, native_us, hz);
-            ImGui::Text("Delta (absolute): %llu %s | %s%s",
-                        static_cast<unsigned long long>(*difference), clock_unit(data.unit),
-                        value.c_str(), hz ? " [manual estimate]" : "");
+            if (hz) result += "\nMANUAL CLOCK ESTIMATE / UNVERIFIED";
+            ImGui::SetClipboardText(result.c_str());
         }
     }
 
-    // Draw both vertical measurement cursors in every lane of this shared
-    // viewport, including the ruler. The raw ticks never change with zoom.
+    // All four cursors overlay the same ruler and every lane.
     const auto draw_cursors = [&](ImDrawList *draw, const ImVec2 &p0,
                                   const ImVec2 &p1, bool on_ruler) {
         if (!measure.enabled) return;
@@ -340,40 +358,50 @@ void Workspace::draw_shared_timeline() {
                 ((offset - timeline_viewport_.start) / timeline_viewport_.width) *
                 static_cast<double>(p1.x - p0.x));
         };
+        const std::array<ImU32, 4> ink{{
+            IM_COL32(255, 194, 80, 255), IM_COL32(255, 136, 77, 255),
+            IM_COL32(65, 220, 255, 255), IM_COL32(116, 161, 255, 255)
+        }};
         draw->PushClipRect(p0, p1, true);
-        if (measure.a && measure.b) {
-            const float xa = x_at(measure.a->tick), xb = x_at(measure.b->tick);
-            draw->AddRectFilled(
-                ImVec2(std::min(xa, xb), p0.y),
-                ImVec2(std::max(xa, xb), p1.y),
-                IM_COL32(113, 184, 244, 23));
+        for (int pair = 0; pair < 2; ++pair) {
+            const auto &a = measure.points[static_cast<std::size_t>(pair * 2)];
+            const auto &b = measure.points[static_cast<std::size_t>(pair * 2 + 1)];
+            if (!a || !b) continue;
+            const float xa = x_at(a->tick), xb = x_at(b->tick);
+            draw->AddRectFilled(ImVec2(std::min(xa, xb), p0.y),
+                                ImVec2(std::max(xa, xb), p1.y),
+                                pair ? IM_COL32(65, 220, 255, 20) :
+                                       IM_COL32(255, 194, 80, 21));
         }
-        const auto one = [&](const std::optional<TimelineCursorPoint> &cursor,
-                             ImU32 color, const char *letter) {
-            if (!cursor) return;
-            const float x = x_at(cursor->tick);
-            if (x < p0.x || x > p1.x) return;
-            draw->AddLine(ImVec2(x, p0.y), ImVec2(x, p1.y), color, 2.f);
+        for (int i = 0; i < 4; ++i) {
+            const auto &point = measure.points[static_cast<std::size_t>(i)];
+            if (!point) continue;
+            const float x = x_at(point->tick);
+            if (x < p0.x || x > p1.x) continue;
+            draw->AddLine(ImVec2(x, p0.y), ImVec2(x, p1.y),
+                          ink[static_cast<std::size_t>(i)], 2.f);
             if (on_ruler)
-                draw->AddText(ImVec2(x + 3.f, p0.y + 1.f), color, letter);
-        };
-        one(measure.a, IM_COL32(255, 194, 80, 255), "A");
-        one(measure.b, IM_COL32(65, 220, 255, 255), "B");
+                draw->AddText(ImVec2(x + 3.f, p0.y + 1.f),
+                              ink[static_cast<std::size_t>(i)],
+                              timeline_cursor_labels[static_cast<std::size_t>(i)]);
+        }
         draw->PopClipRect();
     };
 
     // All canvases share one viewport; never mutate the data's raw tick values.
     const auto interact = [&](float left, float width) {
-        if (!ImGui::IsItemHovered() || width < 1.f) return;
+        const bool hovered = ImGui::IsItemHovered();
+        const bool active = ImGui::IsItemActive();
+        if ((!hovered && !active) || width < 1.f) return;
         const auto &io = ImGui::GetIO();
-        if (io.KeyCtrl && io.MouseWheel != 0.f) {
+        if (hovered && io.KeyCtrl && io.MouseWheel != 0.f) {
             const double at = std::clamp(
                 (static_cast<double>(ImGui::GetMousePos().x) - left) / width, 0., 1.);
             timeline_zoom(timeline_viewport_, std::pow(.8, io.MouseWheel), at);
-        } else if (io.KeyShift && io.MouseWheel != 0.f) {
+        } else if (hovered && io.KeyShift && io.MouseWheel != 0.f) {
             timeline_pan(timeline_viewport_, -static_cast<double>(io.MouseWheel) * .2);
         }
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
+        if (active && ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
             timeline_pan(timeline_viewport_,
                          -static_cast<double>(io.MouseDelta.x) / width);
         if (!measure.enabled) return;
@@ -390,23 +418,24 @@ void Workspace::draw_shared_timeline() {
                 TimelineCursorPoint{tick, std::nullopt, false};
             timeline_set_cursor(measure, cursor, point);
         };
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
-            int chosen = measure.selected;
-            // Picking an existing handle allows dragging A or B naturally.
+        if (hovered && ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+            int chosen = std::clamp(measure.selected, 0, 3);
+            // Pick an existing handle within nine pixels for natural drag.
             double distance = 9.;
-            for (int i = 0; i < 2; ++i) {
-                const auto &point = i == 0 ? measure.a : measure.b;
+            for (int i = 0; i < 4; ++i) {
+                const auto &point = measure.points[static_cast<std::size_t>(i)];
                 if (!point) continue;
-                const double x = left + (
-                    (static_cast<double>(point->tick - first) -
-                     timeline_viewport_.start) / timeline_viewport_.width) * width;
+                const double offset = point->tick >= first ?
+                    static_cast<double>(point->tick - first) : 0.;
+                const double x = left + ((offset - timeline_viewport_.start) /
+                                         timeline_viewport_.width) * width;
                 const double d = std::abs(ImGui::GetMousePos().x - x);
                 if (d < distance) { chosen = i; distance = d; }
             }
             timeline_drag_cursor_ = chosen;
             update_cursor(chosen);
         }
-        if (ImGui::IsItemActive() && timeline_drag_cursor_ >= 0 &&
+        if (active && timeline_drag_cursor_ >= 0 &&
             ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.f))
             update_cursor(timeline_drag_cursor_);
         if (ImGui::IsItemDeactivated())
@@ -453,8 +482,41 @@ void Workspace::draw_shared_timeline() {
         interact(ruler_start.x, ruler_width);
         draw_cursors(draw, ruler_start, ruler_end, true);
 
+        // Scheduling tracks first, followed by ISR and synchronization lanes.
+        const auto lane_rank = [](const std::string &name) {
+            if (name.rfind("Thread /", 0) == 0 ||
+                name.rfind("Task /", 0) == 0) return 0;
+            if (name.rfind("ISR /", 0) == 0) return 1;
+            return 2;
+        };
+        std::vector<std::pair<const std::string *,
+                              const std::vector<std::size_t> *>> ordered_lanes;
+        ordered_lanes.reserve(data.lane_index.size());
+        for (const auto &[name, segments] : data.lane_index)
+            ordered_lanes.emplace_back(&name, &segments);
+        std::stable_sort(ordered_lanes.begin(), ordered_lanes.end(),
+            [&](const auto &a, const auto &b) {
+                return lane_rank(*a.first) < lane_rank(*b.first);
+            });
         std::size_t count = 0;
-        for (const auto &[name, segments] : data.lane_index) {
+        int last_rank = -1;
+        for (const auto &[name_ptr, segments_ptr] : ordered_lanes) {
+            const auto &name = *name_ptr;
+            const auto &segments = *segments_ptr;
+            const int rank = lane_rank(name);
+            const bool digital = rank < 2;
+            if (rank != last_rank) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("%s", rank == 0 ? "TASK ACTIVITY" :
+                                     rank == 1 ? "INTERRUPTS" :
+                                                 "SYNCHRONIZATION");
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("%s", rank < 2 ?
+                    "High = observed activity; gaps unknown" :
+                    "Observed resource intervals");
+                last_rank = rank;
+            }
             if (++count > 80) break;
             ImGui::PushID(static_cast<int>(count));
             ImGui::TableNextRow();
@@ -473,6 +535,8 @@ void Workspace::draw_shared_timeline() {
             const double display_width = timeline_viewport_.width;
             const double display_end = display_start + display_width;
             auto *lane_draw = ImGui::GetWindowDrawList();
+            std::vector<TimelineWaveInterval> digital_spans;
+            if (digital) digital_spans.reserve(segments.size());
             lane_draw->PushClipRect(p0, p1, true);
             lane_draw->AddRectFilled(ImVec2(p0.x, p0.y + 4.f),
                                      ImVec2(p1.x, p1.y - 4.f),
@@ -488,6 +552,10 @@ void Workspace::draw_shared_timeline() {
                 const auto &span = data.spans[index];
                 if (span.end < span.start || span.start < first || span.end < first)
                     continue;
+                // Keep instantaneous source markers visible, but never draw
+                // a nonzero digital activity interval for a zero-duration span.
+                if (digital && span.end > span.start)
+                    digital_spans.push_back({span.start, span.end});
                 const double a = static_cast<double>(span.start - first);
                 const double b = static_cast<double>(span.end - first);
                 if (b < display_start || a > display_end) continue;
@@ -501,7 +569,9 @@ void Workspace::draw_shared_timeline() {
                 if (right <= left) continue;
                 lane_draw->AddRectFilled(ImVec2(left, p0.y + 6.f),
                                          ImVec2(right, p1.y - 6.f),
-                                         category_colour(span.category), 2.f);
+                                         digital ? IM_COL32(77, 169, 221, 65) :
+                                                   category_colour(span.category),
+                                         digital ? 0.f : 2.f);
                 if (shared_selected_event_ && span.evidence_event &&
                     *shared_selected_event_ == *span.evidence_event)
                     lane_draw->AddRect(ImVec2(left, p0.y + 6.f),
@@ -520,6 +590,43 @@ void Workspace::draw_shared_timeline() {
                     shared_selected_event_ = *span.evidence_event;
                     page_ = Page::Evidence;
                 }
+            }
+            // Digital overlay marks recorded activity, not inferred task state.
+            if (digital) {
+                const auto visible_first = timeline_tick_at_fraction(timeline_viewport_, 0.);
+                const auto visible_last = timeline_tick_at_fraction(timeline_viewport_, 1.);
+                const auto intervals = timeline_waveform_intervals(
+                    digital_spans, visible_first, visible_last);
+                const auto x_at = [&](std::uint64_t tick) {
+                    const double relative = tick >= first ?
+                        static_cast<double>(tick - first) : 0.;
+                    return p0.x + width * static_cast<float>(
+                        (relative - display_start) / display_width);
+                };
+                const float high = p0.y + 8.f;
+                const float low = p1.y - 7.f;
+                const ImU32 active_ink = rank == 1 ?
+                    IM_COL32(248, 196, 100, 255) : IM_COL32(93, 205, 247, 255);
+                const ImU32 gap_ink = IM_COL32(111, 132, 154, 145);
+                float previous = p0.x;
+                for (const auto &interval : intervals) {
+                    const float x0 = std::clamp(x_at(interval.start), p0.x, p1.x);
+                    const float x1 = std::clamp(x_at(interval.end), p0.x, p1.x);
+                    if (x1 <= x0) continue;
+                    lane_draw->AddLine(ImVec2(previous, low), ImVec2(x0, low),
+                                       gap_ink, 1.f);
+                    if (interval.start > visible_first)
+                        lane_draw->AddLine(ImVec2(x0, low), ImVec2(x0, high),
+                                           active_ink, 1.7f);
+                    lane_draw->AddLine(ImVec2(x0, high), ImVec2(x1, high),
+                                       active_ink, 2.5f);
+                    if (interval.end < visible_last)
+                        lane_draw->AddLine(ImVec2(x1, high), ImVec2(x1, low),
+                                           active_ink, 1.7f);
+                    previous = x1;
+                }
+                lane_draw->AddLine(ImVec2(previous, low), ImVec2(p1.x, low),
+                                   gap_ink, 1.f);
             }
             lane_draw->PopClipRect();
             interact(p0.x, width);

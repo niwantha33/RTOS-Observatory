@@ -59,8 +59,8 @@ class Workspace final {
         timeline_manual_clock_enabled_ = true;
         timeline_manual_clock_hz_ = 1'000'000;
         if (!unified_.spans.empty()) {
-            timeline_measurement_.a = TimelineCursorPoint{unified_.spans.front().start};
-            timeline_measurement_.b = TimelineCursorPoint{unified_.spans.front().end};
+            timeline_measurement_.points[0] = TimelineCursorPoint{unified_.spans.front().start};
+            timeline_measurement_.points[1] = TimelineCursorPoint{unified_.spans.front().end};
         }
     }
     void show_ctf_detached_smoke() noexcept {
@@ -211,7 +211,7 @@ class Workspace final {
     TimelineViewport timeline_viewport_;
     TimelineMeasurement timeline_measurement_;
     int timeline_clock_source_{}; // explicit source; unknown is never converted
-    int timeline_drag_cursor_{-1}; // 0=A, 1=B; held while pointer is active
+    int timeline_drag_cursor_{-1}; // 0=A1, 1=A2, 2=B1, 3=B2
     int timeline_unit_preference_{}; // 0=auto, 1=source, 2=us, 3=ms, 4=s
     bool timeline_manual_clock_enabled_{};
     std::uint64_t timeline_manual_clock_hz_{}; // user supplied, never clock-qualified

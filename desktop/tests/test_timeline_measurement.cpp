@@ -28,13 +28,37 @@ int main() {
     auto free = timeline_snap_tick(view, 1001250, 1000.f, edges, events);
     assert(!free.snapped && free.tick == 1001250);
     timeline_set_cursor(m, 0, snapped);
-    assert(m.selected == 1);
+    assert(m.selected == 1); // A2 automatically follows A1
     timeline_set_cursor(m, 1, {1001600, {}, false});
-    assert(timeline_cursor_delta(m) && *timeline_cursor_delta(m) == 600);
+    assert(timeline_cursor_delta(m, 0) && *timeline_cursor_delta(m, 0) == 600);
+    assert(m.selected == 2);
+    timeline_set_cursor(m, 2, {1000400, {}, false});
+    assert(m.selected == 3);
+    timeline_set_cursor(m, 3, {1000800, {}, false});
+    assert(timeline_cursor_delta(m, 1) && *timeline_cursor_delta(m, 1) == 400);
+    assert(!timeline_cursor_delta(m, -1));
+    assert(!timeline_cursor_delta(m, 2));
     timeline_set_cursor(m, 1, {1000200, {}, false});
-    assert(*timeline_cursor_delta(m) == 800); // B before A, exact absolute delta
+    assert(*timeline_cursor_delta(m) == 800); // A2 before A1: absolute delta
+    timeline_set_cursor(m, 5, {0, {}, false}); // invalid handle is safe
+    assert(*timeline_cursor_delta(m, 1) == 400);
     timeline_clear_cursors(m);
-    assert(!timeline_cursor_delta(m) && m.selected == 0);
+    assert(!timeline_cursor_delta(m) && !timeline_cursor_delta(m, 1) &&
+           m.selected == 0);
+    for (const auto &cursor : m.points) assert(!cursor);
+
+    // Intervals merge on overlap/touch and clip to the viewport.
+    const std::vector<TimelineWaveInterval> observed{
+        {50, 80}, {10, 30}, {20, 40}, {40, 45}, {80, 90},
+        {140, 140}, {135, 120}, {100, 110}
+    };
+    auto wave = timeline_waveform_intervals(observed, 25, 105);
+    assert(wave.size() == 3);
+    assert(wave[0].start == 25 && wave[0].end == 45);
+    assert(wave[1].start == 50 && wave[1].end == 90);
+    assert(wave[2].start == 100 && wave[2].end == 105);
+    assert(timeline_waveform_intervals(observed, 10, 10).empty());
+    assert(timeline_waveform_intervals(observed, 200, 300).empty());
 
     // 64-bit absolute raw timestamp remains precise with small window.
     const auto top = std::numeric_limits<std::uint64_t>::max();
