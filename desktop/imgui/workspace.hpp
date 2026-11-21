@@ -11,6 +11,7 @@
 #include "observatory/resource_analysis.hpp"
 #include "observatory/snapshot_receipt.hpp"
 #include "observatory/source_index.hpp"
+#include "observatory/elf_intelligence.hpp"
 #include "observatory/timeline.hpp"
 #include "observatory/zephyr_ctf.hpp"
 #include "observatory/ctf_analysis.hpp"
@@ -38,6 +39,8 @@ class Workspace final {
     bool open_fault_snapshot(const std::string &path);
     bool open_source_index(const std::string &manifest, const std::string &elf,
                            const std::string &source_root);
+    bool open_elf_image(const std::string &path);
+    const ElfImage *elf_image() const noexcept { return native_elf_ ? &*native_elf_ : nullptr; }
     bool open_bridge_status(const std::string &path);
     bool open_snapshot_receipt(const std::string &path);
     bool open_live_file(const std::string &path);
@@ -250,6 +253,10 @@ class Workspace final {
     BridgeMonitor bridge_monitor_;
     std::optional<BridgeObservation> bridge_observation_;
     std::array<char, 2048> bridge_file_path_{};
+    std::optional<ElfImage> native_elf_;
+    std::size_t selected_elf_function_{};
+    std::uint64_t elf_pc_{};
+    std::array<char, 2048> elf_file_path_{};
     std::optional<SourceIndex> symbols_;
     SymbolVerification symbol_verification_;
     std::optional<SourceExcerpt> source_excerpt_;
