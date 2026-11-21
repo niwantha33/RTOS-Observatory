@@ -73,6 +73,7 @@ static std::vector<std::uint8_t> elf64() {
                         unsigned link = 0, unsigned ent = 0) {
         const auto at = 0x200 + index * 64u;
         put(b, at, name, 4); put(b, at + 4, type, 4);
+        if (type == 1 && index == 5) put(b, at + 8, 0x6, 8); // executable .text
         put(b, at + 24, offset, 8); put(b, at + 32, size, 8);
         put(b, at + 40, link, 4); put(b, at + 56, ent, 8);
     };
@@ -106,6 +107,7 @@ static std::vector<std::uint8_t> elf32() {
                         unsigned entsize = 0) {
         const auto at = 0x100 + index * 40u;
         put(b, at, name, 4); put(b, at + 4, type, 4);
+        if (type == 1 && index == 4) put(b, at + 8, 0x6, 4); // executable .text
         put(b, at + 16, offset, 4); put(b, at + 20, size, 4);
         put(b, at + 24, link, 4); put(b, at + 36, entsize, 4);
     };
