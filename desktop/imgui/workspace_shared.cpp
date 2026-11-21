@@ -160,44 +160,42 @@ void Workspace::draw_shared_timeline() {
         }
     }
 
-    // The timestamp source is not necessarily the CPU clock. Require the
-    // effective rate of the actual recorder counter, not an inferred MHz.
-    ImGui::SeparatorText("Clock configuration");
+    // Keep the time-base summary visible, but make the detailed settings collapsible.
     if (raw_ctf) {
-        ImGui::TextDisabled("Capture: Zephyr CTF 32-bit timestamp counter (unwrapped)");
-        ImGui::TextDisabled("CTF decoder has no verified counter frequency.");
-        constexpr const char *clock_sources[] = {
-            "Unknown", "CPU cycle counter", "Hardware timer",
-            "RTOS timer tick", "External clock", "Other known counter"
-        };
-        ImGui::SetNextItemWidth(205.f);
-        ImGui::Combo("Timestamp source", &timeline_clock_source_,
-                     clock_sources, IM_ARRAYSIZE(clock_sources));
-        ImGui::Checkbox("Apply manual clock frequency", &timeline_manual_clock_enabled_);
-        if (timeline_manual_clock_enabled_) {
+        const bool known = timeline_clock_hz_valid(timeline_clock_source_,
+            timeline_manual_clock_enabled_, timeline_manual_clock_hz_);
+        if (known)
+            ImGui::TextColored(ImVec4(.99f, .77f, .48f, 1.f),
+                "Time base: manual %s @ %llu Hz (UNVERIFIED estimate)",
+                timeline_clock_source_label(static_cast<TimelineClockSource>(
+                    timeline_clock_source_)),
+                static_cast<unsigned long long>(timeline_manual_clock_hz_));
+        else
+            ImGui::TextColored(ImVec4(.99f, .77f, .48f, 1.f),
+                "Time base: raw CTF ticks; no verified counter frequency");
+        if (ImGui::CollapsingHeader("Clock configuration (counter and frequency)")) {
+            ImGui::TextDisabled("Zephyr CTF 32-bit counter (unwrapped).");
+            constexpr const char *clock_sources[] = {
+                "Unknown", "CPU cycle counter", "Hardware timer",
+                "RTOS timer tick", "External clock", "Other known counter"
+            };
             ImGui::SetNextItemWidth(205.f);
-            ImGui::InputScalar("Effective timestamp Hz", ImGuiDataType_U64,
-                               &timeline_manual_clock_hz_, nullptr, nullptr, "%llu");
+            ImGui::Combo("Timestamp source", &timeline_clock_source_,
+                         clock_sources, IM_ARRAYSIZE(clock_sources));
+            ImGui::Checkbox("Apply manual clock frequency",
+                            &timeline_manual_clock_enabled_);
+            if (timeline_manual_clock_enabled_) {
+                ImGui::SetNextItemWidth(205.f);
+                ImGui::InputScalar("Effective timestamp Hz", ImGuiDataType_U64,
+                    &timeline_manual_clock_hz_, nullptr, nullptr, "%llu");
+            }
+            ImGui::TextDisabled("Enter effective counter Hz after prescaler, NOT CPU MHz."
+                                " This does not calibrate the trace.");
         }
-        if (!timeline_clock_hz_valid(timeline_clock_source_,
-                                     timeline_manual_clock_enabled_,
-                                     timeline_manual_clock_hz_)) {
-            ImGui::TextColored(ImVec4(.98f, .77f, .48f, 1.f),
-                               "UNVERIFIED / raw ticks. Select counter and enter"
-                               " effective Hz to show estimated time.");
-        } else {
-            ImGui::TextColored(ImVec4(.98f, .77f, .48f, 1.f),
-                               "MANUAL ESTIMATE: %s @ %llu Hz (not independently verified).",
-                               timeline_clock_source_label(static_cast<TimelineClockSource>(
-                                   timeline_clock_source_)),
-                               static_cast<unsigned long long>(timeline_manual_clock_hz_));
-        }
-        ImGui::TextDisabled("Frequency must be counter Hz, after any prescaler;"
-                            " CPU MHz may be different.");
     } else if (native_us) {
-        ImGui::TextDisabled("Source unit: normalized microseconds (declared in trace).");
-        ImGui::TextDisabled("Not proof of hardware clock calibration.");
+        ImGui::TextDisabled("Time base: source-declared microseconds (not calibrated).");
     }
+
     const bool valid_manual_hz =
         timeline_clock_hz_valid(timeline_clock_source_, timeline_manual_clock_enabled_,
                                 timeline_manual_clock_hz_);
