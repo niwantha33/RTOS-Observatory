@@ -535,6 +535,8 @@ void Workspace::draw_shared_timeline() {
             const double display_width = timeline_viewport_.width;
             const double display_end = display_start + display_width;
             auto *lane_draw = ImGui::GetWindowDrawList();
+            std::vector<TimelineWaveInterval> digital_spans;
+            if (digital) digital_spans.reserve(segments.size());
             lane_draw->PushClipRect(p0, p1, true);
             lane_draw->AddRectFilled(ImVec2(p0.x, p0.y + 4.f),
                                      ImVec2(p1.x, p1.y - 4.f),
@@ -548,8 +550,9 @@ void Workspace::draw_shared_timeline() {
             for (const auto index : segments) {
                 if (index >= data.spans.size()) continue;
                 const auto &span = data.spans[index];
-                if (span.end < span.start || span.start < first || span.end < first)
+                if (span.end <= span.start || span.start < first || span.end < first)
                     continue;
+                if (digital) digital_spans.push_back({span.start, span.end});
                 const double a = static_cast<double>(span.start - first);
                 const double b = static_cast<double>(span.end - first);
                 if (b < display_start || a > display_end) continue;
@@ -563,7 +566,9 @@ void Workspace::draw_shared_timeline() {
                 if (right <= left) continue;
                 lane_draw->AddRectFilled(ImVec2(left, p0.y + 6.f),
                                          ImVec2(right, p1.y - 6.f),
-                                         category_colour(span.category), 2.f);
+                                         digital ? IM_COL32(77, 169, 221, 65) :
+                                                   category_colour(span.category),
+                                         digital ? 0.f : 2.f);
                 if (shared_selected_event_ && span.evidence_event &&
                     *shared_selected_event_ == *span.evidence_event)
                     lane_draw->AddRect(ImVec2(left, p0.y + 6.f),
@@ -582,6 +587,43 @@ void Workspace::draw_shared_timeline() {
                     shared_selected_event_ = *span.evidence_event;
                     page_ = Page::Evidence;
                 }
+            }
+            // Digital overlay marks recorded activity, not inferred task state.
+            if (digital) {
+                const auto visible_first = timeline_tick_at_fraction(timeline_viewport_, 0.);
+                const auto visible_last = timeline_tick_at_fraction(timeline_viewport_, 1.);
+                const auto intervals = timeline_waveform_intervals(
+                    digital_spans, visible_first, visible_last);
+                const auto x_at = [&](std::uint64_t tick) {
+                    const double relative = tick >= first ?
+                        static_cast<double>(tick - first) : 0.;
+                    return p0.x + width * static_cast<float>(
+                        (relative - display_start) / display_width);
+                };
+                const float high = p0.y + 8.f;
+                const float low = p1.y - 7.f;
+                const ImU32 active_ink = rank == 1 ?
+                    IM_COL32(248, 196, 100, 255) : IM_COL32(93, 205, 247, 255);
+                const ImU32 gap_ink = IM_COL32(111, 132, 154, 145);
+                float previous = p0.x;
+                for (const auto &interval : intervals) {
+                    const float x0 = std::clamp(x_at(interval.start), p0.x, p1.x);
+                    const float x1 = std::clamp(x_at(interval.end), p0.x, p1.x);
+                    if (x1 <= x0) continue;
+                    lane_draw->AddLine(ImVec2(previous, low), ImVec2(x0, low),
+                                       gap_ink, 1.f);
+                    if (interval.start > visible_first)
+                        lane_draw->AddLine(ImVec2(x0, low), ImVec2(x0, high),
+                                           active_ink, 1.7f);
+                    lane_draw->AddLine(ImVec2(x0, high), ImVec2(x1, high),
+                                       active_ink, 2.5f);
+                    if (interval.end < visible_last)
+                        lane_draw->AddLine(ImVec2(x1, high), ImVec2(x1, low),
+                                           active_ink, 1.7f);
+                    previous = x1;
+                }
+                lane_draw->AddLine(ImVec2(previous, low), ImVec2(p1.x, low),
+                                   gap_ink, 1.f);
             }
             lane_draw->PopClipRect();
             interact(p0.x, width);
