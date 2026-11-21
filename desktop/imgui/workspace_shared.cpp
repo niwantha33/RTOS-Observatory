@@ -390,16 +390,18 @@ void Workspace::draw_shared_timeline() {
 
     // All canvases share one viewport; never mutate the data's raw tick values.
     const auto interact = [&](float left, float width) {
-        if (!ImGui::IsItemHovered() || width < 1.f) return;
+        const bool hovered = ImGui::IsItemHovered();
+        const bool active = ImGui::IsItemActive();
+        if ((!hovered && !active) || width < 1.f) return;
         const auto &io = ImGui::GetIO();
-        if (io.KeyCtrl && io.MouseWheel != 0.f) {
+        if (hovered && io.KeyCtrl && io.MouseWheel != 0.f) {
             const double at = std::clamp(
                 (static_cast<double>(ImGui::GetMousePos().x) - left) / width, 0., 1.);
             timeline_zoom(timeline_viewport_, std::pow(.8, io.MouseWheel), at);
-        } else if (io.KeyShift && io.MouseWheel != 0.f) {
+        } else if (hovered && io.KeyShift && io.MouseWheel != 0.f) {
             timeline_pan(timeline_viewport_, -static_cast<double>(io.MouseWheel) * .2);
         }
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
+        if (active && ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
             timeline_pan(timeline_viewport_,
                          -static_cast<double>(io.MouseDelta.x) / width);
         if (!measure.enabled) return;
@@ -416,23 +418,24 @@ void Workspace::draw_shared_timeline() {
                 TimelineCursorPoint{tick, std::nullopt, false};
             timeline_set_cursor(measure, cursor, point);
         };
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
-            int chosen = measure.selected;
-            // Picking an existing handle allows dragging A or B naturally.
+        if (hovered && ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+            int chosen = std::clamp(measure.selected, 0, 3);
+            // Pick an existing handle within nine pixels for natural drag.
             double distance = 9.;
-            for (int i = 0; i < 2; ++i) {
-                const auto &point = i == 0 ? measure.a : measure.b;
+            for (int i = 0; i < 4; ++i) {
+                const auto &point = measure.points[static_cast<std::size_t>(i)];
                 if (!point) continue;
-                const double x = left + (
-                    (static_cast<double>(point->tick - first) -
-                     timeline_viewport_.start) / timeline_viewport_.width) * width;
+                const double offset = point->tick >= first ?
+                    static_cast<double>(point->tick - first) : 0.;
+                const double x = left + ((offset - timeline_viewport_.start) /
+                                         timeline_viewport_.width) * width;
                 const double d = std::abs(ImGui::GetMousePos().x - x);
                 if (d < distance) { chosen = i; distance = d; }
             }
             timeline_drag_cursor_ = chosen;
             update_cursor(chosen);
         }
-        if (ImGui::IsItemActive() && timeline_drag_cursor_ >= 0 &&
+        if (active && timeline_drag_cursor_ >= 0 &&
             ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.f))
             update_cursor(timeline_drag_cursor_);
         if (ImGui::IsItemDeactivated())
