@@ -150,6 +150,7 @@ ElfImage parse_elf_image(const std::vector<std::uint8_t>& bytes, ElfLimits limit
     result.architecture = architecture(result.machine);
     result.address_bits = is64 ? 64u : 32u;
     result.is_relocatable = type == 1;
+    result.requires_load_bias = type == 3;
     result.sha256 = hash_detail::sha256(std::string_view(
         reinterpret_cast<const char*>(bytes.data()), bytes.size()));
     const auto section_offset = is64 ? r.u64(40) : r.u32(32);
@@ -284,7 +285,7 @@ ElfImage inspect_elf_file(const std::filesystem::path& path, ElfLimits limits) {
 
 ElfPcMatch lookup_elf_pc(const ElfImage& elf, std::uint64_t pc) {
     ElfPcMatch match;
-    if (elf.is_relocatable) return match;
+    if (elf.is_relocatable || elf.requires_load_bias) return match;
     match.thumb_normalized = elf.machine == 40 && (pc & 1u) != 0;
     if (match.thumb_normalized) --pc;
     for (std::size_t i = 0; i < elf.functions.size(); ++i) {
