@@ -247,82 +247,103 @@ void Workspace::draw_shared_timeline() {
         ImGui::TextColored(ImVec4(.99f, .77f, .48f, 1.f),
                            "Raw ticks only: source clock Hz is not verified or supplied.");
 
-    ImGui::SeparatorText("Time measurement");
+    ImGui::SeparatorText("Measurement cursors");
     auto &measure = timeline_measurement_;
-    ImGui::Checkbox("Enable A/B cursors", &measure.enabled);
+    ImGui::Checkbox("Enable four cursors", &measure.enabled);
     if (measure.enabled) {
         ImGui::SameLine();
-        if (ImGui::RadioButton("Place A", measure.selected == 0))
-            measure.selected = 0;
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Place B", measure.selected == 1))
-            measure.selected = 1;
-        ImGui::SameLine();
         ImGui::Checkbox("Snap to event / edge", &measure.snap);
-        ImGui::TextDisabled("Click or drag on ruler / lanes; A = amber, B = cyan.");
-        if (ImGui::SmallButton("Clear cursors"))
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Clear all"))
             timeline_clear_cursors(measure);
-        if (measure.a && measure.b) {
+
+        const std::array<ImVec4, 4> colors{{
+            ImVec4(1.f, .76f, .31f, 1.f), ImVec4(1.f, .53f, .30f, 1.f),
+            ImVec4(.33f, .87f, 1.f, 1.f), ImVec4(.45f, .63f, 1.f, 1.f)
+        }};
+        for (int i = 0; i < 4; ++i) {
+            if (i) ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Text, colors[static_cast<std::size_t>(i)]);
+            if (ImGui::RadioButton(timeline_cursor_labels[static_cast<std::size_t>(i)],
+                                   measure.selected == i))
+                measure.selected = i;
+            ImGui::PopStyleColor();
+        }
+        ImGui::TextDisabled("Click ruler or track to place; drag marker to move."
+                            " A1-A2 and B1-B2 are independent pairs.");
+
+        const int columns = ImGui::GetContentRegionAvail().x < 650.f ? 2 : 4;
+        if (ImGui::BeginTable("cursor-readouts", columns,
+                ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_RowBg)) {
+            for (int i = 0; i < 4; ++i) {
+                ImGui::TableNextColumn();
+                const auto &point = measure.points[static_cast<std::size_t>(i)];
+                ImGui::PushStyleColor(ImGuiCol_Text, colors[static_cast<std::size_t>(i)]);
+                if (point) {
+                    const auto offset = point->tick >= first ? point->tick - first : 0;
+                    const auto value = timeline_format(
+                        static_cast<double>(offset), unit, native_us, hz);
+                    ImGui::Text("%s  +%s", timeline_cursor_labels[static_cast<std::size_t>(i)],
+                                value.c_str());
+                    ImGui::TextDisabled("%llu ticks",
+                         static_cast<unsigned long long>(point->tick));
+                } else {
+                    ImGui::Text("%s  --", timeline_cursor_labels[static_cast<std::size_t>(i)]);
+                    ImGui::TextDisabled("Not placed");
+                }
+                ImGui::PopStyleColor();
+                if (point && point->event_index &&
+                    *point->event_index < data.events.size()) {
+                    ImGui::PushID(i);
+                    if (ImGui::SmallButton("Inspect event")) {
+                        shared_selected_event_ = *point->event_index;
+                        page_ = Page::Evidence;
+                    }
+                    ImGui::PopID();
+                }
+            }
+            ImGui::EndTable();
+        }
+        for (int pair = 0; pair < 2; ++pair) {
+            const auto delta = timeline_cursor_delta(measure, pair);
+            if (!delta) continue;
+            const auto formatted = timeline_format(
+                static_cast<double>(*delta), unit, native_us, hz);
+            ImGui::PushID(pair);
+            ImGui::TextColored(colors[static_cast<std::size_t>(pair * 2)],
+                "%s delta: %s  (%llu %s)%s", pair ? "B1-B2" : "A1-A2",
+                formatted.c_str(), static_cast<unsigned long long>(*delta),
+                clock_unit(data.unit), hz ? " [manual estimate]" : "");
             ImGui::SameLine();
-            if (ImGui::SmallButton("Swap A/B"))
-                std::swap(measure.a, measure.b);
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Fit A-B")) {
+            if (ImGui::SmallButton("Fit pair"))
                 timeline_focus(timeline_viewport_,
-                               std::min(measure.a->tick, measure.b->tick),
-                               std::max(measure.a->tick, measure.b->tick));
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Copy measurement")) {
-                const auto difference = *timeline_cursor_delta(measure);
-                const auto value = timeline_format(
-                    static_cast<double>(difference), unit, native_us, hz);
-                const std::string clipboard =
-                    "A=" + std::to_string(measure.a->tick) +
-                    " B=" + std::to_string(measure.b->tick) +
-                    " delta=" + std::to_string(difference) + " " + clock_unit(data.unit) + "; " +
-                    value + (hz ? "; MANUAL CLOCK / UNVERIFIED" : "");
-                ImGui::SetClipboardText(clipboard.c_str());
-            }
+                    std::min(measure.points[static_cast<std::size_t>(pair * 2)]->tick,
+                             measure.points[static_cast<std::size_t>(pair * 2 + 1)]->tick),
+                    std::max(measure.points[static_cast<std::size_t>(pair * 2)]->tick,
+                             measure.points[static_cast<std::size_t>(pair * 2 + 1)]->tick));
+            ImGui::PopID();
         }
-        if (measure.a) {
-            const auto value = timeline_format(
-                static_cast<double>(measure.a->tick - first), unit, native_us, hz);
-            ImGui::TextColored(ImVec4(1.f, .76f, .31f, 1.f),
-                               "A  +%s    raw: %llu",
-                               value.c_str(),
-                               static_cast<unsigned long long>(measure.a->tick));
-            if (measure.a->event_index &&
-                *measure.a->event_index < data.events.size()) {
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Inspect A event")) {
-                    shared_selected_event_ = *measure.a->event_index;
-                    page_ = Page::Evidence;
+        if (ImGui::SmallButton("Copy measurements")) {
+            std::string result;
+            for (int pair = 0; pair < 2; ++pair) {
+                if (!result.empty()) result += "\n";
+                const int index = pair * 2;
+                const auto &a = measure.points[static_cast<std::size_t>(index)];
+                const auto &b = measure.points[static_cast<std::size_t>(index + 1)];
+                result += pair ? "B1-B2" : "A1-A2";
+                if (a && b) {
+                    const auto delta = *timeline_cursor_delta(measure, pair);
+                    result += ": " + std::to_string(a->tick) + " -> " +
+                        std::to_string(b->tick) + " = " + std::to_string(delta) +
+                        " " + clock_unit(data.unit) + " (" +
+                        timeline_format(static_cast<double>(delta),
+                                        unit, native_us, hz) + ")";
+                } else {
+                    result += ": incomplete";
                 }
             }
-        }
-        if (measure.b) {
-            const auto value = timeline_format(
-                static_cast<double>(measure.b->tick - first), unit, native_us, hz);
-            ImGui::TextColored(ImVec4(.33f, .87f, 1.f, 1.f),
-                               "B  +%s    raw: %llu",
-                               value.c_str(),
-                               static_cast<unsigned long long>(measure.b->tick));
-            if (measure.b->event_index &&
-                *measure.b->event_index < data.events.size()) {
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Inspect B event")) {
-                    shared_selected_event_ = *measure.b->event_index;
-                    page_ = Page::Evidence;
-                }
-            }
-        }
-        if (const auto difference = timeline_cursor_delta(measure)) {
-            const auto value = timeline_format(
-                static_cast<double>(*difference), unit, native_us, hz);
-            ImGui::Text("Delta (absolute): %llu %s | %s%s",
-                        static_cast<unsigned long long>(*difference), clock_unit(data.unit),
-                        value.c_str(), hz ? " [manual estimate]" : "");
+            if (hz) result += "\nMANUAL CLOCK ESTIMATE / UNVERIFIED";
+            ImGui::SetClipboardText(result.c_str());
         }
     }
 
