@@ -864,7 +864,8 @@ void Workspace::draw_menus() {
             ctf_explorer_detached_ = false;
             ctf_inspector_detached_ = false;
             ctf_scheduler_detached_ = false;
-            show_sidebar_ = true;
+            show_sidebar_ = false;
+            show_controls_ = true;
             layout_reset_requested_ = true;
             layout_feedback_ = "Layout reset for this run. Save to keep it.";
             page_ = Page::Overview;
@@ -3933,6 +3934,52 @@ void Workspace::draw_detached_analysis() {
     }
 }
 
+void Workspace::draw_analysis_controls() {
+    ImGui::TextColored(ImVec4(.73f, .87f, 1.f, 1.f), "CONTROL CENTER");
+    const char *source = active_adapter_ == SourceAdapter::Ctf ? "Zephyr CTF"
+        : active_adapter_ == SourceAdapter::Normalized ? "Universal trace"
+        : active_adapter_ == SourceAdapter::Live ? "Binary spool"
+        : "No source";
+    ImGui::TextDisabled("Source: %s", source);
+    if (ImGui::Button("Open / change source", ImVec2(-1.f, 0.f)))
+        request_source(import_adapter_);
+    if (ImGui::Button("Browse adapters", ImVec2(-1.f, 0.f))) {
+        workspace_tab_ = WorkspaceTab::Adapters;
+        select_adapters_tab_ = true;
+    }
+
+    if (page_ == Page::Timeline && unified_.adapter != AdapterKind::None) {
+        ImGui::SeparatorText("TIME & MEASUREMENT");
+        draw_shared_timeline_controls();
+    } else {
+        ImGui::SeparatorText("ANALYSIS");
+        ImGui::TextWrapped("Choose a tool from the top bar. "
+                           "The evidence view stays on the large canvas.");
+        if (active_adapter_ != SourceAdapter::None) {
+            if (ImGui::Button("Execution timeline", ImVec2(-1.f, 0.f)))
+                page_ = Page::Timeline;
+            if (ImGui::Button("Evidence inspector", ImVec2(-1.f, 0.f)))
+                page_ = Page::Evidence;
+        }
+    }
+
+    ImGui::SeparatorText("DISPLAY SETTINGS");
+    ImGui::TextUnformatted("Text size");
+    ImGui::SetNextItemWidth(-1.f);
+    ImGui::SliderFloat("##control-center-text-size", &ui_scale_, .75f, 2.2f, "%.2fx");
+    ImGui::Checkbox("Compact spacing", &compact_spacing_);
+    ImGui::Checkbox("Show navigation pane", &show_sidebar_);
+    ImGui::TextDisabled("Ctrl + / Ctrl - also change text size.");
+
+    ImGui::SeparatorText("WORKSPACE");
+    if (ImGui::Button("Save panel layout", ImVec2(-1.f, 0.f)))
+        save_layout();
+    if (ImGui::Button("Restore saved layout", ImVec2(-1.f, 0.f)))
+        layout_restore_requested_ = true;
+    if (!layout_feedback_.empty())
+        ImGui::TextWrapped("%s", layout_feedback_.c_str());
+}
+
 void Workspace::draw() {
     if (active_adapter_ == SourceAdapter::Live && live_follow_ && live_session_)
         (void)poll_live_file();
@@ -3958,8 +4005,8 @@ void Workspace::draw() {
         flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
     ImGui::Begin("RTOS Observatory", nullptr, flags);
     draw_menus();
-    // A real workspace tab separates source acquisition from analysis.
-    // Both tabs retain the same in-memory session, no redundant decoder loads.
+
+    // Source selection has its own workspace, never occupies the graph canvas.
     if (ImGui::BeginTabBar("main-workspace-tabs")) {
         const auto analysis_flag = select_analysis_tab_
             ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
@@ -3977,88 +4024,119 @@ void Workspace::draw() {
     }
     select_analysis_tab_ = false;
     select_adapters_tab_ = false;
+
+    const float footer_height = ImGui::GetTextLineHeightWithSpacing() + 14.f;
     if (workspace_tab_ == WorkspaceTab::Adapters) {
-        const float footer = ImGui::GetTextLineHeightWithSpacing() + 14.f;
-        ImGui::BeginChild("Adapter catalogue scroll", ImVec2(0.f, -footer),
-                          ImGuiChildFlags_None);
+        ImGui::BeginChild("Adapter catalogue scroll", ImVec2(0.f, -footer_height));
         draw_adapters_tab();
         ImGui::EndChild();
     } else {
-    const float workspace_width = ImGui::GetContentRegionAvail().x;
-    const bool sidebar_fits =
-        plan_layout(workspace_width, ImGui::GetFontSize(), show_sidebar_).show_sidebar;
-    if (sidebar_fits) {
-        draw_sidebar();
-        ImGui::SameLine();
-    } else {
-        // Narrow and resized windows keep the SAME tools accessible without
-        // squeezing the evidence panels into an unusable fixed-width column.
-        if (ImGui::Button("Adapters...")) {
-            workspace_tab_ = WorkspaceTab::Adapters;
-            select_adapters_tab_ = true;
-        }
-        if (workspace_width >= 35.f * ImGui::GetFontSize())
-            ImGui::SameLine();
-        constexpr const char *compact_pages[] = {
-            "Dashboard", "Timeline", "CPU / scheduling", "Evidence relationships",
-            "Time-travel / order", "Scheduling / ISR", "Resource objects",
-            "Causal diagnostics", "Fault / memory", "Source / symbols",
-            "Debugger lifecycle", "Snapshot receipts", "Live event epochs",
-            "Events", "Findings", "Evidence inspector", "CTF explorer"
+        constexpr const char *page_labels[] = {
+            "Evidence dashboard", "Execution timeline", "CPU / scheduling",
+            "Evidence relationships", "Time-travel / event order", "Scheduling / ISR",
+            "Resources and waits", "Causal diagnostics", "Fault and memory",
+            "Source / symbol graph", "Debugger lifecycle", "Snapshot receipts",
+            "Live event epochs", "Event explorer", "Findings", "Evidence inspector",
+            "Zephyr CTF"
         };
-        ImGui::SetNextItemWidth(-1.f);
-        if (ImGui::BeginCombo("##compact-tool", compact_pages[static_cast<int>(page_)])) {
-            for (int k = 0; k < 16; ++k) {
-                if (ImGui::Selectable(compact_pages[k], static_cast<int>(page_) == k))
-                    page_ = static_cast<Page>(k);
+        // Tool switching belongs in a compact header, not a full-width left rail.
+        ImGui::TextDisabled("VIEW");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(std::min(340.f, ImGui::GetContentRegionAvail().x * .55f));
+        if (ImGui::BeginCombo("##analysis-view", page_labels[static_cast<int>(page_)])) {
+            for (int i = 0; i < IM_ARRAYSIZE(page_labels); ++i) {
+                const bool selected = static_cast<int>(page_) == i;
+                if (ImGui::Selectable(page_labels[i], selected))
+                    page_ = static_cast<Page>(i);
+                if (selected)
+                    ImGui::SetItemDefaultFocus();
             }
             ImGui::EndCombo();
         }
-    }
-    const float footer_height = ImGui::GetTextLineHeightWithSpacing() + 14.f;
-    ImGui::BeginChild("Investigation", ImVec2(0, -footer_height), ImGuiChildFlags_None);
-    constexpr const char *page_labels[] = {
-        "Evidence dashboard", "Execution timeline", "CPU / scheduling",
-        "Evidence relationships", "Time-travel / event order", "Scheduling / ISR",
-        "Resources and waits", "Causal diagnostics", "Fault and memory",
-        "Source / symbol graph", "Debugger lifecycle", "Snapshot receipts",
-        "Live event epochs", "Event explorer", "Findings", "Evidence inspector",
-        "Zephyr CTF"
-    };
-    ImGui::TextColored(ImVec4(.91f, .96f, 1.f, 1.f), "%s",
-                       page_labels[static_cast<int>(page_)]);
-    if (ImGui::GetContentRegionAvail().x > 760.f) {
         ImGui::SameLine();
-        const char *source = active_adapter_ == SourceAdapter::Ctf ? "Zephyr CTF"
-            : active_adapter_ == SourceAdapter::Normalized ? "Universal trace"
-            : active_adapter_ == SourceAdapter::Live ? "Binary spool"
-            : "No source loaded";
-        ImGui::TextDisabled("  |  %s", source);
+        if (ImGui::SmallButton(show_controls_ ? "Hide controls" : "Show controls"))
+            show_controls_ = !show_controls_;
+        ImGui::Separator();
+
+        const auto draw_canvas = [this, &page_labels]() {
+            ImGui::BeginChild("Investigation", ImVec2(0.f, 0.f));
+            ImGui::TextColored(ImVec4(.91f, .96f, 1.f, 1.f), "%s",
+                               page_labels[static_cast<int>(page_)]);
+            ImGui::Separator();
+            if (!error_.empty()) {
+                ImGui::TextColored(ImVec4(1.f, .53f, .40f, 1.f), "ERROR: %s",
+                                   error_.c_str());
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Dismiss"))
+                    error_.clear();
+            } else if (!notice_.empty() && active_adapter_ == SourceAdapter::Normalized) {
+                ImGui::TextDisabled("%s", notice_.c_str());
+            }
+            if (active_adapter_ == SourceAdapter::None &&
+                (page_ == Page::Overview || page_ == Page::Timeline ||
+                 page_ == Page::CpuWaits || page_ == Page::Resources ||
+                 page_ == Page::Events || page_ == Page::Findings ||
+                 page_ == Page::Evidence || page_ == Page::Graph)) {
+                ImGui::Spacing();
+                ImGui::TextWrapped("Select an RTOS evidence adapter to start a graphical investigation.");
+                if (ImGui::Button("Open data source..."))
+                    request_source(ImportAdapter::ZephyrCtf);
+            } else {
+                draw_page(page_);
+            }
+            ImGui::EndChild();
+        };
+        const auto draw_controls = [this]() {
+            ImGui::BeginChild("Settings and measurements", ImVec2(0.f, 0.f),
+                              ImGuiChildFlags_Borders, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+            draw_analysis_controls();
+            ImGui::EndChild();
+        };
+
+        ImGui::BeginChild("Analysis workspace body", ImVec2(0.f, -footer_height));
+        const float available = ImGui::GetContentRegionAvail().x;
+        if (show_sidebar_ &&
+            plan_layout(available, ImGui::GetFontSize(), true).show_sidebar) {
+            draw_sidebar();
+            ImGui::SameLine();
+        }
+        const float content_width = ImGui::GetContentRegionAvail().x;
+        if (show_controls_ && content_width >= 850.f) {
+            const auto table_flags = ImGuiTableFlags_SizingStretchProp |
+                                     ImGuiTableFlags_Resizable |
+                                     ImGuiTableFlags_BordersInnerV;
+            if (ImGui::BeginTable("analysis-control-split", 2, table_flags,
+                                  ImVec2(0.f, ImGui::GetContentRegionAvail().y))) {
+                ImGui::TableSetupColumn("Graphical analysis",
+                    ImGuiTableColumnFlags_WidthStretch, .72f);
+                ImGui::TableSetupColumn("Configuration and tools",
+                    ImGuiTableColumnFlags_WidthStretch, .28f);
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                draw_canvas();
+                ImGui::TableSetColumnIndex(1);
+                draw_controls();
+                ImGui::EndTable();
+            }
+        } else if (show_controls_) {
+            // A narrow laptop still exposes both panes without crushing graphs.
+            if (ImGui::BeginTabBar("compact-analysis-workspace")) {
+                if (ImGui::BeginTabItem("Graphical analysis")) {
+                    draw_canvas();
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("Configuration / controls")) {
+                    draw_controls();
+                    ImGui::EndTabItem();
+                }
+                ImGui::EndTabBar();
+            }
+        } else {
+            draw_canvas();
+        }
+        ImGui::EndChild();
     }
-    ImGui::Separator();
-    if (!error_.empty()) {
-        ImGui::TextColored(ImVec4(1.f, .53f, .40f, 1.f), "ERROR: %s",
-                           error_.c_str());
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Dismiss"))
-            error_.clear();
-    } else if (!notice_.empty() && active_adapter_ == SourceAdapter::Normalized) {
-        ImGui::TextDisabled("%s", notice_.c_str());
-    }
-    if (active_adapter_ == SourceAdapter::None &&
-        (page_ == Page::Overview || page_ == Page::Timeline ||
-         page_ == Page::CpuWaits || page_ == Page::Resources ||
-         page_ == Page::Events || page_ == Page::Findings ||
-         page_ == Page::Evidence || page_ == Page::Graph)) {
-        ImGui::Spacing();
-        ImGui::TextWrapped("Select an RTOS evidence adapter to start a graphical investigation.");
-        if (ImGui::Button("Open data source..."))
-            request_source(ImportAdapter::ZephyrCtf);
-    } else {
-        draw_page(page_);
-    }
-    ImGui::EndChild();
-    } // Analysis tab content
+
     ImGui::Separator();
     const float workspace_width = ImGui::GetContentRegionAvail().x;
     if (workspace_width < 900.f)
@@ -4070,8 +4148,7 @@ void Workspace::draw() {
                             observatory::build_info::configured_utc);
     draw_dialogs();
     ImGui::End();
-    // Separate dockable ImGui windows share the exact same session and
-    // selected source event; viewports can move them outside the main OS window.
+    // Detached analysis windows continue sharing the exact same session.
     draw_ctf_floating();
     draw_detached_analysis();
     if (compact_spacing_)
