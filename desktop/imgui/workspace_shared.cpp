@@ -347,8 +347,7 @@ void Workspace::draw_shared_timeline() {
         }
     }
 
-    // Draw both vertical measurement cursors in every lane of this shared
-    // viewport, including the ruler. The raw ticks never change with zoom.
+    // All four cursors overlay the same ruler and every lane.
     const auto draw_cursors = [&](ImDrawList *draw, const ImVec2 &p0,
                                   const ImVec2 &p1, bool on_ruler) {
         if (!measure.enabled) return;
@@ -359,25 +358,33 @@ void Workspace::draw_shared_timeline() {
                 ((offset - timeline_viewport_.start) / timeline_viewport_.width) *
                 static_cast<double>(p1.x - p0.x));
         };
+        const std::array<ImU32, 4> ink{{
+            IM_COL32(255, 194, 80, 255), IM_COL32(255, 136, 77, 255),
+            IM_COL32(65, 220, 255, 255), IM_COL32(116, 161, 255, 255)
+        }};
         draw->PushClipRect(p0, p1, true);
-        if (measure.a && measure.b) {
-            const float xa = x_at(measure.a->tick), xb = x_at(measure.b->tick);
-            draw->AddRectFilled(
-                ImVec2(std::min(xa, xb), p0.y),
-                ImVec2(std::max(xa, xb), p1.y),
-                IM_COL32(113, 184, 244, 23));
+        for (int pair = 0; pair < 2; ++pair) {
+            const auto &a = measure.points[static_cast<std::size_t>(pair * 2)];
+            const auto &b = measure.points[static_cast<std::size_t>(pair * 2 + 1)];
+            if (!a || !b) continue;
+            const float xa = x_at(a->tick), xb = x_at(b->tick);
+            draw->AddRectFilled(ImVec2(std::min(xa, xb), p0.y),
+                                ImVec2(std::max(xa, xb), p1.y),
+                                pair ? IM_COL32(65, 220, 255, 20) :
+                                       IM_COL32(255, 194, 80, 21));
         }
-        const auto one = [&](const std::optional<TimelineCursorPoint> &cursor,
-                             ImU32 color, const char *letter) {
-            if (!cursor) return;
-            const float x = x_at(cursor->tick);
-            if (x < p0.x || x > p1.x) return;
-            draw->AddLine(ImVec2(x, p0.y), ImVec2(x, p1.y), color, 2.f);
+        for (int i = 0; i < 4; ++i) {
+            const auto &point = measure.points[static_cast<std::size_t>(i)];
+            if (!point) continue;
+            const float x = x_at(point->tick);
+            if (x < p0.x || x > p1.x) continue;
+            draw->AddLine(ImVec2(x, p0.y), ImVec2(x, p1.y),
+                          ink[static_cast<std::size_t>(i)], 2.f);
             if (on_ruler)
-                draw->AddText(ImVec2(x + 3.f, p0.y + 1.f), color, letter);
-        };
-        one(measure.a, IM_COL32(255, 194, 80, 255), "A");
-        one(measure.b, IM_COL32(65, 220, 255, 255), "B");
+                draw->AddText(ImVec2(x + 3.f, p0.y + 1.f),
+                              ink[static_cast<std::size_t>(i)],
+                              timeline_cursor_labels[static_cast<std::size_t>(i)]);
+        }
         draw->PopClipRect();
     };
 
