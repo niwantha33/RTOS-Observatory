@@ -182,6 +182,7 @@ Workspace::Workspace() {
     std::snprintf(fault_path_.data(), fault_path_.size(), "%s", "examples/fault-snapshot.tsv");
     std::snprintf(symbol_manifest_path_.data(), symbol_manifest_path_.size(), "%s", "symbols.tsv");
     std::snprintf(symbol_elf_path_.data(), symbol_elf_path_.size(), "%s", "firmware.elf");
+    std::snprintf(elf_file_path_.data(), elf_file_path_.size(), "%s", "firmware.elf");
     std::snprintf(symbol_source_root_.data(), symbol_source_root_.size(), "%s", ".");
     std::snprintf(bridge_file_path_.data(), bridge_file_path_.size(), "%s",
                   "rtos-observatory-dsf-status.tsv");
@@ -393,6 +394,22 @@ bool Workspace::open_source_index(const std::string &manifest, const std::string
         std::snprintf(symbol_elf_path_.data(), symbol_elf_path_.size(), "%s", elf.c_str());
         std::snprintf(symbol_source_root_.data(), symbol_source_root_.size(), "%s",
                       source_root.c_str());
+        error_.clear();
+        page_ = Page::SourceGraph;
+        return true;
+    } catch (const std::exception &e) {
+        error_ = e.what();
+        return false;
+    }
+}
+bool Workspace::open_elf_image(const std::string &path) {
+    try {
+        // Build the complete candidate first; failed imports preserve the old inspected image.
+        auto image = inspect_elf_file(file_path(path));
+        native_elf_ = std::move(image);
+        selected_elf_function_ = 0;
+        elf_pc_ = 0;
+        std::snprintf(elf_file_path_.data(), elf_file_path_.size(), "%s", path.c_str());
         error_.clear();
         page_ = Page::SourceGraph;
         return true;
@@ -2238,6 +2255,89 @@ void Workspace::draw_faults() {
 }
 
 void Workspace::draw_source_graph() {
+    header("ELF Intelligence / firmware symbols");
+    ImGui::TextDisabled(
+        "Real ELF symbols, read-only. No DWARF source mapping or trace/firmware identity attestation.");
+    ImGui::SetNextItemWidth(std::min(510.f, ImGui::GetContentRegionAvail().x * .75f));
+    ImGui::InputText("Firmware ELF", elf_file_path_.data(), elf_file_path_.size());
+#ifdef _WIN32
+    ImGui::SameLine();
+    if (ImGui::Button("Browse ELF...")) {
+        if (const auto file = choose_native_file_or_folder(false))
+            std::snprintf(elf_file_path_.data(), elf_file_path_.size(), "%s", file->c_str());
+    }
+#endif
+    if (ImGui::Button("Inspect native ELF symbols"))
+        (void)open_elf_image(elf_file_path_.data());
+    if (native_elf_) {
+        const auto &image = *native_elf_;
+        ImGui::Text("%s / %u-bit | %zu functions | DWARF sections: %s",
+                    image.architecture.c_str(), image.address_bits, image.functions.size(),
+                    image.has_dwarf_sections ? "present (not decoded)" : "not found");
+        ImGui::TextWrapped("ELF SHA-256: %s", image.sha256.c_str());
+        if (!image.build_id.empty())
+            ImGui::TextWrapped("GNU build-id: %s (not an authenticated trace link)",
+                               image.build_id.c_str());
+        if (image.is_relocatable)
+            ImGui::TextDisabled(
+                "Relocatable ELF: addresses are not linked runtime PC addresses.");
+        ImGui::SetNextItemWidth(200.f);
+        ImGui::InputScalar("Code PC (decimal)", ImGuiDataType_U64, &elf_pc_);
+        ImGui::SameLine();
+        if (ImGui::Button("Find function")) {
+            const auto resolved = lookup_elf_pc(image, elf_pc_);
+            if (resolved.index) {
+                selected_elf_function_ = *resolved.index;
+                error_.clear();
+            } else {
+                error_ = resolved.ambiguous ? "Overlapping ELF function address ranges"
+                    : "No unique ELF symbol for that PC (or relocatable ELF)";
+            }
+        }
+        if (image.functions.empty()) {
+            ImGui::TextDisabled("No named native functions found (stripped or empty image).");
+        } else if (ImGui::BeginTable("elf-native-functions", 4,
+                    ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                    ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
+                    ImVec2(0, 235))) {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("Function", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthFixed, 125.f);
+            ImGui::TableSetupColumn("Bytes", ImGuiTableColumnFlags_WidthFixed, 65.f);
+            ImGui::TableSetupColumn("Origin", ImGuiTableColumnFlags_WidthFixed, 75.f);
+            ImGui::TableHeadersRow();
+            ImGuiListClipper clipper;
+            clipper.Begin(static_cast<int>(image.functions.size()));
+            while (clipper.Step()) {
+                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+                    const auto &fn = image.functions[static_cast<std::size_t>(i)];
+                    ImGui::PushID(i);
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    if (ImGui::Selectable(fn.name.c_str(),
+                                          selected_elf_function_ == static_cast<std::size_t>(i),
+                                          ImGuiSelectableFlags_SpanAllColumns))
+                        selected_elf_function_ = static_cast<std::size_t>(i);
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::Text("0x%llx", static_cast<unsigned long long>(fn.address));
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::Text("%llu", static_cast<unsigned long long>(fn.size));
+                    ImGui::TableSetColumnIndex(3);
+                    ImGui::TextUnformatted(fn.dynamic_symbol ? "dynsym" : "symtab");
+                    ImGui::PopID();
+                }
+            }
+            ImGui::EndTable();
+            const auto &chosen = image.functions[std::min(
+                selected_elf_function_, image.functions.size() - 1)];
+            ImGui::TextWrapped("Selected: %s", chosen.name.c_str());
+            ImGui::TextDisabled(
+                "Names/sizes originate from the ELF; execution times require actual trace evidence.");
+        }
+    }
+    ImGui::Separator();
+    if (!ImGui::CollapsingHeader("Advanced: legacy sidecar source graph"))
+        return;
     header("C / C++ / Rust source and symbol graph");
     ImGui::TextDisabled(
         "Offline, read-only. ELF and source SHA-256 matching is required for source navigation.");
