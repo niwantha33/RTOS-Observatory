@@ -122,7 +122,7 @@ void Workspace::draw_shared_dashboard() {
         page_ = Page::Events;
 }
 
-void Workspace::draw_shared_timeline() {
+void Workspace::draw_shared_timeline_controls() {
     const auto &data = unified_;
     if (!has_capability(data.capabilities, ToolCapability::Timeline)) {
         ImGui::TextWrapped("This adapter has no qualified time intervals. "
@@ -173,20 +173,22 @@ void Workspace::draw_shared_timeline() {
         else
             ImGui::TextColored(ImVec4(.99f, .77f, .48f, 1.f),
                 "Time base: raw CTF ticks; no verified counter frequency");
-        if (ImGui::CollapsingHeader("Clock configuration (counter and frequency)")) {
+        if (ImGui::CollapsingHeader("Clock configuration (counter and frequency)", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::TextDisabled("Zephyr CTF 32-bit counter (unwrapped).");
             constexpr const char *clock_sources[] = {
                 "Unknown", "CPU cycle counter", "Hardware timer",
                 "RTOS timer tick", "External clock", "Other known counter"
             };
-            ImGui::SetNextItemWidth(205.f);
-            ImGui::Combo("Timestamp source", &timeline_clock_source_,
+            ImGui::TextUnformatted("Timestamp source");
+            ImGui::SetNextItemWidth(-1.f);
+            ImGui::Combo("##timestamp-source", &timeline_clock_source_,
                          clock_sources, IM_ARRAYSIZE(clock_sources));
             ImGui::Checkbox("Apply manual clock frequency",
                             &timeline_manual_clock_enabled_);
             if (timeline_manual_clock_enabled_) {
-                ImGui::SetNextItemWidth(205.f);
-                ImGui::InputScalar("Effective timestamp Hz", ImGuiDataType_U64,
+                ImGui::TextUnformatted("Effective timestamp (Hz)");
+                ImGui::SetNextItemWidth(-1.f);
+                ImGui::InputScalar("##effective-clock-hz", ImGuiDataType_U64,
                     &timeline_manual_clock_hz_, nullptr, nullptr, "%llu");
             }
             ImGui::TextDisabled("Enter effective counter Hz after prescaler, NOT CPU MHz."
@@ -204,8 +206,9 @@ void Workspace::draw_shared_timeline() {
 
     constexpr std::array<const char*, 5> choices{"Auto", "Source units", "us", "ms", "s"};
     timeline_unit_preference_ = std::clamp(timeline_unit_preference_, 0, 4);
-    ImGui::SetNextItemWidth(145.f);
-    if (ImGui::BeginCombo("Time units", choices[static_cast<std::size_t>(timeline_unit_preference_)])) {
+    ImGui::TextUnformatted("Time units");
+    ImGui::SetNextItemWidth(-1.f);
+    if (ImGui::BeginCombo("##timeline-time-units", choices[static_cast<std::size_t>(timeline_unit_preference_)])) {
         for (int i = 0; i < static_cast<int>(choices.size()); ++i) {
             const bool available = i < 2 || convertible;
             if (!available) ImGui::BeginDisabled();
@@ -230,8 +233,9 @@ void Workspace::draw_shared_timeline() {
     const double max_pan = std::max(0., total - timeline_viewport_.width);
     if (max_pan > 0.) {
         float position = static_cast<float>(timeline_viewport_.start / max_pan);
-        ImGui::SetNextItemWidth(std::min(360.f, ImGui::GetContentRegionAvail().x * .7f));
-        if (ImGui::SliderFloat("Horizontal position", &position, 0.f, 1.f, "%.0f%%")) {
+        ImGui::TextUnformatted("Horizontal position");
+        ImGui::SetNextItemWidth(-1.f);
+        if (ImGui::SliderFloat("##timeline-pan-position", &position, 0.f, 1.f, "%.0f%%")) {
             timeline_viewport_.start = max_pan * static_cast<double>(position);
             timeline_viewport_.fit_to_capture = false;
         }
@@ -251,7 +255,6 @@ void Workspace::draw_shared_timeline() {
     auto &measure = timeline_measurement_;
     ImGui::Checkbox("Enable four cursors", &measure.enabled);
     if (measure.enabled) {
-        ImGui::SameLine();
         ImGui::Checkbox("Snap to event / edge", &measure.snap);
         ImGui::SameLine();
         if (ImGui::SmallButton("Clear all"))
@@ -262,7 +265,7 @@ void Workspace::draw_shared_timeline() {
             ImVec4(.33f, .87f, 1.f, 1.f), ImVec4(.45f, .63f, 1.f, 1.f)
         }};
         for (int i = 0; i < 4; ++i) {
-            if (i) ImGui::SameLine();
+            if (i % 2 == 1) ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Text, colors[static_cast<std::size_t>(i)]);
             if (ImGui::RadioButton(timeline_cursor_labels[static_cast<std::size_t>(i)],
                                    measure.selected == i))
@@ -346,6 +349,49 @@ void Workspace::draw_shared_timeline() {
             ImGui::SetClipboardText(result.c_str());
         }
     }
+
+}
+
+void Workspace::draw_shared_timeline() {
+    const auto &data = unified_;
+    if (!has_capability(data.capabilities, ToolCapability::Timeline)) {
+        ImGui::TextWrapped("This adapter has no qualified time intervals. "
+                           "Publisher ticks from distinct epochs cannot be combined.");
+        if (ImGui::Button("Open source events"))
+            page_ = Page::Events;
+        return;
+    }
+    if (data.spans.empty() || data.lane_index.empty()) {
+        ImGui::TextDisabled("No recorded complete intervals. Missing transitions are not inferred.");
+        return;
+    }
+    // Keep the original integer capture origin; double is used ONLY for small
+    // relative offsets in pixels so 64-bit raw ticks remain source-exact.
+    std::uint64_t first = data.spans.front().start;
+    std::uint64_t last = data.spans.front().end;
+    for (const auto &span : data.spans) {
+        if (span.end < span.start) continue;
+        first = std::min(first, span.start);
+        last = std::max(last, span.end);
+    }
+    timeline_sync(timeline_viewport_, first, last);
+    const bool native_us = data.unit == ClockUnit::Microseconds;
+    const bool raw_ctf = data.unit == ClockUnit::RawCtfTicks;
+
+    const bool valid_manual_hz = timeline_clock_hz_valid(
+        timeline_clock_source_, timeline_manual_clock_enabled_, timeline_manual_clock_hz_);
+    const std::uint64_t hz = raw_ctf && valid_manual_hz ? timeline_manual_clock_hz_ : 0;
+    const int preference = std::clamp(timeline_unit_preference_, 0, 4);
+    TimelineTimeUnit unit = TimelineTimeUnit::Source;
+    if (preference == 0)
+        unit = timeline_auto_unit(timeline_viewport_.width, native_us, hz);
+    else if (preference == 2 && timeline_has_time_units(native_us, hz))
+        unit = TimelineTimeUnit::Microseconds;
+    else if (preference == 3 && timeline_has_time_units(native_us, hz))
+        unit = TimelineTimeUnit::Milliseconds;
+    else if (preference == 4 && timeline_has_time_units(native_us, hz))
+        unit = TimelineTimeUnit::Seconds;
+    auto &measure = timeline_measurement_;
 
     // All four cursors overlay the same ruler and every lane.
     const auto draw_cursors = [&](ImDrawList *draw, const ImVec2 &p0,
