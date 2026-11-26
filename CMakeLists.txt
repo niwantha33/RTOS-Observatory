@@ -115,6 +115,15 @@ if(OBSERVATORY_BUILD_TESTS)
     ${CMAKE_CURRENT_BINARY_DIR})
   add_executable(observatory_source_tests tests/test_source_index.cpp)
   target_link_libraries(observatory_source_tests PRIVATE observatory_core)
+  add_executable(observatory_hardfault_tests tests/test_hardfault_decode.cpp)
+  target_link_libraries(observatory_hardfault_tests PRIVATE observatory_core)
+  add_test(NAME observatory_hardfault_decode COMMAND observatory_hardfault_tests)
+  add_test(NAME observatory_hardfault_bus_fixture COMMAND
+    rtos-observatory --fault-inspect ${CMAKE_CURRENT_SOURCE_DIR}/examples/hardfault-busfault.tsv
+    --output ${CMAKE_CURRENT_BINARY_DIR}/hardfault-bus-report.json)
+  add_test(NAME observatory_hardfault_usage_fixture COMMAND
+    rtos-observatory --fault-inspect ${CMAKE_CURRENT_SOURCE_DIR}/examples/hardfault-usagefault.tsv
+    --output ${CMAKE_CURRENT_BINARY_DIR}/hardfault-usage-report.json)
   add_executable(observatory_bridge_tests tests/test_debug_bridge.cpp)
   target_link_libraries(observatory_bridge_tests PRIVATE observatory_core)
   add_test(NAME observatory_dsf_bridge_lifecycle COMMAND observatory_bridge_tests
@@ -161,7 +170,7 @@ if(OBSERVATORY_BUILD_TESTS)
 endif()
 
 if(OBSERVATORY_BUILD_TESTS)
-  foreach(test_target observatory_shared_adapter_tests observatory_ctf_analysis_tests observatory_ctf_tests observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_fault_tests observatory_elf_tests observatory_source_tests observatory_bridge_tests observatory_snapshot_policy_tests observatory_snapshot_receipt_tests observatory_ring_tests observatory_recorder_tests observatory_recorder_concurrency_tests observatory_wire_tests observatory_transport_tests observatory_live_session_tests)
+  foreach(test_target observatory_shared_adapter_tests observatory_ctf_analysis_tests observatory_ctf_tests observatory_tests observatory_timeline_tests observatory_graph_tests observatory_replay_tests observatory_diagnostics_tests observatory_resource_tests observatory_causal_tests observatory_fault_tests observatory_elf_tests observatory_source_tests observatory_hardfault_tests observatory_bridge_tests observatory_snapshot_policy_tests observatory_snapshot_receipt_tests observatory_ring_tests observatory_recorder_tests observatory_recorder_concurrency_tests observatory_wire_tests observatory_transport_tests observatory_live_session_tests)
     if(MSVC)
       target_compile_options(${test_target} PRIVATE /UNDEBUG)
     else()

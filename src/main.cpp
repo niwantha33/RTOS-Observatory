@@ -1,10 +1,61 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "observatory/session.hpp"
 #include "observatory/elf_intelligence.hpp"
+#include "observatory/hardfault.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 int main(int argc, char** argv) {
+    if (argc > 1 && std::string(argv[1]) == "--fault-inspect") {
+        if (argc < 3) {
+            std::cerr << "Usage: rtos-observatory --fault-inspect snapshot.tsv "
+                         "[--symbols sym.tsv] [--output decode.json]\n";
+            return 2;
+        }
+        std::string input_path = argv[2];
+        std::string symbols_path, output_path;
+        for (int i = 3; i < argc; ++i) {
+            const std::string arg = argv[i];
+            if ((arg == "--output" || arg == "--symbols") && i + 1 >= argc) {
+                std::cerr << "Missing value for " << arg << "\n";
+                return 2;
+            }
+            if (arg == "--output") output_path = argv[++i];
+            else if (arg == "--symbols") symbols_path = argv[++i];
+            else { std::cerr << "Unknown option: " << arg << "\n"; return 2; }
+        }
+        try {
+            std::ifstream input(input_path, std::ios::binary);
+            if (!input) throw observatory::Error("cannot open fault snapshot: " + input_path);
+            const auto snap = observatory::parse_fault_snapshot(input);
+            std::vector<observatory::SymbolEntry> extra;
+            if (!symbols_path.empty()) {
+                std::ifstream sym(symbols_path);
+                if (!sym) throw observatory::Error("cannot open symbols file: " + symbols_path);
+                extra = observatory::parse_symbol_table(sym);
+            }
+            const auto view = observatory::analyze_fault_snapshot(snap);
+            const auto dec = observatory::analyze_hardfault(snap, extra);
+            std::cout << "Fault capture: " << dec.capture_id
+                      << " | firmware: " << dec.firmware_label
+                      << " | arch: " << dec.architecture
+                      << " | Cortex-M decode: " << (dec.supported_arch ? "yes" : "no") << "\n"
+                      << "Frames: " << dec.frames.size()
+                      << " | W28 findings: " << dec.findings.size()
+                      << " | W12 structural findings: " << view.findings.size() << "\n";
+            for (const auto& f : dec.findings)
+                std::cout << "- [" << f.code << "] " << f.subject << ": " << f.explanation << "\n";
+            if (!output_path.empty()) {
+                std::ofstream out(output_path, std::ios::binary | std::ios::trunc);
+                if (!out) throw observatory::Error("cannot write decode report: " + output_path);
+                out << observatory::hardfault_decode_json(dec, &view);
+            }
+            return 0;
+        } catch (const std::exception& e) {
+            std::cerr << "Fault decode failed: " << e.what() << "\n";
+            return 1;
+        }
+    }
     if (argc > 1 && std::string(argv[1]) == "--elf-inspect") {
         if (argc != 3) {
             std::cerr << "Usage: rtos-observatory --elf-inspect firmware.elf\n";
@@ -38,7 +89,8 @@ int main(int argc, char** argv) {
             std::cout << "RTOS Observatory 0.2.0\n"
               "--input trace --output report.json [--decoder legacy-tsv|universal-v1] [--store session-dir]\n"
               "--replay session-dir --output report.json\n"
-              "--elf-inspect firmware.elf\n"; return 0;
+              "--elf-inspect firmware.elf\n"
+              "--fault-inspect snapshot.tsv [--symbols sym.tsv] [--output decode.json]\n"; return 0;
         }
         if (i+1>=argc) { std::cerr<<"Missing value\n";return 2; }
         if (arg=="--input") input_path=argv[++i];

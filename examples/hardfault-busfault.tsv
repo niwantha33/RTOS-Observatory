@@ -1,0 +1,14 @@
+RTOS-OBSERVATORY-FAULT	1	cortex-m4	32	fw-synthetic-bus-v1	crash-bus-demo	unverified
+# Synthetic W28 evidence. Not an MCU dump, GDB transcript, ELF image or certified fault.
+REGION	flash	flash	0x08000000	0x20000	rx
+REGION	ram	ram	0x20002000	0x8000	rw
+THREAD	ctrl	0x20000020	0x80	0x20000800	0x400	0x20000bf0	0x120
+THREAD	sensor_task	0x20000200	0x80	0x20002000	0x800	0x20002060	0x500
+REG	cpu0	CFSR	0x00008200	ok
+REG	cpu0	BFAR	0x20002340	ok
+REG	cpu0	HFSR	0x40000000	ok
+REG	cpu0	MMFAR	-	failed
+REG	cpu0	PC	0x08001244	ok
+FAULT	HardFault	cpu0	0x08001244
+FRAME	cpu0	0x20002060	basic	0x00000001	0x00000002	0x00000003	0x00000004	0x00000005	0xFFFFFFFD	0x08001244	0x61000203
+SYMB	0x08001200	0x80	sensor_sample_loop
