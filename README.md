@@ -44,6 +44,25 @@ accessed by the validator.
 python tools/w19_qualification.py --manifest examples/w19-synthetic.json
 ```
 
+## W28 — offline supplied-frame Cortex-M HardFault decode (branch feature)
+
+`--fault-inspect` interprets an externally supplied W12 snapshot that also
+contains a saved `FRAME` record and optional `SYMB` function table: EXC_RETURN
+mode/stack/FPU-bit consistency, CFSR/HFSR fault classes, fault-address mapping
+against declared regions, exception-frame stack-fit checks, and PC-to-function
+symbolication. Every result is an evidence-linked observation; no target read,
+unwinding or root-cause proof is claimed.
+
+```sh
+./build/rtos-observatory --fault-inspect examples/hardfault-busfault.tsv \
+    --output build/hardfault-bus-report.json
+./build/rtos-observatory --fault-inspect examples/hardfault-usagefault.tsv \
+    --symbols path/to/symbols.tsv --output build/hardfault-usage-report.json
+```
+
+See [W28 specification](docs/W28_HARDFAULT_DECODE.md). Synthetic fixtures are
+not MCU captures; desktop panel grouping and FPU-word records remain follow-up work.
+
 ## W18 — opt-in live trace epochs (unverified software stage)
 
 The desktop now has a **Live trace epochs** panel, backed by a bounded
@@ -120,6 +139,7 @@ ctest --test-dir build --output-on-failure
 | Visual timeline, findings, waits and cycles | Offline local HTML viewer plus Dear ImGui task/ISR timeline and CPU analysis (migration PR) |
 | Eclipse bridge | Opt-in Java source and PDE extension snippet; **not compiled/installed/validated** |
 | Saved Zephyr CTF aggregate report import | Implemented read-only adapter for existing ZEW `offline_trace_json.py` CPU and contention JSON, without raw event reconstruction |
+| Cortex-M HardFault supplied-frame decode (W28 branch) | Offline EXC_RETURN, CFSR/HFSR fault class, fault-address region, stack-fit and PC-symbolication observations; no target reads or unwinding |
 | Live streaming and cross-RTOS capture | Not implemented; next phases |
 
 ## Source layout
@@ -156,6 +176,7 @@ ctest --test-dir build --output-on-failure
 4. Add FreeRTOS trace-hook adapter; then SYS/BIOS UIA, RT-Thread, ThreadX and Rust/Embassy adapters separately.
 5. Add correlated fault, memory, queue/notification, priority-inheritance and cross-core dependency analysis.
 6. Production-release gates: fuzz, stress, multi-compiler/OS CI, latency overhead and real-hardware tests.
+7. W28 (branch): supplied-frame Cortex-M HardFault decoder — EXC_RETURN, CFSR/HFSR classes, fault-address mapping, stack-fit, PC symbolication; desktop panel, FPU-word records and secure-state decoding are follow-ups.
 
 Apache-2.0 licensed. See `LICENSE`.
 

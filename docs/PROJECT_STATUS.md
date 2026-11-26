@@ -38,6 +38,7 @@
 | W17 | Merged; target qualification pending | PR #33 / commit `43f3e7f3aef8`; CRC32/LE bounded frames, staged sender backpressure, host parser and optional owned TCP receiver. Target UART/USB/RTT hardware drivers unqualified |
 | W18 | Merged; physical/integration qualification pending | PR #34 / commit `700b23802e43`; bounded incremental W17 epoch/loss/clock coordinator, opt-in TCP spool + local GUI event arrival view. **Not a qualified RTOS CPU scheduler timeline** |
 | **W19** | Draft PR; offline qualification kit only | Evidence manifest SHA256 validator, synthetic/human-review distinction, independent timing/footprint/throughput audit and regression tests. **MSPM0G3507/XDS110 hardware testing DEFERRED** |
+| **W28** | Draft branch; unmerged | Branch `feature/w28-cortexm-hardfault-decode`: offline supplied-frame Cortex-M HardFault decoder — EXC_RETURN mode/stack/FPU-bit check, CFSR/HFSR fault classes, fault-address region mapping, exception-frame stack-fit candidate, PC-to-function symbolication. Local Linux GCC C++20 build, 35/35 CTest green; not merged, no hardware, no desktop panel, no unwinding or root-cause proof. See [W28 spec](W28_HARDFAULT_DECODE.md) |
 | W20–W24 | Not started (P4) | Native vendor/version-aware RTOS adapters not yet qualified |
 | W25–W27 | Not started (P5) | Rich reports, optional AI/MCP and what-if simulator future work |
 

@@ -1,0 +1,10 @@
+RTOS-OBSERVATORY-FAULT	1	cortex-m33	32	fw-synthetic-usage-v1	crash-usage-demo	unverified
+# Synthetic W28 evidence. Not an MCU dump, GDB transcript, ELF image or certified fault.
+REGION	flash	flash	0x08000000	0x20000	rx
+REGION	ram	ram	0x20002000	0x8000	rw
+THREAD	comms	0x20000200	0x80	0x20002000	0x60	0x20002050	0x50
+REG	cpu0	CFSR	0x00130000	ok
+REG	cpu0	HFSR	0x40000000	ok
+REG	cpu0	PC	0x08001000	ok
+FAULT	HardFault	cpu0	0x08001000
+FRAME	cpu0	0x20002050	basic	0x00000000	0x20000010	0x00000003	0x00000004	0x00000005	0xFFFFFFF9	0x08001000	0x60000002

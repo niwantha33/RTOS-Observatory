@@ -75,6 +75,7 @@ Zephyr / FreeRTOS / SYS-BIOS / RT-Thread / ThreadX / Rust firmware
 | P5 | **W25** | Reproducible evidence-linked HTML, JSON, Markdown, graph and SARIF exports | P0 | Reports reopen offline and every finding links to its evidence |
 | P5 | **W26** | Optional local MCP / AI evidence investigation | P1 | Read-only bounded queries, privacy opt-in, grounded references |
 | P5 | **W27** | What-if scheduling models and before/after CI regression checks | P2 | Simulations identified as such; repeatable baseline comparisons |
+| P5 | **W28** | Branch prototype: offline supplied-frame Cortex-M HardFault decoder (EXC_RETURN, CFSR/HFSR classes, fault-address mapping, stack-fit, PC symbolication) | P1 | Known-answer offline tests; supplied records only; no hardware reads, unwinding or root-cause proof |
 
 ## Phase gates and linked trackers
 

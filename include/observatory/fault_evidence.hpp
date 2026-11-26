@@ -13,6 +13,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -29,6 +30,32 @@ struct FaultLimits {
     std::size_t max_mem_samples{256};
     std::size_t max_total_mem_bytes{64 * 1024};
     std::size_t max_findings{4096};
+    std::size_t max_frames{64};       // W28 supplied Cortex-M exception frames
+    std::size_t max_symbols{4096};    // W28 supplied function symbol table
+};
+// W28: one explicitly supplied stacked exception frame. The source, not this
+// analyzer, provides every word; missing words stay unknown and are never
+// reconstructed from a memory dump.
+struct StackedFrame {
+    std::string context;
+    std::optional<std::uint64_t> sp;
+    std::string format; // basic (8 words) | fpu (extended frame)
+    std::optional<std::uint64_t> r0;
+    std::optional<std::uint64_t> r1;
+    std::optional<std::uint64_t> r2;
+    std::optional<std::uint64_t> r3;
+    std::optional<std::uint64_t> r12;
+    std::optional<std::uint64_t> lr;   // stacked EXC_RETURN on Cortex-M entry
+    std::optional<std::uint64_t> pc;
+    std::optional<std::uint64_t> xpsr;
+    std::size_t line{};
+};
+// W28: read-only function symbol record supplied alongside the snapshot.
+struct SymbolEntry {
+    std::string name;
+    std::uint64_t address{};
+    std::uint64_t size{};
+    std::size_t line{};
 };
 struct FaultRegion {
     std::string name;
@@ -87,6 +114,8 @@ struct FaultSnapshot {
     std::vector<FaultRegister> registers;
     std::vector<FaultMarker> markers;
     std::vector<FaultMemory> memory;
+    std::vector<StackedFrame> frames;   // W28
+    std::vector<SymbolEntry> symbols;   // W28
 };
 struct FaultFinding {
     std::string code;
@@ -187,13 +216,16 @@ inline std::vector<std::uint8_t> bytes(const std::string& raw, std::size_t line)
 inline FaultSnapshot parse_fault_snapshot(std::istream& input, FaultLimits limits = {}) {
     if (!limits.max_input_bytes || !limits.max_line_bytes ||
         !limits.max_regions || !limits.max_threads || !limits.max_registers ||
-        !limits.max_mem_samples || !limits.max_total_mem_bytes || !limits.max_findings)
+        !limits.max_mem_samples || !limits.max_total_mem_bytes || !limits.max_findings ||
+        !limits.max_frames || !limits.max_symbols)
         throw Error("W12 snapshot limits must be positive");
     FaultSnapshot s;
     std::size_t raw_bytes=0,line_no=0,memory_bytes=0;
     bool header=false;
     std::set<std::string> thread_ids,region_ids,heap_ids;
     std::set<std::pair<std::string,std::string>> register_ids;
+    std::set<std::string> frame_contexts;
+    std::set<std::tuple<std::uint64_t,std::uint64_t,std::string>> symbol_ids;
     auto parse_line=[&](std::string line) {
         ++line_no;
         if (!line.empty() && line.back()=='\r') line.pop_back();
@@ -309,6 +341,41 @@ inline FaultSnapshot parse_fault_snapshot(std::istream& input, FaultLimits limit
                 throw Error("W12 memory sample address range overflow");
             memory_bytes += bytes.size();
             s.memory.push_back({f[1],address,f[4]=="ok",std::move(bytes),line_no});
+        } else if (f[0]=="FRAME") {
+            // W28: explicitly supplied Cortex-M exception stack frame. The host
+            // never reads or guesses frame words; "-" stays a missing value.
+            expect(12);
+            if(s.frames.size()>=limits.max_frames)
+                throw Error("W28 frame limit reached");
+            fault_detail::token(f[1],line_no);
+            if(!frame_contexts.insert(f[1]).second)
+                throw Error("W28 duplicate frame context");
+            if(f[3]!="basic" && f[3]!="fpu")
+                throw Error("W28 frame format must be basic or fpu");
+            auto cell=[&](std::size_t idx){
+                return fault_detail::optional_hex(f[idx],line_no);
+            };
+            StackedFrame frame{f[1],cell(2),f[3],cell(4),cell(5),cell(6),
+                               cell(7),cell(8),cell(9),cell(10),cell(11),line_no};
+            for(const auto v : {frame.sp,frame.r0,frame.r1,frame.r2,frame.r3,
+                                frame.r12,frame.lr,frame.pc,frame.xpsr})
+                if(v) fault_detail::width(*v,s.address_bits,line_no);
+            s.frames.push_back(std::move(frame));
+        } else if (f[0]=="SYMB") {
+            // W28: read-only function address/name table supplied with the
+            // snapshot; identity attestation remains outside this parser.
+            expect(4);
+            if(s.symbols.size()>=limits.max_symbols)
+                throw Error("W28 symbol limit reached");
+            const auto address=fault_detail::hex(f[1],line_no);
+            const auto size=fault_detail::hex(f[2],line_no);
+            fault_detail::token(f[3],line_no);
+            if(size==0) throw Error("W28 symbol size must be positive");
+            if(!fault_detail::range_ok(address,size,s.address_bits))
+                throw Error("W28 symbol range overflow or invalid width");
+            if(!symbol_ids.insert({address,size,f[3]}).second)
+                throw Error("W28 duplicate symbol record");
+            s.symbols.push_back({f[3],address,size,line_no});
         } else {
             throw Error("fault line "+std::to_string(line_no)+": unsupported record type");
         }
